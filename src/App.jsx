@@ -370,6 +370,10 @@ export default function App() {
       {!closed ? (
         <div className="app-shell">
           <aside className="sidebar">
+            <GlassSurface width="100%" height="100%" borderRadius={27}
+              borderWidth={0.08} brightness={65} opacity={0.9} blur={12} displace={0.5}
+              backgroundOpacity={0.72} saturation={1.15} distortionScale={-12}
+              redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="sidebar-material" />
             <button
               className="brand"
               onClick={() => navigate("home")}
@@ -470,7 +474,7 @@ export default function App() {
                     <GlassSurface width="100%" height="auto" borderRadius={22}
                       borderWidth={0.04} brightness={65} opacity={0.7} blur={8}
                       backgroundOpacity={0.09} saturation={1.25} distortionScale={-45}
-                      redOffset={0} greenOffset={2} blueOffset={5} renderer="svg" className="identity-glass">
+                      redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="identity-glass">
                     <div className="identity-main">
                       <div className="identity-copy">
                         <div className="identity-greeting">你好，旅人</div>
@@ -1022,14 +1026,15 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
                 onClick={() => setSelected(item.id)}
                 className={`title-tile ${item.style} ${selected === item.id ? "selected" : ""} ${!item.owned ? "locked" : ""}`}
                 pressed={selected === item.id} captionText={`${item.name}${state.equipped === item.id ? "，已佩戴" : ""}${!item.owned ? "，未获得" : ""}`}
-                containerHeight={compact ? "86px" : "166px"} imageHeight={compact ? "86px" : "166px"}
-                imageWidth="100%" radius={18} rotateAmplitude={reduceMotion ? 0 : 7}
-                scaleOnHover={reduceMotion ? 1 : 1.025} glare={0.6} shadow={0.12}
+                containerHeight={compact ? "86px" : "154px"} imageHeight={compact ? "86px" : "154px"}
+                imageWidth="100%" radius={18} rotateAmplitude={reduceMotion ? 0 : 5}
+                scaleOnHover={reduceMotion ? 1 : 1.018} glare={0.5} shadow={0.12}
                 gyroscope={false} intro={false} reducedMotion={reduceMotion} showTooltip={false}
               >
                 <span className={`title-tile-icon ${item.style}`}>
                   <Symbol name={item.icon} size={24} />
                 </span>
+                <Symbol name={item.icon} className="tile-emboss" aria-hidden="true" />
                 <span className="tile-copy">
                   <TitleText title={item} />
                   <span className="tile-category">{item.category}</span>
@@ -1042,11 +1047,12 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
                 ) : !item.owned ? (
                   <Lock className="locked-icon" size={14} />
                 ) : (
-                  <span className="rarity-dot" />
+                  <span className="rarity-label">{item.rarity}</span>
                 )}
                 <span className="tile-footer">
-                  <span>{item.owned ? item.date : "尚未解锁"}</span>
-                  {selected === item.id && <Check size={14} />}
+                  <span className="tile-date"><CalendarDays size={12} />{item.owned ? item.date : "尚未解锁"}</span>
+                  <span className="tile-quality">{state.equipped === item.id ? item.rarity : selected === item.id ? "已选中" : item.owned ? "已收藏" : "待解锁"}
+                    {selected === item.id && <Check size={12} />}</span>
                 </span>
               </TiltedCard>
             ))}
@@ -1332,6 +1338,7 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
           </div>
           {selectedFortune ? (
             <>
+              <div className="fortune-seal" aria-hidden="true"><img src="/assets/fortune-slip.png" alt="" /></div>
               <span
                 className="fortune-grade"
                 style={{ color: gradeColor(selectedFortune.grade) }}

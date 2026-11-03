@@ -696,12 +696,14 @@ nav {
   box-shadow: inset 0 1px 0 #ffffff9c;
 }
 .avatar-cube {
+  --cube-depth: 6px;
   width: 48px;
   height: 48px;
   position: relative;
   transform: translate(3px, 3px);
 }
 .avatar-cube img {
+  display: block;
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
@@ -711,23 +713,21 @@ nav {
 }
 .cube-top {
   position: absolute;
-  left: -7px;
-  top: -7px;
-  right: 3px;
-  height: 7px;
+  left: calc(-1 * var(--cube-depth));
+  top: calc(-1 * var(--cube-depth));
+  width: calc(100% + var(--cube-depth));
+  height: var(--cube-depth);
   background: #302820;
-  transform: skewX(45deg);
-  transform-origin: bottom;
+  clip-path: polygon(0 0, calc(100% - var(--cube-depth)) 0, 100% 100%, var(--cube-depth) 100%);
 }
 .cube-side {
   position: absolute;
-  left: -7px;
-  top: -7px;
-  width: 7px;
-  height: 48px;
+  left: calc(-1 * var(--cube-depth));
+  top: calc(-1 * var(--cube-depth));
+  width: var(--cube-depth);
+  height: calc(100% + var(--cube-depth));
   background: #644e34;
-  transform: skewY(45deg);
-  transform-origin: right;
+  clip-path: polygon(0 0, 100% var(--cube-depth), 100% 100%, 0 calc(100% - var(--cube-depth)));
 }
 .avatar-status {
   position: absolute;
@@ -1352,9 +1352,6 @@ select {
 }
 .nameplate-preview .avatar-cube {
   width: 53px;
-  height: 53px;
-}
-.nameplate-preview .cube-side {
   height: 53px;
 }
 .nameplate-preview .avatar-status {
