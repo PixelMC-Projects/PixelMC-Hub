@@ -1,0 +1,38 @@
+/* Do not apply opacity, filters or clipping to these preserve-3d containers. */
+.avatar .avatar-cube {
+  --head-size:48px;
+  width:var(--head-size);
+  height:var(--head-size);
+  position:relative;
+  transform-style:preserve-3d;
+  transform:rotateX(-12deg) rotateY(-23deg);
+  filter:none;
+}
+.avatar-cube .head-layer {
+  --layer-size:var(--head-size);
+  position:absolute;
+  width:var(--layer-size);
+  height:var(--layer-size);
+  left:calc((var(--head-size) - var(--layer-size)) / 2);
+  top:calc((var(--head-size) - var(--layer-size)) / 2);
+  transform-style:preserve-3d;
+}
+.avatar-cube .head-hat { --layer-size:calc(var(--head-size) * 1.125); }
+.head-face {
+  position:absolute;
+  inset:0;
+  display:block;
+  background-repeat:no-repeat;
+  image-rendering:pixelated;
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
+}
+.head-front { transform:translateZ(calc(var(--layer-size) / 2)); }
+.head-back { transform:rotateY(180deg) translateZ(calc(var(--layer-size) / 2)); }
+.head-left { transform:rotateY(-90deg) translateZ(calc(var(--layer-size) / 2)); filter:brightness(.82); }
+.head-right { transform:rotateY(90deg) translateZ(calc(var(--layer-size) / 2)); filter:brightness(.88); }
+.head-top { transform:rotateX(90deg) translateZ(calc(var(--layer-size) / 2)); filter:brightness(1.04); }
+.head-bottom { transform:rotateX(-90deg) translateZ(calc(var(--layer-size) / 2)); filter:brightness(.7); }
+.fallback-head .head-face { background:#69523a; }
+.fallback-head .head-top { background:#47372a; }
+.fallback-head .head-front { background:url('/assets/avatar.png') center / 100% 100%; }

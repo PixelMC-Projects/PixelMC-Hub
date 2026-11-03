@@ -1,0 +1,21 @@
+.welcome-shell { position:relative; }
+.welcome-splash { position:absolute; inset:0; z-index:50; display:grid; place-items:center; border-radius:inherit; overflow:hidden; background:radial-gradient(ellipse at 28% 28%,#d2ebffc9,transparent 60%),radial-gradient(ellipse at 80% 75%,#e1d4f9b8,transparent 65%),#f7f8ff; animation:welcome-leave 420ms 2600ms ease-in-out both; }
+.welcome-ink { width:min(420px,60%); transform:translateY(-8px); text-align:center; }
+.hello-script { width:100%; overflow:visible; transform:rotate(-5deg); }
+.hello-stroke,.hello-flourish { fill:none; stroke:url(#hello-ink); stroke-width:6.8; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1; stroke-dashoffset:1; }
+.hello-stroke { animation:hello-write 1900ms 120ms cubic-bezier(.32,.08,.35,1) forwards; }
+.hello-flourish { stroke-width:2.1; animation:hello-write 350ms 1810ms ease-out forwards; opacity:.58; }
+.welcome-signature { display:block; margin-top:21px; color:#9292ad; font-size:10px; letter-spacing:5px; padding-left:5px; animation:welcome-signature 500ms 1550ms both; }
+@keyframes hello-write { to { stroke-dashoffset:0; } }
+@keyframes welcome-signature { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@keyframes welcome-leave { to { opacity:0; visibility:hidden; } }
+.app-shell.is-opening > :is(.sidebar,.workspace) { pointer-events:none; }
+.app-shell.is-opening .page-content { visibility:hidden; }
+.page-content.page-home { animation:none; }
+.page-home>.page-heading { animation:hub-card-enter 340ms ease-out both; }
+.page-home>.identity-card { animation:hub-card-enter 440ms 50ms cubic-bezier(.2,.7,.2,1) both; }
+.page-home>.home-lower { animation:hub-card-enter 440ms 110ms cubic-bezier(.2,.7,.2,1) both; }
+.page-home>.page-footnote { animation:hub-card-enter 340ms 170ms ease-out both; }
+@keyframes hub-card-enter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion:reduce) { .welcome-splash { display:none; } }
+:root[data-motion='reduced'] .welcome-splash { display:none; }

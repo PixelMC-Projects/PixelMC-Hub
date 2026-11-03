@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .runtime/
+public/assets/local-preview/
 *.log
 .env
 .env.*

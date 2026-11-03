@@ -6,6 +6,7 @@ export const player = {
   name: "zhan_cpu",
   uuid: "7f1a0000-0000-4000-8000-000000000001",
   joined: "2026/10/17",
+  lastLogin: "2026/11/02 20:26:14",
   hours: 128,
   minutes: 42,
   logins: 36,

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import GlassIcons from "./vendor/react-bits/GlassIcons.jsx";
 import GlassSurface from "./vendor/react-bits/GlassSurface.jsx";
 import TiltedCard from "./vendor/react-bits/TiltedCard.jsx";
+import PlayerHead from "./PlayerHead.jsx";
+import WelcomeSplash from "./WelcomeSplash.jsx";
 import {
   Home,
   Tag,
@@ -98,11 +100,7 @@ function Symbol({ name, ...props }) {
 function Avatar({ large = false }) {
   return (
     <div className={`avatar ${large ? "large" : ""}`}>
-      <div className="avatar-cube">
-        <div className="cube-top" />
-        <div className="cube-side" />
-        <img src="/assets/avatar.png" alt="演示玩家头像" />
-      </div>
+      <PlayerHead name={player.name} />
       <span className="avatar-status" />
     </div>
   );
@@ -280,11 +278,8 @@ function FortuneReading({ fortune, onClose, displayDate, onDisplay }) {
 }
 
 export default function App() {
-  const [page, setPage] = useState(() =>
-    ["titles", "fortunes"].includes(location.hash.slice(2))
-      ? location.hash.slice(2)
-      : "home",
-  );
+  const [page, setPage] = useState("home");
+  useEffect(() => { location.hash = "/home"; }, []);
   const [state, setState] = useState(initial);
   const [systemReduced, setSystemReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   useEffect(() => {
@@ -298,6 +293,16 @@ export default function App() {
   const [reading, setReading] = useState(null);
   const [toast, setToast] = useState(null);
   const [closed, setClosed] = useState(false);
+  const [opening, setOpening] = useState(true);
+  useEffect(() => {
+    if (closed || reduceMotion) {
+      setOpening(false);
+      return;
+    }
+    if (!opening) return;
+    const timer = setTimeout(() => setOpening(false), 3060);
+    return () => clearTimeout(timer);
+  }, [closed, reduceMotion, opening]);
   const notify = (text) => setToast({ text, key: Date.now() });
   const update = (patch) => setState((s) => ({ ...s, ...patch }));
   const equipped = titles.find((t) => t.id === state.equipped);
@@ -316,6 +321,12 @@ export default function App() {
   const navigate = (p) => {
     setPage(p);
     location.hash = "/" + p;
+    setClosed(false);
+  };
+  const openHandbook = () => {
+    setPage("home");
+    location.hash = "/home";
+    setOpening(!reduceMotion);
     setClosed(false);
   };
   useEffect(() => {
@@ -342,14 +353,15 @@ export default function App() {
   }, []);
   useEffect(() => {
     const f = (e) => {
-      if (e.key === "Escape" && !modal && !reading) {
+      if (e.key === "Escape" && !e.repeat && !modal && !reading) {
         e.preventDefault();
-        setClosed((v) => !v);
+        if (closed) openHandbook();
+        else setClosed(true);
       }
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
-  }, [modal, reading]);
+  }, [modal, reading, closed, reduceMotion]);
   function equip(title) {
     update({ equipped: title.id });
     notify(`已佩戴「${title.name}」`);
@@ -368,11 +380,12 @@ export default function App() {
         <span>PLAYER EXPERIENCE</span>
       </div>
       {!closed ? (
-        <div className="app-shell">
-          <aside className="sidebar">
+        <div className={`app-shell welcome-shell ${opening ? "is-opening" : ""}`}>
+          {opening && <WelcomeSplash />}
+          <aside className="sidebar" inert={opening}>
             <GlassSurface width="100%" height="100%" borderRadius={0}
               borderWidth={0.08} brightness={65} opacity={0.9} blur={12} displace={0.5}
-              backgroundOpacity={0.72} saturation={1.15} distortionScale={-12}
+              backgroundOpacity={0.48} saturation={1.15} distortionScale={-12}
               redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="sidebar-material" />
             <button
               className="brand"
@@ -423,14 +436,9 @@ export default function App() {
                 <Settings size={19} />
                 <span>界面设置</span>
               </button>
-              <div className="side-profile">
-                <img src="/assets/avatar.png" alt="" />
-                <span>{player.name}</span>
-                <span className="small-online">在线</span>
-              </div>
             </div>
           </aside>
-          <div className="workspace">
+          <div className="workspace" inert={opening}>
             <header className="topbar">
               <span className="topbar-path">
                 我的空间 <ChevronRight size={13} />{" "}
@@ -457,7 +465,7 @@ export default function App() {
                 </IconButton>
               </div>
             </header>
-            <main className="page-content" key={page}>
+            <main className={`page-content page-${page}`} key={`${page}-${opening ? "opening" : "ready"}`}>
               {page === "home" && (
                 <>
                   <div className="page-heading">
@@ -477,7 +485,7 @@ export default function App() {
                       redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="identity-glass">
                     <div className="identity-main">
                       <div className="identity-copy">
-                        <div className="identity-greeting">你好，旅人</div>
+                        <div className="identity-greeting">你好</div>
                         <h2>
                           {player.name}
                           <Pill>在线</Pill>
@@ -545,9 +553,10 @@ export default function App() {
                           <CalendarDays size={19} />
                         </span>
                         <div>
-                          <small>初次相遇</small>
+                          <small>上次登录</small>
                           <strong className="date-value">
-                            {player.joined}
+                            <span>{player.lastLogin.split(" ")[0]}</span>
+                            <span className="last-login-time">{player.lastLogin.split(" ")[1]}</span>
                           </strong>
                         </div>
                       </div>
@@ -750,7 +759,7 @@ export default function App() {
           </span>
           <h1>旅途仍在继续</h1>
           <p>这里是旅人手册的本地交互预览。</p>
-          <button className="btn primary" onClick={() => setClosed(false)}>
+          <button className="btn primary" onClick={openHandbook}>
             打开旅人手册
             <ArrowRight size={16} />
           </button>
@@ -1164,6 +1173,7 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
 
 function FortunesPage({ archive, state, setReading, update, notify }) {
   const [month, setMonth] = useState(new Date(2026, 10, 1));
+  const [monthDirection, setMonthDirection] = useState(1);
   const [selected, setSelected] = useState(todayKey);
   const [mode, setMode] = useState("calendar");
   const monthPrefix = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
@@ -1176,6 +1186,7 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
   const cells = Math.ceil((start + days) / 7) * 7;
   const shift = (amount) => {
     const d = new Date(month.getFullYear(), month.getMonth() + amount, 1);
+    setMonthDirection(Math.sign(amount));
     setMonth(d);
     const prefix = dateKey(d).slice(0, 7);
     setSelected(Object.keys(archive).filter(date => date.startsWith(prefix)).sort().at(-1) || dateKey(d));
@@ -1194,9 +1205,9 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
         <span className="module-label">DailyFortunes</span>
       </div>
       <div className="fortunes-layout">
-        <section className="card calendar-card">
+        <section className="card calendar-card" style={{ "--month-enter": `${monthDirection * 28}px` }}>
           <div className="calendar-toolbar">
-            <div className="month-label">
+            <div className="month-label" key={monthPrefix}>
               <span className="month-numeral" aria-hidden="true">{String(month.getMonth() + 1).padStart(2, "0")}</span>
               <div><h2>{month.getFullYear()} 年 {month.getMonth() + 1} 月</h2>
                 <span className="month-collection"><Bookmark size={12} />本月收藏 <strong>{stored.length}</strong> 张</span>
@@ -1206,6 +1217,7 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
               <button
                 className="text-button"
                 onClick={() => {
+                  setMonthDirection(1);
                   setMonth(new Date(2026, 10, 1));
                   setSelected(todayKey);
                 }}
@@ -1237,6 +1249,8 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
               </IconButton>
             </div>
           </div>
+          <div className="calendar-month-viewport">
+          <div className="calendar-month-body" key={`${monthPrefix}-${mode}`}>
           {mode === "calendar" ? (
             <>
               <div className="weekdays">
@@ -1311,6 +1325,8 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
               )}
             </div>
           )}
+          </div>
+          </div>
           <div className="calendar-legend">
             <span>
               <i style={{ background: "#b48a41" }} />

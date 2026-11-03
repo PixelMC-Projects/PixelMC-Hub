@@ -695,40 +695,6 @@ nav {
   place-items: center;
   box-shadow: inset 0 1px 0 #ffffff9c;
 }
-.avatar-cube {
-  --cube-depth: 6px;
-  width: 48px;
-  height: 48px;
-  position: relative;
-  transform: translate(3px, 3px);
-}
-.avatar-cube img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  position: relative;
-  border-radius: 1px;
-  box-shadow: 2px 4px 5px #233a2320;
-}
-.cube-top {
-  position: absolute;
-  left: calc(-1 * var(--cube-depth));
-  top: calc(-1 * var(--cube-depth));
-  width: calc(100% + var(--cube-depth));
-  height: var(--cube-depth);
-  background: #302820;
-  clip-path: polygon(0 0, calc(100% - var(--cube-depth)) 0, 100% 100%, var(--cube-depth) 100%);
-}
-.cube-side {
-  position: absolute;
-  left: calc(-1 * var(--cube-depth));
-  top: calc(-1 * var(--cube-depth));
-  width: var(--cube-depth);
-  height: calc(100% + var(--cube-depth));
-  background: #644e34;
-  clip-path: polygon(0 0, 100% var(--cube-depth), 100% 100%, 0 calc(100% - var(--cube-depth)));
-}
 .avatar-status {
   position: absolute;
   right: -3px;
