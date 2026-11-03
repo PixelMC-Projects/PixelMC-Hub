@@ -1,0 +1,42 @@
+{
+  "retrieved": "2026-11-03",
+  "license": "LICENSE.md",
+  "files": [
+    {
+      "file": "GlassIcons.css",
+      "source": "https://reactbits.dev/r/GlassIcons-JS-CSS.json",
+      "upstreamSha256": "c85801f8d4e5cefbccf564c40603ccf1ddb4f6109f65b5ca96e51f85663f16bb",
+      "adapted": false
+    },
+    {
+      "file": "GlassIcons.jsx",
+      "source": "https://reactbits.dev/r/GlassIcons-JS-CSS.json",
+      "upstreamSha256": "bb5e28c8b56d4c7e6cc0b420ebb0a633a7883059ef76f79c9b876ad5335b2d1b",
+      "adapted": true
+    },
+    {
+      "file": "GlassSurface.css",
+      "source": "https://reactbits.dev/r/GlassSurface-JS-CSS.json",
+      "upstreamSha256": "90cfc3ad54ad7aa92bb2b700696e2d9f2d8704162ba1b94ebf0b6f8dcecc4e61",
+      "adapted": false
+    },
+    {
+      "file": "GlassSurface.jsx",
+      "source": "https://reactbits.dev/r/GlassSurface-JS-CSS.json",
+      "upstreamSha256": "d435562be2930a98270e3ff5881402a301f84813b06f0603ed353af12a9c96b3",
+      "adapted": false
+    },
+    {
+      "file": "TiltedCard.css",
+      "source": "https://reactbits.dev/r/TiltedCard-JS-CSS.json",
+      "upstreamSha256": "6214acb092fd97b67af30712ae7d53590bd65ee695c79867410dbed68a042904",
+      "adapted": false
+    },
+    {
+      "file": "TiltedCard.jsx",
+      "source": "https://reactbits.dev/r/TiltedCard-JS-CSS.json",
+      "upstreamSha256": "a2e16f0a1ba2fda592eecce15f05870f95b2f75117b1476c4be9fe2cf59a6ae5",
+      "adapted": true
+    }
+  ]
+}

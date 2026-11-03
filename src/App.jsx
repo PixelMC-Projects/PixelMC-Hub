@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import GlassIcons from "./vendor/react-bits/GlassIcons.jsx";
+import GlassSurface from "./vendor/react-bits/GlassSurface.jsx";
+import TiltedCard from "./vendor/react-bits/TiltedCard.jsx";
 import {
   Home,
   Tag,
@@ -283,6 +286,14 @@ export default function App() {
       : "home",
   );
   const [state, setState] = useState(initial);
+  const [systemReduced, setSystemReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setSystemReduced(media.matches);
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  const reduceMotion = state.reducedMotion || systemReduced;
   const [modal, setModal] = useState(null);
   const [reading, setReading] = useState(null);
   const [toast, setToast] = useState(null);
@@ -309,10 +320,10 @@ export default function App() {
   };
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(state));
-    document.documentElement.dataset.motion = state.reducedMotion
+    document.documentElement.dataset.motion = reduceMotion
       ? "reduced"
       : "full";
-  }, [state]);
+  }, [state, reduceMotion]);
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 2800);
@@ -374,24 +385,20 @@ export default function App() {
             </button>
             <div className="nav-label">我的空间</div>
             <nav aria-label="主导航">
-              {[
-                { id: "home", name: "个人主页", Icon: Home },
-                { id: "titles", name: "我的称号", Icon: Tag },
-                { id: "fortunes", name: "我的签笺", Icon: BookOpen },
-              ].map(({ id, name, Icon }) => (
-                <button
-                  key={id}
-                  className={`nav-item ${page === id ? "active" : ""}`}
-                  aria-current={page === id ? "page" : undefined}
-                  onClick={() => navigate(id)}
-                >
-                  <Icon size={19} />
-                  <span>{name}</span>
-                  {id === "titles" && (
-                    <small>{titles.filter((t) => t.owned).length}</small>
-                  )}
-                </button>
-              ))}
+              <GlassIcons
+                key={String(reduceMotion)}
+                items={[
+                  { id: "home", label: "个人主页", icon: <Home />, color: "blue" },
+                  { id: "titles", label: "我的称号", icon: <Tag />, color: "purple" },
+                  { id: "fortunes", label: "我的签笺", icon: <BookOpen />, color: "orange" },
+                ].map(item => ({ ...item, onClick: () => navigate(item.id), current: page === item.id,
+                  className: page === item.id ? "is-current" : "" }))}
+                size={46} gap={28} columns={1} labels="always" theme="light"
+                plate="tilt" tilt={-16} roundness={0.65} shine={0.9} frost={0.1}
+                tint="#ffffff" tintOpacity={0.16}
+                hover={reduceMotion ? "none" : "lift"} parallax={reduceMotion ? 0 : 0.65}
+                intro={!reduceMotion} reducedMotion={reduceMotion} className="hub-navigation"
+              />
             </nav>
             <div className="sidebar-bottom">
               <div className="server-card">
@@ -438,6 +445,9 @@ export default function App() {
                   <span /> 本地预览
                 </span>
                 <span className="top-divider" />
+                <IconButton className="mobile-settings" label="界面设置" onClick={() => setModal("settings")}>
+                  <Settings size={18} />
+                </IconButton>
                 <IconButton label="收起手册" onClick={() => setClosed(true)}>
                   <X size={19} />
                 </IconButton>
@@ -457,8 +467,11 @@ export default function App() {
                     </div>
                   </div>
                   <section className="identity-card">
+                    <GlassSurface width="100%" height="auto" borderRadius={22}
+                      borderWidth={0.04} brightness={65} opacity={0.7} blur={8}
+                      backgroundOpacity={0.09} saturation={1.25} distortionScale={-45}
+                      redOffset={0} greenOffset={2} blueOffset={5} renderer="svg" className="identity-glass">
                     <div className="identity-main">
-                      <Avatar large />
                       <div className="identity-copy">
                         <div className="identity-greeting">你好，旅人</div>
                         <h2>
@@ -483,8 +496,17 @@ export default function App() {
                         <ArrowUpRight size={15} />
                       </button>
                       <div className="identity-decoration">
-                        <Leaf />
-                        <Leaf />
+                        <span className="medallion-ring" />
+                        <TiltedCard containerHeight="160px" imageHeight="160px" imageWidth="190px"
+                          containerWidth="190px" rotateAmplitude={reduceMotion ? 0 : 10}
+                          scaleOnHover={reduceMotion ? 1 : 1.04} glare={0.75} shadow={0.16}
+                          gyroscope={false} intro={!reduceMotion} reducedMotion={reduceMotion}
+                          showTooltip={false} radius={26} className="player-medallion">
+                          <Avatar large />
+                          <span className="journey-badge"><Sparkles size={13} /> 旅程第 18 天</span>
+                        </TiltedCard>
+                        <span className="identity-spark spark-a">✦</span>
+                        <span className="identity-spark spark-b">✧</span>
                       </div>
                     </div>
                     <div className="stats-row">
@@ -526,6 +548,7 @@ export default function App() {
                         </div>
                       </div>
                     </div>
+                    </GlassSurface>
                   </section>
                   <div className="home-lower">
                     <section className="card today-card">
@@ -701,6 +724,7 @@ export default function App() {
                   update={update}
                   equip={equip}
                   notify={notify}
+                  reduceMotion={reduceMotion}
                 />
               )}
               {page === "fortunes" && (
@@ -818,7 +842,7 @@ export default function App() {
             <div className="setting-row">
               <div>
                 <strong>减少动态效果</strong>
-                <p>减少页面过渡与弹窗动画</p>
+                <p>关闭卡片倾斜、图标动效与页面过渡</p>
               </div>
               <Toggle
                 checked={state.reducedMotion}
@@ -829,7 +853,7 @@ export default function App() {
             <div className="setting-row">
               <div>
                 <strong>界面主题</strong>
-                <p>Fluent 2 · 浅色</p>
+                <p>Liquid Glass · 浅色</p>
               </div>
               <span className="theme-swatch">
                 <Check size={14} />
@@ -912,7 +936,7 @@ export default function App() {
   );
 }
 
-function TitlesPage({ state, update, equip, notify }) {
+function TitlesPage({ state, update, equip, notify, reduceMotion }) {
   const [selected, setSelected] = useState(state.equipped || "dew");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("owned");
@@ -993,11 +1017,15 @@ function TitlesPage({ state, update, equip, notify }) {
           </div>
           <div className={`title-grid ${compact ? "compact" : ""}`}>
             {list.map((item) => (
-              <button
+              <TiltedCard
                 key={item.id}
                 onClick={() => setSelected(item.id)}
-                className={`title-tile ${selected === item.id ? "selected" : ""} ${!item.owned ? "locked" : ""}`}
-                aria-pressed={selected === item.id}
+                className={`title-tile ${item.style} ${selected === item.id ? "selected" : ""} ${!item.owned ? "locked" : ""}`}
+                pressed={selected === item.id} captionText={`${item.name}${state.equipped === item.id ? "，已佩戴" : ""}${!item.owned ? "，未获得" : ""}`}
+                containerHeight={compact ? "86px" : "166px"} imageHeight={compact ? "86px" : "166px"}
+                imageWidth="100%" radius={18} rotateAmplitude={reduceMotion ? 0 : 7}
+                scaleOnHover={reduceMotion ? 1 : 1.025} glare={0.6} shadow={0.12}
+                gyroscope={false} intro={false} reducedMotion={reduceMotion} showTooltip={false}
               >
                 <span className={`title-tile-icon ${item.style}`}>
                   <Symbol name={item.icon} size={24} />
@@ -1020,7 +1048,7 @@ function TitlesPage({ state, update, equip, notify }) {
                   <span>{item.owned ? item.date : "尚未解锁"}</span>
                   {selected === item.id && <Check size={14} />}
                 </span>
-              </button>
+              </TiltedCard>
             ))}
           </div>
           {!list.length && (

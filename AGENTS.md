@@ -1,7 +1,9 @@
 # PixelMC Player Hub
 
 - 本项目位于 `E:\minecraftserver\fabricmod\PixelMCPlayerHub`，当前仅为本地玩家面板原型，不是 Manager 管理后台，也不是已经接入游戏的模组。
-- 使用 Fluent 2 浅色方向；先保留获准的三页：个人主页、我的称号、我的签笺。没有玩法指南页面。详见 `docs/design-spec.md`。
+- 使用场景是 Minecraft Java 版游戏内横屏面板；验收优先横屏分辨率、GUI 缩放和鼠标键盘交互，不开展手机竖屏专项设计或验收。
+- 使用浅色液态玻璃方向和实际 React Bits 组件；保留获准的三页：个人主页、我的称号、我的签笺。没有玩法指南页面。详见 `docs/design-spec.md`。
+- 本项目自有代码使用 Apache-2.0，不影响其他模组许可证。React Bits 保留 `src/vendor/react-bits/LICENSE.md` 的独立条款，不得改标为 Apache 或标准 MIT；已有素材保留独立授权，见 `NOTICE.md`。构建产物须保留许可证副本。
 - 演示数据和真实接口必须清楚区分。不得因本地原型任务修改生产服务器、数据库、客户端或其他模组。
 - 不引入远程字体、凭据、玩家真实隐私记录、服务器身份或管理后台密钥。素材来源见 `NOTICE.md`。
 - 关闭称号展示必须保留已佩戴状态；未解签不泄露签文；未归档的签不能出现在收藏历史。未来接入游戏后以服务端授权与状态为准。
