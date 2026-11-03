@@ -370,7 +370,7 @@ export default function App() {
       {!closed ? (
         <div className="app-shell">
           <aside className="sidebar">
-            <GlassSurface width="100%" height="100%" borderRadius={27}
+            <GlassSurface width="100%" height="100%" borderRadius={0}
               borderWidth={0.08} brightness={65} opacity={0.9} blur={12} displace={0.5}
               backgroundOpacity={0.72} saturation={1.15} distortionScale={-12}
               redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="sidebar-material" />
@@ -963,7 +963,7 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
       <div className="page-heading">
         <div>
           <h1>
-            我的称号<span className="heading-count">6</span>
+            我的称号<span className="heading-count">{titles.filter(item => item.owned).length}</span>
           </h1>
           <p>选一个喜欢的称号，让名字多一点自己的颜色。</p>
         </div>
@@ -1026,18 +1026,19 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
                 onClick={() => setSelected(item.id)}
                 className={`title-tile ${item.style} ${selected === item.id ? "selected" : ""} ${!item.owned ? "locked" : ""}`}
                 pressed={selected === item.id} captionText={`${item.name}${state.equipped === item.id ? "，已佩戴" : ""}${!item.owned ? "，未获得" : ""}`}
-                containerHeight={compact ? "86px" : "154px"} imageHeight={compact ? "86px" : "154px"}
+                containerHeight={compact ? "68px" : "158px"} imageHeight={compact ? "68px" : "158px"}
                 imageWidth="100%" radius={18} rotateAmplitude={reduceMotion ? 0 : 5}
                 scaleOnHover={reduceMotion ? 1 : 1.018} glare={0.5} shadow={0.12}
                 gyroscope={false} intro={false} reducedMotion={reduceMotion} showTooltip={false}
               >
-                <span className={`title-tile-icon ${item.style}`}>
-                  <Symbol name={item.icon} size={24} />
+                <span className="title-emblem" aria-hidden="true">
+                  <span className="emblem-back" />
+                  <span className="emblem-front"><Symbol name={item.icon} size={33} /></span>
                 </span>
-                <Symbol name={item.icon} className="tile-emboss" aria-hidden="true" />
                 <span className="tile-copy">
-                  <TitleText title={item} />
                   <span className="tile-category">{item.category}</span>
+                  <TitleText title={item} />
+                  <span className="tile-rarity">{item.rarity}</span>
                 </span>
                 {state.equipped === item.id ? (
                   <span className="equipped-tag">
@@ -1046,13 +1047,10 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
                   </span>
                 ) : !item.owned ? (
                   <Lock className="locked-icon" size={14} />
-                ) : (
-                  <span className="rarity-label">{item.rarity}</span>
-                )}
+                ) : null}
                 <span className="tile-footer">
                   <span className="tile-date"><CalendarDays size={12} />{item.owned ? item.date : "尚未解锁"}</span>
-                  <span className="tile-quality">{state.equipped === item.id ? item.rarity : selected === item.id ? "已选中" : item.owned ? "已收藏" : "待解锁"}
-                    {selected === item.id && <Check size={12} />}</span>
+                  <span className="tile-quality">{selected === item.id ? <><Check size={12} />已选中</> : <ArrowUpRight size={14} />}</span>
                 </span>
               </TiltedCard>
             ))}
@@ -1080,12 +1078,17 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
               : "每一个名字，都有它的故事"}
           </p>
         </section>
-        <aside className="title-detail card">
+        <aside className={`title-detail card ${t.style}`}>
           <div className="card-title">
             <h2>佩戴预览</h2>
-            <span className="quiet-label">{t.rarity}</span>
+            <span className={`preview-status ${state.equipped === t.id ? "is-equipped" : ""}`}>
+              {state.equipped === t.id ? <Check size={12} /> : <Eye size={12} />}
+              {state.equipped === t.id ? "已佩戴" : "仅预览"}
+            </span>
           </div>
           <div className="nameplate-preview">
+            <span className="preview-orbit" aria-hidden="true" />
+            <Symbol name={t.icon} className="preview-symbol" aria-hidden="true" />
             <div className="nameplate">
               <TitleText title={t} />
               <strong>{player.name}</strong>
@@ -1101,9 +1104,10 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
             </h3>
             <p>{t.description}</p>
             <div className="acquisition">
-              <small>{t.owned ? "获得方式" : "解锁条件"}</small>
+              <small><Gift size={13} />{t.owned ? "获得方式" : "解锁条件"}</small>
               <span>{t.condition}</span>
             </div>
+            {t.owned && <div className="acquired-date"><CalendarDays size={13} /><span>{t.date}</span><span>获得</span></div>}
           </div>
           <div className="equip-controls">
             {t.owned ? (
@@ -1173,7 +1177,8 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
   const shift = (amount) => {
     const d = new Date(month.getFullYear(), month.getMonth() + amount, 1);
     setMonth(d);
-    setSelected(dateKey(d));
+    const prefix = dateKey(d).slice(0, 7);
+    setSelected(Object.keys(archive).filter(date => date.startsWith(prefix)).sort().at(-1) || dateKey(d));
   };
   const display = archive[state.displayDate];
   return (
@@ -1192,11 +1197,10 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
         <section className="card calendar-card">
           <div className="calendar-toolbar">
             <div className="month-label">
-              <CalendarDays size={20} />
-              <h2>
-                {month.getFullYear()} 年 <strong>{month.getMonth() + 1}</strong>{" "}
-                月
-              </h2>
+              <span className="month-numeral" aria-hidden="true">{String(month.getMonth() + 1).padStart(2, "0")}</span>
+              <div><h2>{month.getFullYear()} 年 {month.getMonth() + 1} 月</h2>
+                <span className="month-collection"><Bookmark size={12} />本月收藏 <strong>{stored.length}</strong> 张</span>
+              </div>
             </div>
             <div className="calendar-controls">
               <button
@@ -1328,9 +1332,9 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
               <i style={{ background: "#a27b7e" }} />
               下下签
             </span>
-            <small>本月收藏 {stored.length} 张</small>
           </div>
         </section>
+        <div className="fortune-aside">
         <aside className="card calendar-selection">
           <div className="card-title">
             <h2>{selected.replaceAll("-", " / ")}</h2>
@@ -1338,6 +1342,7 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
           </div>
           {selectedFortune ? (
             <>
+              <div className="fortune-preview-paper" style={{ "--grade": gradeColor(selectedFortune.grade) }}>
               <div className="fortune-seal" aria-hidden="true"><img src="/assets/fortune-slip.png" alt="" /></div>
               <span
                 className="fortune-grade"
@@ -1353,17 +1358,20 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
                   <p key={l}>{l}</p>
                 ))}
               </div>
-              <span className="collected-status">
+              <div className="fortune-provenance"><span>{player.name} 所得</span><time>{selectedFortune.time}</time></div>
+              </div>
+              <div className="fortune-reading-actions"><span className="collected-status">
                 <CheckCheck size={14} />
-                已收进藏签匣
+                已收藏
               </span>
               <button
                 className="btn primary"
                 onClick={() => setReading(selectedFortune)}
               >
-                展开签文
+                阅读解签
                 <ArrowRight size={16} />
               </button>
+              </div>
             </>
           ) : (
             <div className="empty-day">
@@ -1373,8 +1381,8 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
             </div>
           )}
         </aside>
-      </div>
       <section className="display-card">
+        <div className="display-current">
         <span className="display-object">
           <img src="/assets/collection-chest.png" alt="藏签匣" />
         </span>
@@ -1386,10 +1394,12 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
               {display?.grade}
             </span>
           </h3>
-          <p>选一张喜欢的签，留在手册中。方块上的悬浮展示仍在游戏内设置。</p>
+          <p>{display ? `${display.date.replaceAll("-", "/")} · 已收藏` : "从月历中选择一张已收藏的签"}</p>
+        </div>
         </div>
         <button
           className="btn subtle"
+          disabled={!selectedFortune || state.displayDate === selected}
           onClick={() => {
             if (selectedFortune) {
               update({ displayDate: selected });
@@ -1398,9 +1408,12 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
           }}
         >
           {state.displayDate === selected ? "当前选择已展示" : "展示选中的签"}
-          <ArrowUpRight size={15} />
+          {state.displayDate === selected ? <Check size={15} /> : <ArrowUpRight size={15} />}
         </button>
+        <small className="display-note">仅用于手册，方块展示在游戏内设置</small>
       </section>
+        </div>
+      </div>
     </>
   );
 }
