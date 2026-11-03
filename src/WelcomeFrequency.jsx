@@ -1,7 +1,7 @@
 export const welcomeModes = [
-  { id: "always", label: "每次打开", description: "每次打开手册时播放" },
-  { id: "login", label: "每次登录", description: "每次进服后，仅首次打开手册时播放" },
   { id: "once", label: "仅初次", description: "仅第一次打开手册时播放，以后不再显示" },
+  { id: "login", label: "每次登录", description: "每次进服后，仅首次打开手册时播放" },
+  { id: "always", label: "每次打开", description: "每次打开手册时播放" },
 ];
 
 export function shouldShowWelcome(mode, { reducedMotion, seenThisLogin, seenBefore }) {
