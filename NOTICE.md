@@ -19,7 +19,7 @@ Artwork and fortune text are reused from the local PixelMC projects under their 
 
 ## Native client / 原生客户端
 
-- `minecraft/` 的原生 UI 与绘制桥接为本项目实现，使用 Apache-2.0；网页中的 React Bits 组件没有作为浏览器运行时嵌入游戏，网页组件仍保留原有许可。Native UI and rendering integration are original application code; the web React Bits components retain their own terms.
+- `minecraft/` 中自有的原生 UI 与绘制桥接使用 Apache-2.0。直接移植自 React Bits 的弹簧动画、透视及玻璃着色算法保留 Copyright © 2026 David Haz / MIT + Commons Clause，具体文件在文件头标明；完整条款随 JAR 保存于 `assets/pixelmc_hub/licenses/React-Bits-LICENSE.md`。Native adaptations of React Bits motion, perspective, and glass algorithms retain the original copyright and MIT + Commons Clause terms; they are not relicensed as Apache-2.0. File headers identify those adaptations. No browser runtime is embedded.
 - Skija `0.143.18` / HumbleUI types `0.2.0`：Apache-2.0；Windows x64 本地库包含 Skia，使用其 BSD 许可及上游声明。依赖以原始 Jar-in-Jar 分发，未重定位或改写 JNI 包。The original dependency jars are bundled without JNI relocation.
 - 上游许可副本及 Skija NOTICE 保存于 `minecraft/src/main/resources/assets/pixelmc_hub/licenses/`，并包含在客户端 JAR 中。Native dependency license and notice copies are included in the client JAR.
 - `minecraft/src/main/resources/assets/pixelmc_hub/` 下复用的图像、签文和 Lucide 图标沿用上文对应许可；素材清单记录来源与文件摘要。运行时玩家皮肤只读取游戏内已加载的纹理，不保存或发布玩家皮肤文件。Reused native assets keep their original licenses; runtime skin textures are not published with the project.

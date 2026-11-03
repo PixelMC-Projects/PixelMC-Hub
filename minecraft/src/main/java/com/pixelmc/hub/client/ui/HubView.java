@@ -2,6 +2,12 @@
 package com.pixelmc.hub.client.ui;
 
 import com.pixelmc.hub.client.render.HubDraw;
+import com.pixelmc.hub.client.render.GlassStyle;
+import com.pixelmc.hub.client.render.IconPose;
+import io.github.humbleui.skija.Matrix33;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
 import java.text.Collator;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -12,7 +18,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /** Native, client-only rendering of the approved local handbook prototype. */
 public final class HubView {
@@ -22,9 +27,16 @@ public final class HubView {
     private final HubData data=new HubData();
     private final List<Hit> hits=new ArrayList<>();
     private final List<Hit> nextHits=new ArrayList<>();
+    private final Map<String,HubMotion.Transition> transitions=new HashMap<>();
+    private final Map<String,HubMotion.Tilt> tilts=new HashMap<>();
+    private final HubMotion.Navigation[] navigation={new HubMotion.Navigation(),new HubMotion.Navigation(),new HubMotion.Navigation()};
+    private final Deque<Matrix33> matrixStack=new ArrayDeque<>();
+    private final Deque<Float> alphaStack=new ArrayDeque<>();
+    private Matrix33 logical=Matrix33.IDENTITY;
+    private Matrix33 titleClipTransform=Matrix33.IDENTITY,pageTransform=Matrix33.IDENTITY,sliderTransform=Matrix33.IDENTITY;
     private HubDraw d;
-    private float mx,my,opacity=1,offsetY;
-    private long now=System.nanoTime(),openedAt=now,pageAt=now,monthAt=now,toastAt;
+    private float mx,my,opacity=1,offsetY,interactiveAlpha=1,dt=1f/60;
+    private long now=System.nanoTime(),openedAt=now,pageAt=now,monthAt=now,toastAt,lastFrame=now,modalAt,navAt=now;
     private int page,filter,sort,fortuneState=3,searchCaret;
     private String playerName="zhan_cpu",equipped="dew",selectedTitle="dew",query="",welcomeMode="always";
     private boolean visible=true,reducedMotion,closeRequest,playWelcome,compact,history,sliderDragging,searchSelectAll;
@@ -32,18 +44,26 @@ public final class HubView {
     private YearMonth month=YearMonth.from(HubData.TODAY);
     private int monthDirection=1;
     private LocalDate selectedDate=HubData.TODAY,displayDate=HubData.TODAY;
-    private String overlay,focusId,restoreFocus,toast;
+    private String overlay,focusId,restoreFocus,toast,pressedId;
+    private Hit pressedHit;
+    private boolean keyboardFocus,pressMoved,keyboardPress;
+    private float pressX,pressY;
     private HubData.Entry reading;
     private float modalX,modalY,modalW,modalH;
+    private float viewportX,viewportY,viewportW=1260,viewportH=850;
 
-    private record Hit(String id,String label,float x,float y,float w,float h,Runnable action) {
-        boolean contains(float px,float py) { return px>=x&&py>=y&&px<x+w&&py<y+h; }
+    private record Hit(String id,String label,float x,float y,float w,float h,Matrix33 transform,Matrix33 viewport,Runnable action) {
+        boolean contains(float px,float py) {
+            if(viewport!=null){float[] clip=HubDraw.inversePoint(viewport,px,py);if(clip[0]<230||clip[1]<272||clip[0]>=904||clip[1]>=794)return false;}
+            float[] p=HubDraw.inversePoint(transform,px,py);return p[0]>=x&&p[1]>=y&&p[0]<x+w&&p[1]<y+h;
+        }
     }
     public HubView() {}
     public void setPlayerName(String name) { if(name!=null&&!name.isBlank()) playerName=name; }
+    public void setViewportBounds(float x,float y,float w,float h){if(w>0&&h>0){viewportX=x;viewportY=y;viewportW=w;viewportH=h;}}
     public void setSettings(String mode,boolean reduced) {
         welcomeMode=List.of("once","login","always").contains(mode)?mode:"always";
-        reducedMotion=reduced;
+        setReducedMotion(reduced);
     }
     public String welcomeMode() { return welcomeMode; }
     public boolean reducedMotion() { return reducedMotion; }
@@ -51,16 +71,25 @@ public final class HubView {
     public boolean isWelcomePlaying() { return playWelcome&&!reducedMotion&&System.nanoTime()-openedAt<3_060_000_000L; }
     public void open(boolean welcome) {
         page=0;overlay=null;reading=null;focusId=null;closeRequest=false;
-        openedAt=System.nanoTime();playWelcome=welcome&&!reducedMotion;
+        openedAt=System.nanoTime();navAt=openedAt;lastFrame=openedAt;playWelcome=welcome&&!reducedMotion;
         pageAt=openedAt+(playWelcome?3_060_000_000L:0);hits.clear();
+        transitions.clear();tilts.clear();pressedId=null;
+        for(HubMotion.Navigation state:navigation){state.enter.snap(reducedMotion?1:0);state.hover.snap(0);state.press.snap(0);state.x.snap(0);state.y.snap(0);}
     }
 
     public void render(HubDraw draw,float mouseX,float mouseY,long nowNanos) {
-        d=draw;mx=mouseX;my=mouseY;now=nowNanos;opacity=1;offsetY=0;nextHits.clear();
+        d=draw;mx=mouseX;my=mouseY;now=nowNanos;dt=clamp((now-lastFrame)/1_000_000_000f,0,.05f);lastFrame=now;
+        opacity=1;offsetY=0;interactiveAlpha=1;logical=Matrix33.IDENTITY;matrixStack.clear();alphaStack.clear();nextHits.clear();
+        float shell=reducedMotion?1:HubMotion.bezier(progress(now-openedAt,360_000_000L),.2f,.8f,.2f,1);
+        beginAlpha(shell);push(HubDraw.cssPerspective(630,425,800,0,0,0,.992f+.008f*shell,0,12*(1-shell)));
+        d.boxShadow(0,0,1260,850,28,0,28,80,-28,0x60435882);
+        d.boxShadow(0,0,1260,850,28,0,5,16,0,0x1253658e);
         d.save();d.clipRoundRect(0,0,1260,850,28);
-        // The color belongs to the surface, never to its text or controls.
-        d.gradientRoundRect(0,0,1260,850,28,0xc9edf6ff,0xc6eee8ff);
-        d.rect(208,0,1052,850,0xaefbfcff);
+        d.blurBackdrop(0,0,1260,850,28,24,1);
+        d.roundRect(0,0,1260,850,28,0x99f4f6ff);
+        d.insetBoxShadow(0,0,1260,850,28,0,1,0,0,0xffffffff);
+        d.linearGradientRoundRect(208,0,1052,850,0,135,new int[]{0xadffffff,0x9cf5f6ff},new float[]{0,1});
+        d.captureGlassBackdrop(0,0,208,850);
         sidebar();topbar();
         boolean welcomeActive=playWelcome&&!reducedMotion&&now-openedAt<3_060_000_000L;
         if(!welcomeActive) {
@@ -68,7 +97,8 @@ public final class HubView {
         }
         if(welcomeActive) { nextHits.clear();welcome(); }
         d.restore();
-        d.strokeRoundRect(.5f,.5f,1259,849,28,1,0xecffffff);
+        d.strokeRoundRect(.5f,.5f,1259,849,28,1,0xe6ffffff);
+        pop();endAlpha();
         if(!welcomeActive&&(overlay!=null||reading!=null))modal();
         if(toast!=null)toast();
         hits.clear();hits.addAll(nextHits);
@@ -76,36 +106,46 @@ public final class HubView {
     }
 
     private void sidebar() {
-        d.gradientRoundRect(0,0,208,850,0,0x62ffffff,0x78dce5ff);
+        d.glassSurface(0,0,208,850,0,GlassStyle.SIDEBAR);
+        d.linearGradientRoundRect(0,0,208,850,0,145,new int[]{0x40ffffff,0x28e6edff,0x35e9e3ff},new float[]{0,.52f,1});
+        d.linearGradientRoundRect(0,0,208,850,0,145,new int[]{0x3df8fcff,0x2beaf1ff,0x38eee9ff},new float[]{0,.5f,1});
+        d.linearGradientRoundRect(5,5,203,840,0,118,new int[]{0x24ffffff,0x00ffffff,0x00ffffff,0x14bcc0e3},new float[]{0,.32f,.72f,1});
+        d.insetBoxShadow(0,0,208,850,0,2,1,3,0,0xffffffff);
+        d.insetBoxShadow(0,0,208,850,0,-3,0,7,0,0x42abb9e1);
+        d.boxShadow(0,0,208,850,0,6,0,20,0,0x0c65719e);
         d.rect(5,5,1,840,0x88ffffff);d.rect(207,0,1,850,0x88b3bfdf);
         image("server-logo",22,27,44,44,1);
-        text("旅人手册",77,46,18,INK,true);text("PixelMC-Hub",77,65,10,0xff687491,false);
+        tracked("旅人手册",77,46,18,1.2f,INK,650,false);text("PixelMC-Hub",77,65,10,0xff687491,false);
         hit("brand","旅人手册首页",18,20,174,61,()->navigate(0));
         text("我的空间",25,118,11,0xff677591,false);
         String[] labels={"个人主页","我的称号","我的签笺"};
         String[] icons={"home","tag","book-open"};
-        int[] colors={0xff1a4be6,0xff7334d5,0xfff86a1b};
-        int[] bright={0xff56a1fb,0xffbf72f3,0xffffb93d};
+        int[] colors={0xff1949e6,0xff6f34d5,0xfff8651b};
+        int[] bright={0xff569dfb,0xffbf72f3,0xffffb83d};
         for(int i=0;i<3;i++) {
             float y=145+i*74;final int destination=i;
             boolean hover=inside(21,y-8,172,64),current=page==i;
-            if(current||hover)glass(20,y-8,173,64,18,current?0xbdffffff:0x64ffffff,0x52ffffff);
-            float lift=!reducedMotion&&hover?-3:0;
-            d.save();d.translate(81,y+lift+46);d.canvas().rotate(-16);
-            d.gradientRoundRect(-46,-46,46,46,14,bright[i],colors[i]);
-            d.strokeRoundRect(-46,-46,46,46,14,1,0xa4ffffff);d.restore();
-            shadow(35,y+4+lift,46,46,14,0x17565790);
-            d.gradientRoundRect(35,y+lift,46,46,14,0x4dffffff,0x29ffffff);
-            d.strokeRoundRect(35,y+lift,46,46,14,1,0xe6ffffff);
-            icon(icons[i],48,y+13+lift,20,0xffffffff);
-            text(labels[i],99,y+28,14,current?0xff3a3590:0xff53627e,current);
+            float h=transition("nav-bg-"+i,hover?1:0,200);
+            if(current)glass(20,y-8,173,64,18,0xb8ffffff,0x57ffffff);
+            else if(h>0)d.roundRect(20,y-8,173,64,18,withAlpha(0x65ffffff,h));
+            float[] mouse=HubDraw.inversePoint(logical,mx,my);
+            float nx=clamp((mouse[0]-58)/23,-1,1),ny=clamp((mouse[1]-y-23)/23,-1,1);
+            HubMotion.Navigation state=navigation[i];
+            state.update(dt,reducedMotion,hover,Objects.equals(pressedId,"nav-"+i),nx,ny,now-navAt>=i*70_000_000L);
+            IconPose pose=HubDraw.iconPose(46,state.enter.value,state.hover.value,state.press.value,state.x.value,state.y.value,reducedMotion);
+            d.glassIcon(35,y,46,bright[i],colors[i],pose,1);
+            beginAlpha(pose.faceAlpha(),35,y-8,46,62);
+            push(HubDraw.cssPerspective(58,y+23,800,0,0,0,pose.faceScale(),0,pose.faceY()));
+            icon(icons[i],48.8f,y+13.8f,18.4f,0xffffffff);pop();endAlpha();
+            tracked(labels[i],99,y+28,14,.25f,current?0xff3a3590:0xff53627e,current?700:550,false);
             hit("nav-"+i,labels[i],20,y-8,173,64,()->navigate(destination));
         }
         glass(24,718,36,40,12,0xc9e7fff2,0x7ab4e9d7);icon("flower-2",32,728,21,0xff458c80);
         text("香草纪元",70,731,12,0xff52627b,true);
         d.circle(72,748,2,0xff6a9c8b);text("当前存档 · 演示",80,752,10,0xff708098,false);
         d.line(24,777,184,777,1,0x55b7c2dc);
-        if(inside(20,791,172,40))d.roundRect(20,791,172,40,10,0x88ffffff);
+        float settingsHover=transition("settings-hover",inside(20,791,172,40)?1:0,140);
+        if(settingsHover>0)d.roundRect(20,791,172,40,10,withAlpha(0x99ffffff,settingsHover));
         icon("settings",34,801,19,0xff65738c);text("界面设置",65,816,13,0xff65738c,false);
         hit("settings","界面设置",20,791,172,40,()->openOverlay("settings"));
     }
@@ -119,8 +159,8 @@ public final class HubView {
     }
     private void heading(String title,String subtitle,String module,int count) {
         group(0,340);
-        text(title,LEFT,108,25,INK,true);
-        if(count>=0){float x=LEFT+d.textWidth(title,25,true)+12;pill(Integer.toString(count),x,87,0xffe9e1ff,0xff7361c3,false);}
+        tracked(title,LEFT,108,25,1,INK,720,false);
+        if(count>=0){String number=Integer.toString(count);float x=LEFT+trackedWidth(title,25,1,720,false)+12,w=d.textWidth(number,13,500)+18;d.roundRect(x,84,w,28,10,0xffe9e1ff);d.strokeRoundRect(x,84,w,28,10,1,0xffffffff);d.text(number,x+9,103,13,0xff7361c3,500);}
         text(subtitle,LEFT,137,13,0xff6c7891,false);
         if(module!=null)textRight(module,1232,105,10,0xff7c72a6,false);
         ungroup();
@@ -129,31 +169,38 @@ public final class HubView {
 
     private void home() {
         heading("个人主页","很高兴又见到你，今天是旅程的第 18 天。",null,-1);
+        group(0,340);
         icon("sun",1062,88,18,0xffbf8a37);text("11 月 3 日，星期二",1089,103,12,0xff6e7990,false);
+        ungroup();
         group(50,440);
-        shadow(LEFT,174,WIDTH,276,22,0x188980c5);
-        d.gradientRoundRect(LEFT,174,WIDTH,276,22,0xffd9f0ff,0xffdbc9f9);
+        d.boxShadow(LEFT,174,WIDTH,276,22,0,10,30,0,0x288980c5);
+        d.linearGradientRoundRect(LEFT,174,WIDTH,276,22,110,new int[]{0xffd9f0ff,0xffe4e8ff,0xffdbc9f9},new float[]{0,.45f,1});
+        d.radialGradientRoundRect(LEFT,174,WIDTH,276,22,LEFT+WIDTH*.78f,174+276*.34f,WIDTH*.5f,276*.5f,new int[]{0xffbcbbff,0x00bcbbff},new float[]{0,1});
+        d.captureGlassBackdrop(LEFT,174,WIDTH,276);d.glassSurface(LEFT,174,WIDTH,276,22,GlassStyle.IDENTITY);
+        d.insetBoxShadow(LEFT,174,WIDTH,276,22,0,1,2,0,0xffffffff);
+        d.insetBoxShadow(LEFT,174,WIDTH,276,22,0,0,5,0,0x298c9ac3);
+        d.boxShadow(LEFT,174,WIDTH,276,22,0,8,22,0,0x136c64aa);
         d.save();d.clipRoundRect(LEFT,174,WIDTH,276,22);
-        for(int i=0;i<20;i++)d.circle(1041,256,205-i*9,a(0x02aaa3f7));
         d.rect(LEFT,366,WIDTH,84,a(0x9effffff));
         d.line(LEFT,366,1232,366,1,a(0xc7ffffff));d.restore();
         d.strokeRoundRect(LEFT,174,WIDTH,276,22,1,a(0xf2ffffff));
         text("你好",263,211,12,0xff586987,false);
-        text(fit(playerName,390,35,true),263,255,35,0xff253657,true);
-        float nameWidth=Math.min(390,d.textWidth(playerName,35,true));
+        String name=fitTracked(playerName,390,35,-1,700,false);tracked(name,263,255,35,-1,0xff253657,700,false);
+        float nameWidth=trackedWidth(name,35,-1,700,false);
         pill("本地角色",277+nameWidth,232,0xbceffff2,0xff25816a,true);
         HubData.Title worn=HubData.title(equipped);
-        text(worn==null?"暂未佩戴称号":worn.name(),263,287,15,worn==null?MUTED:HubData.titleText(worn),true);
+        if(worn==null)text("暂未佩戴称号",263,287,14,MUTED,true);else titleLabel(worn,263,287,14,1.4f,false,false);
         if(!visible&&worn!=null){icon("eye-off",371,276,13,MUTED);text("展示已隐藏",390,287,10,MUTED,false);}
         button("profile","个人资料  ↗",263,315,106,31,false,true,()->openOverlay("profile"));
         d.save();d.translate(1080,268);d.canvas().rotate(-29);
         d.strokeRoundRect(-120,-57,240,114,57,2,a(0x70ffffff));d.restore();
-        float tilt=!reducedMotion&&inside(987,187,190,160)?(mx-1082)/32:-5;
-        d.save();d.translate(1082,267);d.canvas().rotate(tilt);
-        glass(-95,-80,190,160,26,0x66ffffff,0x24e7e5ff);
-        if(opacity>.04f)HubHead.draw(d,-27,-53,54,-23);
-        pill("✧ 旅程第 18 天",-62,42,0x6bffffff,0xff5d5491,false);
-        d.restore();text("✦",1190,222,27,0xffffffff,false);text("✧",967,321,21,0xffffffff,false);
+        push(Matrix33.makeRotate(-5,1082,267));
+        HubMotion.Tilt medallion=beginTilt("medallion",987,187,190,160,10,1.04f,true,.16f,26);
+        glass(987,187,190,160,26,0x66ffffff,0x24e7e5ff);
+        HubHead.draw(d,1055,214,54,-23,-2);
+        pill("✧ 旅程第 18 天",1020,309,0x6bffffff,0xff5d5491,false);
+        endTilt(medallion,987,187,190,160,26,10,.75f);pop();
+        text("✦",1190,222,27,0xffffffff,false);text("✧",967,321,21,0xffffffff,false);
         stat(263,391,"clock","累计在线 · 演示","128", "小时  42 分钟",0xff6b7dd6,0xffe8eeff);
         d.line(566,388,566,430,1,a(0x4ab7c1e0));
         stat(590,391,"log-in","登录次数 · 演示","36","次",0xffaa75c6,0xfff1e9ff);
@@ -171,23 +218,27 @@ public final class HubView {
     private void stat(float x,float y,String name,String label,String main,String unit,int color,int background) {
         d.roundRect(x,y,33,33,11,a(background));icon(name,x+8,y+8,17,color);
         text(label,x+45,y+9,11,0xff72809c,false);text(main,x+45,y+34,21,0xff344566,true);
-        text(unit,x+49+d.textWidth(main,21,true),y+33,10,0xff78869d,false);
+        text(unit,x+49+d.textWidth(main,21,600),y+33,10,0xff78869d,false);
     }
     private void homeToday() {
-        glass(LEFT,470,515,310,22,0xfffffefa,0xfffff5e4);
+        glass(LEFT,470,515,310,22,0xfffffefa,0xfffff9ef);
+        d.radialGradientRoundRect(LEFT,470,515,310,22,751,600,335,202,new int[]{0x9cffe9bf,0x00ffe9bf},new float[]{0,1});
         icon("leaf",259,493,19,0xffbc9345);text("今日签笺",287,510,16,INK,true);
         textRight("每日一签",728,508,10,MUTED,false);
         HubData.Fortune f=data.fortune(1);
         if(fortuneState>=2) {
             text(f.grade()+"  ·  第"+f.id()+"签",259,551,11,HubData.gradeColor(f.grade()),false);
-            serif(f.title(),259,597,29,0xff4e4f42,true);
-            serif(f.poem().get(0),259,630,13,0xff828069,false);serif(f.poem().get(1),259,655,13,0xff828069,false);
+            tracked(f.title(),259,597,29,2,0xff4e4f42,600,true);
+            tracked(f.poem().get(0),259,630,13,1.3f,0xff828069,400,true);tracked(f.poem().get(1),259,655,13,1.3f,0xff828069,400,true);
         } else {
             text("今日机缘",259,551,11,0xffae8132,false);
             text(fortuneState==0?"有一签，等你开启":"签已入手，静候解读",259,593,24,0xff4e4f42,true);
             wrap(fortuneState==0?"拿起签筒，为今天留下一份期许。":"带上未解的签，前往解签龛。",259,629,260,13,23,0xff928675,false);
         }
-        d.circle(662,606,61,a(0x30ebcf87));image("fortune-barrel",598,541,126,140,1);
+        d.circle(662,606,61,a(0x30ebcf87));
+        float barrel=transition("fortune-barrel-hover",inside(LEFT,470,515,310)?1:0,350);
+        if(reducedMotion)barrel=0;
+        push(HubDraw.cssPerspective(661,611,800,0,0,-8+5*barrel,1,0,-4*barrel));image("fortune-barrel",598,541,126,140,1);pop();
         text("✦",716,556,12,0xffd5ae61,false);text("✧",586,675,16,0xffd5ae61,false);
         d.line(259,706,728,706,1,a(0x33cabc9b));
         icon(fortuneState==3?"check-check":"info",259,731,15,0xff7f8e81);
@@ -210,7 +261,8 @@ public final class HubView {
         iconButton("archive-link","打开签笺月历","arrow-up-right",1177,740,30,()->navigate(2),true);
     }
     private void keepsake(float y,String title,String subtitle,String art,int bg,int color,String grade,Runnable click) {
-        if(inside(793,y-1,417,60))d.roundRect(787,y-1,429,60,10,a(0x80f5f2ff));
+        float hover=transition("keepsake-hover-"+y,inside(793,y-1,417,60)?1:0,140);
+        if(hover>0)d.roundRect(793,y-1,417,60,0,withAlpha(0x80f5f2ff,hover));
         glass(793,y+5,36,39,12,bg,lighten(bg,.1f));
         if(art.equals("fortune-slip"))image(art,797,y+7,28,34,1);else icon(art,800,y+13,22,color);
         text(title,841,y+19,13,0xff4c5570,false);
@@ -234,8 +286,9 @@ public final class HubView {
         String[] labels={"已拥有","全部","未获得"};
         for(int i=0;i<3;i++) {
             final int value=i;float x=LEFT+3+i*76;
-            if(filter==i)glass(x,177,74,30,10,0xffffffff,0xffffffff);
-            textCenter(labels[i],x+37,197,11,filter==i?0xff6650a7:0xff78839b,filter==i);
+            float chosen=stateTransition("title-filter-selected-"+i,filter==i?1:0,140);
+            if(chosen>0){beginAlpha(chosen,x,177,74,30);glass(x,177,74,30,10,0xffffffff,0xffffffff);endAlpha();}
+            textCenter(labels[i],x+37,197,11,mix(0xff78839b,0xff6650a7,chosen),filter==i);
             hit("filter-"+i,labels[i],x,177,74,30,()->{filter=value;titleScroll=0;});
         }
         iconButton("density",compact?"切换卡片显示":"切换紧凑显示",compact?"grid-2x2":"list",864,176,32,()->{compact=!compact;titleScroll=0;},true);
@@ -244,7 +297,8 @@ public final class HubView {
         if(searchSelectAll&&!query.isEmpty()&&"search".equals(focusId))d.roundRect(273,230,Math.min(438,d.textWidth(query,12,false))+2,21,3,a(0xffd4c9ff));
         text(query.isEmpty()?"搜索称号":fit(query,439,12,false),274,247,12,query.isEmpty()?0xff949caf:INK,false);
         if("search".equals(focusId)) {
-            d.strokeRoundRect(LEFT,223,518,36,11,1.5f,a(0xffa391dc));
+            d.boxShadow(LEFT,223,518,36,11,0,0,0,3,0x1fab92ef);
+            d.strokeRoundRect(LEFT,223,518,36,11,1,a(0xffa391dc));
             if(!searchSelectAll&&(now/500_000_000L)%2==0) {
                 float caret=274+d.textWidth(query.substring(0,Math.min(searchCaret,query.length())),12,false);
                 if(caret<735)d.line(caret,232,caret,250,1,a(INK));
@@ -258,6 +312,7 @@ public final class HubView {
         float viewportHeight=510;
         titleScroll=Math.max(0,Math.min(titleScroll,Math.max(0,contentHeight-viewportHeight)));
         d.save();d.clipRoundRect(230,272,674,522,0);
+        titleClipTransform=logical;
         for(int i=0;i<list.size();i++) {
             float x=compact?LEFT:LEFT+(i%2)*339;
             float y=278+(compact?i*80:(i/2)*174)-titleScroll;
@@ -279,26 +334,22 @@ public final class HubView {
     }
     private void titleTile(HubData.Title t,float x,float y,float w,float h) {
         boolean selected=selectedTitle.equals(t.id()),hover=inside(x,y,w,h);
-        d.save();
-        if(hover&&!reducedMotion) {
-            d.translate(x+w/2,y+h/2);d.canvas().rotate((mx-(x+w/2))/w*2.1f);
-            d.canvas().scale(1.012f,1.012f);d.translate(-x-w/2,-y-h/2);
-        }
+        beginAlpha(t.owned()?1:.8f,x,y,w,h);
+        HubMotion.Tilt tilt=beginTilt("title-"+t.id(),x,y,w,h,5,1.018f,false,.12f,18);
         shadow(x,y,w,h,18,selected?0x1f607097:0x0b607097);
-        d.gradientRoundRect(x,y,w,h,18,a(0xf9ffffff),a(lighten(t.light(),.15f)));
+        d.radialGradientRoundRect(x,y,w,h,18,x+w,y,w,h,new int[]{t.light(),0xd9ffffff},new float[]{0,.74f});
         d.strokeRoundRect(x,y,w,h,18,selected?1.5f:1,a(selected?mix(t.color(),0xff6452ad,.2f):0xfaffffff));
-        if(hover)d.gradientRoundRect(x+1,y+1,w-2,h-2,17,a(0x32ffffff),a(0x04ffffff));
         if(compact) {
             emblem(t,x+16,y+13,42);
-            text(t.name(),x+75,y+30,17,t.owned()?HubData.titleText(t):0xff78859b,true);
+            titleLabel(t,x+75,y+30,17,1,false,!t.owned());
             text(t.category(),x+75,y+50,10,0xff7c859a,false);
             if(Objects.equals(equipped,t.id()))pill("✓ 已佩戴",x+w-84,y+22,0xa3ffffff,0xff448772,false);
             else if(!t.owned())icon("lock",x+w-36,y+26,14,0xff8d97ad);
         } else {
             text(t.category(),x+20,y+32,10,0xff7c859a,false);
-            text(t.name(),x+20,y+66,20,t.owned()?HubData.titleText(t):0xff78859b,true);
+            titleLabel(t,x+20,y+66,20,1,false,!t.owned());
             d.circle(x+23,y+88,2,a(t.color()));text(t.rarity(),x+32,y+92,10,mix(t.color(),INK,.5f),false);
-            emblem(t,x+w-81,y+47,57);
+            emblem(t,x+w-81,y+43,60);
             if(Objects.equals(equipped,t.id()))pill("✓ 已佩戴",x+w-86,y+12,0xa3ffffff,0xff448772,false);
             else if(!t.owned())icon("lock",x+w-31,y+17,14,0xff8d97ad);
             d.line(x+20,y+124,x+w-20,y+124,1,a(mix(t.color(),0x00ffffff,.75f)));
@@ -307,20 +358,22 @@ public final class HubView {
             if(selected){icon("check",x+w-77,y+135,12,mix(t.color(),INK,.4f));text("已选中",x+w-60,y+146,10,mix(t.color(),INK,.4f),false);}
             else icon("arrow-up-right",x+w-34,y+135,14,mix(t.color(),INK,.4f));
         }
-        d.restore();
         // Clamp hit areas to the scroll viewport so clipped cards cannot steal input.
-        float top=Math.max(y,274),bottom=Math.min(y+h,790);
-        if(bottom>top)hit("title-"+t.id(),t.name()+(t.owned()?"":"，未获得"),x,top,w,bottom-top,()->selectedTitle=t.id());
+        hit("title-"+t.id(),t.name()+(t.owned()?"":"，未获得"),x,y,w,h,()->selectedTitle=t.id());
+        endTilt(tilt,x,y,w,h,18,5,.5f);
+        endAlpha();
     }
     private void emblem(HubData.Title t,float x,float y,float size) {
         float radius=size*.28f;
-        d.save();d.translate(x+size/2+4,y+size/2-4);d.canvas().rotate(8);
-        shadow(-size/2,-size/2,size,size,radius,0x195b5278);
-        d.gradientRoundRect(-size/2,-size/2,size,size,radius,a(t.color()),a(mix(t.color(),0xff463169,.17f)));d.restore();
-        d.save();d.translate(x+size/2,y+size/2);d.canvas().rotate(-8);
-        d.gradientRoundRect(-size/2,-size/2,size,size,radius,a(0xbfffffff),a(0x5fffffff));
+        d.save();d.translate(x+size/2,y+size/2);d.canvas().rotate(-9);
+        d.save();d.canvas().rotate(12);d.translate(4,-5);
+        int back=t.owned()?t.color():desaturate(t.color(),.35f);
+        d.boxShadow(-size/2,-size/2,size,size,radius,0,9,18,0,withAlpha(back,.35f));
+        d.linearGradientRoundRect(-size/2,-size/2,size,size,radius,145,new int[]{back,mix(back,0xff463169,.17f)},new float[]{0,1});d.restore();
+        d.captureGlassBackdrop(-size/2,-size/2,size,size);d.blurBackdrop(-size/2,-size/2,size,size,radius,4,1);
+        d.linearGradientRoundRect(-size/2,-size/2,size,size,radius,145,new int[]{0xa6ffffff,0x47ffffff},new float[]{0,1});
         d.strokeRoundRect(-size/2,-size/2,size,size,radius,1,a(0xe8ffffff));
-        icon(t.icon(),-size*.27f,-size*.27f,size*.54f,mix(t.color(),0xff25364c,.32f));d.restore();
+        icon("stroke-1.5/"+t.icon(),-size*.27f,-size*.27f,size*.54f,mix(t.color(),0xff25364c,.32f));d.restore();
     }
     private void titleDetail() {
         HubData.Title t=HubData.title(selectedTitle);if(t==null)t=HubData.TITLES.get(0);
@@ -333,8 +386,8 @@ public final class HubView {
         d.strokeRoundRect(940,225,274,226,18,1,a(0xffffffff));d.strokeRoundRect(948,233,258,210,11,1,a(0x8cffffff));
         d.save();d.clipRoundRect(940,225,274,226,18);d.translate(1077,338);d.canvas().rotate(-30);
         d.strokeRoundRect(-134,-49,268,98,49,1,a(0xb8ffffff));d.restore();
-        icon(t.icon(),931,292,106,mix(t.color(),t.light(),.65f));
-        textCenter(t.name(),1077,267,21,HubData.titleText(t),true);
+        icon("stroke-1.0/"+t.icon(),931,292,106,withAlpha(t.color(),.14f));
+        titleLabel(t,1077,267,21,2,true,false);
         textCenter(fit(playerName,230,13,true),1077,290,13,0xff62718f,true);
         d.roundRect(1011,389,132,28,14,a(0x9cf6f8ff));d.strokeRoundRect(1011,389,132,28,14,1,a(0xc8ffffff));
         if(opacity>.04f)HubHead.draw(d,1051,321,51,-23);
@@ -367,13 +420,13 @@ public final class HubView {
         glass(LEFT,174,662,626,22,0xecffffff,0xabffffff);
         int stored=(int)records.keySet().stream().filter(date->YearMonth.from(date).equals(month)).count();
         float monthProgress=progress(now-monthAt,260_000_000L);
-        float monthOffset=reducedMotion?0:monthDirection*10*(1-ease(monthProgress));
-        float pageOpacity=opacity;
-        if(!reducedMotion)opacity*=ease(monthProgress);
+        float monthHeading=reducedMotion?1:HubMotion.easeOut(monthProgress);
+        float monthOffset=monthDirection*(28f/3)*(1-monthHeading);
+        beginAlpha(monthHeading,LEFT,174,430,78);
         text(String.format(Locale.ROOT,"%02d",month.getMonthValue()),258+monthOffset,231,39,0xff67549b,true);
         text(month.getYear()+" 年 "+month.getMonthValue()+" 月",320+monthOffset,211,13,0xff505b76,true);
         icon("bookmark",321+monthOffset,223,12,0xff8a8fa5);text("本月收藏 "+stored+" 张",339+monthOffset,234,10,0xff8a8fa5,false);
-        opacity=pageOpacity;
+        endAlpha();
         glass(704,195,171,37,11,0xfff0edf8,0xfff0edf8);
         textButton("current-month","本月",707,198,45,30,()->{monthDirection=1;month=YearMonth.from(HubData.TODAY);selectedDate=HubData.TODAY;monthAt=System.nanoTime();historyScroll=0;},true);
         iconButton("previous-month","上个月","chevron-left",752,198,29,()->shiftMonth(-1),true);
@@ -381,10 +434,11 @@ public final class HubView {
         d.line(816,205,816,225,1,a(0xffdbd7e7));
         iconButton("fortune-mode",history?"切换月历显示":"切换签笺列表",history?"grid-2x2":"list",829,198,30,()->{history=!history;historyScroll=0;monthAt=System.nanoTime();},true);
         d.save();d.clipRoundRect(255,252,624,498,0);
-        float slide=reducedMotion?0:monthDirection*28*(1-ease(monthProgress));d.translate(slide,0);
-        if(!reducedMotion)opacity*=ease(monthProgress);
-        if(history)fortuneHistory(records,slide);else calendar(records,slide);
-        d.restore();opacity=pageOpacity;
+        float monthBody=reducedMotion?1:HubMotion.bezier(monthProgress,.18f,.75f,.22f,1);
+        float slide=monthDirection*28*(1-monthBody);
+        beginAlpha(monthBody);push(Matrix33.makeTranslate(slide,0));
+        if(history)fortuneHistory(records,0);else calendar(records,0);
+        pop();endAlpha();d.restore();
         String[] grades={"上上签","上吉签","中平签","小凶签","下下签"};
         for(int i=0;i<grades.length;i++) {float x=258+i*122;d.circle(x+3,775,3,a(HubData.gradeColor(grades[i])));text(grades[i],x+15,779,10,0xff808aa0,false);}
         fortuneSelection(records);ungroup();
@@ -403,13 +457,15 @@ public final class HubView {
             int grade=entry==null?0xffa0a7bb:HubData.gradeColor(entry.fortune().grade());
             if(entry!=null)d.gradientRoundRect(x,y,cellW,cellH,11,a(0xffffffff),a(lighten(grade,.43f)));
             else d.roundRect(x,y,cellW,cellH,11,a(future?0xfff5f5fa:0xfff4f4fa));
-            d.strokeRoundRect(x,y,cellW,cellH,11,selected?1.7f:1,a(selected?0xff8b6bb9:entry!=null?0xffe1d9d0:0xffe6e7f1));
-            if(selected)d.strokeRoundRect(x-2,y-2,cellW+4,cellH+4,13,1.7f,a(0x279a7bc3));
-            if(!future&&inside(x+slide,y,cellW,cellH))d.strokeRoundRect(x,y,cellW,cellH,11,1,a(0xffb396d8));
+            float selection=stateTransition("day-selected-"+date,selected?1:0,160);
+            d.strokeRoundRect(x,y,cellW,cellH,11,1,mix(entry!=null?0xffe1d9d0:0xffe6e7f1,0xff8b6bb9,selection));
+            if(selection>0){d.boxShadow(x,y,cellW,cellH,11,0,0,0,2,withAlpha(0x279a7bc3,selection));d.boxShadow(x,y,cellW,cellH,11,0,4,9,0,withAlpha(0x198876aa,selection));}
+            float hover=transition("day-hover-"+date,!future&&inside(x+slide,y,cellW,cellH)?1:0,160);
+            if(hover>0)d.strokeRoundRect(x,y,cellW,cellH,11,1,withAlpha(0xffb396d8,hover));
             text(Integer.toString(day),x+10,y+20,12,future?0xffacb2c2:0xff65728b,false);
             if(today)textRight("今天",x+cellW-7,y+18,9,0xff8f70ad,false);
             float slipH=Math.min(38,cellH-26),slipW=slipH*.83f;
-            if(!future)image("fortune-slip",x+(cellW-slipW)/2,y+cellH/2-10,slipW,slipH,entry!=null?1:.14f);
+            if(!future){d.save();d.translate(x+cellW/2,y+cellH/2+slipH/2-10);d.canvas().rotate(-8);image("fortune-slip",-slipW/2,-slipH/2,slipW,slipH,entry!=null?1:.14f);d.restore();}
             if(entry!=null)textRight(entry.fortune().grade(),x+cellW-5,y+cellH-6,9,grade,false);
             if(!future)hit("day-"+date,date+(entry==null?" 未收藏":" "+entry.fortune().title()),x+slide,y,cellW,cellH,()->selectedDate=date);
         }
@@ -446,9 +502,9 @@ public final class HubView {
             paper(937,219,280,331);
             glass(1053,238,48,49,13,0x94f2deac,0xfffff7e6);image("fortune-slip",1062,244,29,37,1);
             textCenter(f.grade()+" · 第"+f.id()+"签",1077,310,11,HubData.gradeColor(f.grade()),false);
-            serifCenter(f.title(),1077,348,25,0xff615b4f,true);
+            trackedCenter(f.title(),1077,348,25,3,0xff615b4f,true,true);
             d.line(961,365,1193,365,1,a(0x36c9b78d));
-            for(int i=0;i<f.poem().size();i++)serifCenter(f.poem().get(i),1077,391+i*29,13,0xff817967,false);
+            for(int i=0;i<f.poem().size();i++)trackedCenter(f.poem().get(i),1077,391+i*30.55f,13,1.6f,0xff817967,false,true);
             d.line(961,494,1193,494,1,a(0x36c9b78d));
             text(fit(playerName,190,9,false)+" 所得",960,526,9,0xffae9565,false);textRight(entry.time(),1195,526,9,0xffae9565,false);
             icon("check-check",940,582,14,0xff7f8f87);text("已收藏",962,594,10,0xff7f8f87,false);
@@ -481,12 +537,19 @@ public final class HubView {
 
     private void modal() {
         opacity=1;offsetY=0;nextHits.clear();
-        d.roundRect(0,0,1260,850,28,0x6634405c);
+        d.captureGlassBackdrop(viewportX,viewportY,viewportW,viewportH);
+        float backdrop=reducedMotion?1:HubMotion.ease(progress(now-modalAt,180_000_000L));
+        beginAlpha(backdrop,viewportX,viewportY,viewportW,viewportH);d.blurBackdrop(viewportX,viewportY,viewportW,viewportH,0,9,1);
+        d.rect(viewportX,viewportY,viewportW,viewportH,0x3634405c);
         boolean wide=reading!=null;
-        modalW=wide?880:560;modalH=wide?586:"settings".equals(overlay)?520:"profile".equals(overlay)?590:"preview".equals(overlay)?430:355;
+        modalW=wide?720:440;
+        modalH=wide?147+Math.max(357,178.5f+trackedLines(reading.fortune().interpretation(),319.5f,15,1,400,true).size()*31.5f):"settings".equals(overlay)?520:"profile".equals(overlay)?590:"preview".equals(overlay)?430:355;
         modalX=(1260-modalW)/2;modalY=(850-modalH)/2;
-        shadow(modalX,modalY,modalW,modalH,25,0x3435416c);
-        d.gradientRoundRect(modalX,modalY,modalW,modalH,25,0xfffcfdff,0xfff5f3ff);
+        float enter=reducedMotion?1:HubMotion.bezier(progress(now-modalAt,220_000_000L),.2f,.8f,.2f,1);
+        beginAlpha(enter,modalX,modalY,modalW,modalH);
+        push(HubDraw.cssPerspective(630,425,800,0,0,0,.985f+.015f*enter,0,9*(1-enter)));
+        d.boxShadow(modalX,modalY,modalW,modalH,25,0,28,90,0,0x4235416c);
+        d.linearGradientRoundRect(modalX,modalY,modalW,modalH,25,135,new int[]{0xf5fcfdff,0xeff5f3ff},new float[]{0,1});
         d.strokeRoundRect(modalX,modalY,modalW,modalH,25,1,0xffffffff);
         String title=wide?"签笺详情":switch(overlay){case "settings"->"界面设置";case "profile"->"个人资料";case "preview"->"预览选项";default->fortuneState==0?"如何抽签":"如何解签";};
         String subtitle=wide?reading.date().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))+" · "+playerName+" 所得":switch(overlay){case "settings"->"让手册更符合你的习惯";case "profile"->"你在这段旅程中留下的足迹";case "preview"->"仅用于体验不同状态，不会修改游戏数据";default->"DailyFortunes · 玩法提示";};
@@ -497,40 +560,43 @@ public final class HubView {
         if(wide)readingModal();else switch(overlay) {
             case "settings"->settingsModal();case "profile"->profileModal();case "preview"->previewModal();default->fortuneHelp();
         }
+        pop();endAlpha();endAlpha();
     }
     private void settingsModal() {
         float x=modalX+28,y=modalY+118;
         text("开屏动画",x,y,14,INK,true);textRight("从低到高",modalX+modalW-28,y,10,0xff9694ac,false);
-        glass(x,y+22,504,94,14,0x96eaf0ff,0x8cf1eafe);
-        int selected=welcomeIndex();float start=x+83,end=x+421,trackY=y+48;
-        d.roundRect(start,trackY,338,6,4,0xffd9dced);
-        if(selected>0)d.gradientRoundRect(start,trackY,selected*169,6,4,0xff819de0,0xff9575da);
-        for(int i=0;i<3;i++){d.circle(start+i*169,trackY+3,3,0xffffffff);d.strokeRoundRect(start+i*169-3,trackY,6,6,3,1,0xffbdc4dd);}
-        d.circle(start+selected*169,trackY+5,12,0x226b61ae);d.circle(start+selected*169,trackY+3,11,0xffffffff);
-        d.circle(start+selected*169,trackY+3,8,selected==0?0xff96b4f1:selected==1?0xff97a0e8:0xff9172d8);
-        hit("frequency","开屏动画频率",start-15,trackY-12,368,30,()->setWelcomeFromX(mx));
+        glass(x,y+22,384,94,14,0x96eaf0ff,0x8cf1eafe);
+        int selected=welcomeIndex();float start=x+64,trackY=y+48;
+        d.roundRect(start,trackY,256,6,4,0xffd9dced);
+        if(selected>0)d.gradientRoundRect(start,trackY,selected*128,6,4,0xff819de0,0xff9575da);
+        for(int i=0;i<3;i++){d.circle(start+i*128,trackY+3,3,0xffffffff);d.strokeRoundRect(start+i*128-3,trackY,6,6,3,1,0xffbdc4dd);}
+        d.circle(start+selected*128,trackY+5,12,0x226b61ae);d.circle(start+selected*128,trackY+3,11,0xffffffff);
+        d.circle(start+selected*128,trackY+3,8,selected==0?0xff96b4f1:selected==1?0xff97a0e8:0xff9172d8);
+        hit("frequency","开屏动画频率",start-15,trackY-12,286,30,()->setWelcomeFromX(mx));
         String[] labels={"仅初次","每次登录","每次打开"};
         for(int i=0;i<3;i++) {
-            final int index=i;float bx=x+5+i*165;
-            if(i==selected)d.roundRect(bx,y+74,164,28,8,0x8fffffff);
-            textCenter(labels[i],bx+82,y+93,11,i==selected?0xff7056af:0xff81869e,i==selected);
-            hit("frequency-label-"+i,labels[i],bx,y+74,164,28,()->welcomeMode=List.of("once","login","always").get(index));
+            final int index=i;float bx=x+5+i*125;
+            if(i==selected)d.roundRect(bx,y+74,124,28,8,0x8fffffff);
+            float hover=transition("frequency-label-"+i+"-hover",inside(bx,y+74,124,28)?1:0,180);
+            if(hover>0)d.roundRect(bx,y+74,124,28,8,withAlpha(0x66ffffff,hover));
+            textCenter(labels[i],bx+62,y+93,11,i==selected?0xff7056af:mix(0xff81869e,0xff67509d,hover),i==selected);
+            hit("frequency-label-"+i,labels[i],bx,y+74,124,28,()->welcomeMode=List.of("once","login","always").get(index));
         }
         String explanation=reducedMotion?"减少动态效果已开启，开屏动画会跳过。":switch(welcomeMode){case "once"->"仅首次打开时播放；已经看过的记录会保留。";case "login"->"每次进入游戏后，首次打开手册时播放。";default->"每次打开手册时播放约 3 秒的手写问候。";};
-        text(explanation,x,y+143,12,0xff8c8fa5,false);
-        d.line(x,y+169,x+504,y+169,1,0xffe7e6f1);
+        wrap(explanation,x,y+139,384,12,19.2f,0xff8c8fa5,false);
+        d.line(x,y+169,x+384,y+169,1,0xffe7e6f1);
         text("减少动态效果",x,y+203,14,INK,true);text("关闭开屏动画、卡片倾斜与页面过渡",x,y+229,12,0xff8c8fa5,false);
-        toggle("reduce-motion",reducedMotion,x+457,y+190,()->{reducedMotion=!reducedMotion;if(reducedMotion)playWelcome=false;});
-        d.line(x,y+252,x+504,y+252,1,0xffe7e6f1);
+        toggle("reduce-motion",reducedMotion,x+351,y+190,()->setReducedMotion(!reducedMotion));
+        d.line(x,y+252,x+384,y+252,1,0xffe7e6f1);
         text("界面主题",x,y+284,14,INK,true);text("Liquid Glass · 浅色",x,y+309,12,0xff8c8fa5,false);
-        glass(x+465,y+270,39,38,11,0xffe0e9ff,0xfff3e0ff);icon("check",x+477,y+282,14,0xff817393);
-        icon("info",x,y+345,15,0xff8c8fa5);text("偏好保存在当前测试实例；统计与收藏为本地演示。",x+25,y+357,11,0xff8c8fa5,false);
+        glass(x+345,y+270,39,38,11,0xffe0e9ff,0xfff3e0ff);icon("check",x+357,y+282,14,0xff817393);
+        icon("info",x,y+345,15,0xff8c8fa5);wrap("偏好保存在当前测试实例；统计与收藏为本地演示。",x+25,y+357,359,11,18,0xff8c8fa5,false);
     }
     private void profileModal() {
         float cx=630,top=modalY+115;
         glass(cx-46,top,92,92,24,0xffe5ecff,0xffeae1ff);HubHead.draw(d,cx-27,top+21,54,-23);
         textCenter(fit(playerName,480,24,true),cx,top+130,24,INK,true);
-        HubData.Title worn=HubData.title(equipped);textCenter(worn==null?"暂未佩戴称号":worn.name(),cx,top+160,14,worn==null?MUTED:HubData.titleText(worn),true);
+        HubData.Title worn=HubData.title(equipped);if(worn==null)textCenter("暂未佩戴称号",cx,top+160,14,MUTED,true);else titleLabel(worn,cx,top+160,14,1.4f,true,false);
         String[][] rows={{"首次加入 · 演示","2026/10/17"},{"累计在线 · 演示","128 小时 42 分钟"},{"累计登录 · 演示","36 次"},{"玩家 UUID · 演示身份","7f1a0000-0000-4000-8000-000000000001"}};
         for(int i=0;i<rows.length;i++) {
             float y=top+207+i*48;d.line(modalX+28,y-21,modalX+modalW-28,y-21,1,0xffe7e6f1);
@@ -543,132 +609,187 @@ public final class HubView {
         text("今日抽签状态",x,y,13,INK,true);
         String[] labels={"尚未抽签","等待解签","已经解签","已收进藏签匣"};
         for(int i=0;i<4;i++) {
-            final int state=i;float bx=x+(i%2)*257,by=y+22+(i/2)*55;
-            button("preview-state-"+i,(fortuneState==i?"✓ ":"")+labels[i],bx,by,247,42,fortuneState==i,true,()->{fortuneState=state;notify("今日状态："+stateLabel()+" · 本地演示");});
+            final int state=i;float bx=x+(i%2)*197,by=y+22+(i/2)*55;
+            button("preview-state-"+i,(fortuneState==i?"✓ ":"")+labels[i],bx,by,187,42,fortuneState==i,true,()->{fortuneState=state;notify("今日状态："+stateLabel()+" · 本地演示");});
         }
-        wrap("未解签不会显示结果；已解但未归档的签不会出现在收藏和月历中。",x,y+164,504,12,22,0xff8c8fa5,false);
+        wrap("未解签不会显示结果；已解但未归档的签不会出现在收藏和月历中。",x,y+164,384,12,22,0xff8c8fa5,false);
         button("reset-demo","还原演示数据",x,y+236,148,37,false,true,()->{equipped="dew";visible=true;fortuneState=3;displayDate=HubData.TODAY;selectedDate=HubData.TODAY;notify("样例已还原，界面偏好保留");});
         text("F8 打开此面板 · 界面偏好不参与演示还原",x,y+295,11,MUTED,false);
     }
     private void fortuneHelp() {
         float x=modalX+30,y=modalY+125;
         image(fortuneState==0?"fortune-barrel":"fortune-slip",x,y,94,106,1);
-        text(fortuneState==0?"拿起签筒，为今天留一份期许。":"带上未解的签，前往解签龛。",x+119,y+24,14,0xff807789,true);
-        wrap(fortuneState==0?"在游戏中手持签筒使用，即可抽取今日的签。抽到之后仍需解签，才会看见结果。":"签文尚未解读，因此手册不会提前展示内容。完成解签后，打开藏签匣即可归档收藏。",x+119,y+61,355,12,23,0xff807789,false);
+        wrap(fortuneState==0?"拿起签筒，为今天留一份期许。":"带上未解的签，前往解签龛。",x+119,y+20,235,13,21,0xff807789,true);
+        wrap(fortuneState==0?"在游戏中手持签筒使用，即可抽取今日的签。抽到之后仍需解签，才会看见结果。":"签文尚未解读，因此手册不会提前展示内容。完成解签后，打开藏签匣即可归档收藏。",x+119,y+68,235,12,23,0xff807789,false);
         text("这里是本地界面原型，不会触发游戏抽签。",x,modalY+modalH-40,11,0xff9992a4,false);
     }
     private void readingModal() {
         HubData.Entry entry=reading;HubData.Fortune f=entry.fortune();
-        float x=modalX+28,y=modalY+110;
-        paper(x,y,350,444);
-        textCenter("第"+f.id()+"签 · "+f.grade(),x+175,y+48,12,HubData.gradeColor(f.grade()),false);
-        serifCenter(f.title(),x+175,y+105,32,0xff68604c,true);
-        for(int i=0;i<f.poem().size();i++)serifCenter(f.poem().get(i),x+175,y+170+i*39,18,0xff84806c,false);
-        d.strokeRoundRect(x+272,y+345,42,44,5,1.5f,0x70ae8173);text("签",x+281,y+376,25,0xffb18a78,false);
-        textCenter("DAILY FORTUNES",x+175,y+415,10,0xffb6a783,false);
-        float rx=x+383;
-        icon("leaf",rx,y+14,15,0xff8f7da7);text("解签",rx+24,y+27,13,0xff8f7da7,true);
-        wrap(f.interpretation(),rx,y+70,413,15,29,0xff7b7883,false);
+        float x=modalX+26,y=modalY+121,w=319.5f,h=modalH-147;
+        d.linearGradientRoundRect(x,y,w,h,6,110,new int[]{0xfff7f0dd,0xfffffaf0},new float[]{0,1});
+        d.strokeRoundRect(x,y,w,h,6,1,0xffe6dcc1);d.boxShadow(x,y,w,h,6,0,6,16,0,0x12867955);
+        trackedCenter("第"+f.id()+"签 · "+f.grade(),x+w/2,y+39,11,.5f,HubData.gradeColor(f.grade()),false,false);
+        trackedCenter(f.title(),x+w/2,y+89,29,4,0xff68604c,true,true);
+        for(int i=0;i<f.poem().size();i++)trackedCenter(f.poem().get(i),x+w/2,y+133+i*35.2f,16,2,0xff84806c,false,true);
+        d.line(x+8,y+8,x+26,y+8,1,0xffcbbc93);d.line(x+8,y+8,x+8,y+26,1,0xffcbbc93);
+        d.line(x+w-8,y+h-8,x+w-26,y+h-8,1,0xffcbbc93);d.line(x+w-8,y+h-8,x+w-8,y+h-26,1,0xffcbbc93);
+        push(Matrix33.makeRotate(-5,x+w/2,y+292));beginAlpha(.7f,x+w/2-11,y+281,22,22);
+        d.strokeRoundRect(x+w/2-11,y+281,22,22,0,1,0xffb58b6b);serifCenter("签",x+w/2,y+297,12,0xffb08767,false);endAlpha();pop();
+        trackedCenter("DAILY FORTUNES",x+w/2,y+333,10,2,0xffc1b693,false,false);
+        float rx=x+w+29;
+        icon("leaf",rx,y+8,15,0xff8f7da7);tracked("解签",rx+23,y+21,12,2,0xff8f7da7,500,false);
+        trackedWrap(f.interpretation(),rx,y+57,w,15,31.5f,1,0xff7b7883,400,true);
         boolean archived=archive().containsKey(entry.date());
-        d.line(rx,y+320,modalX+modalW-28,y+320,1,0xffe6e2ef);
-        icon("bookmark",rx,y+343,16,0xff8f91a2);
-        text(archived?"已收藏于你的藏签匣":"已解签，尚未收藏",rx+26,y+355,12,0xff8f91a2,false);
-        text(archived?"签笺一经收藏，便成为旅途的一部分。":"在游戏中打开藏签匣，即可收存这张签。",rx+26,y+380,11,0xff9997aa,false);
+        d.line(rx,y+h-111,rx+w,y+h-111,1,0xffe6e2ef);
+        icon("bookmark",rx,y+h-97,16,0xff8f91a2);
+        text(archived?"已收藏于你的藏签匣":"已解签，尚未收藏",rx+24,y+h-84,10,0xff8f91a2,false);
+        text(archived?"签笺一经收藏，便成为旅途的一部分。":"在游戏中打开藏签匣，即可收存这张签。",rx+24,y+h-66,10,0xff9997aa,false);
         boolean current=Objects.equals(displayDate,entry.date());
-        button("reading-display",!archived?"收藏后可设为展示":current?"当前展示的签笺":"设为手册展示  ✧",rx,y+406,413,38,true,archived&&!current,()->displaySelected(entry));
+        button("reading-display",!archived?"收藏后可设为展示":current?"当前展示的签笺":"设为手册展示  ✧",rx,y+h-45,w,37,true,archived&&!current,()->displaySelected(entry));
     }
 
-    private static final float[][] HELLO=sampleCurve(new float[]{24,111},new float[][]{
-        {42,99,63,77,72,48},{83,14,67,11,58,29},{48,49,49,86,41,121},
-        {48,94,60,77,73,81},{92,88,64,127,88,124},{101,122,111,111,120,101},
-        {139,80,143,95,128,104},{99,122,112,139,139,123},{160,111,176,80,185,48},
-        {194,13,177,12,170,33},{162,57,159,100,157,113},{154,140,178,126,194,105},
-        {211,82,222,51,224,32},{228,11,210,14,206,38},{201,65,196,102,199,116},
-        {201,136,220,125,235,108},{253,85,268,91,262,112},{256,136,231,136,229,116},
-        {227,98,243,87,255,96},{270,107,284,109,303,93}
-    });
-    private static final float[][] FLOURISH=sampleCurve(new float[]{97,145},new float[][]{{153,133,229,134,283,142},{302,145,316,143,329,136}});
-    private static float[][] sampleCurve(float[] start,float[][] curves) {
-        List<float[]> points=new ArrayList<>();float px=start[0],py=start[1],length=0;points.add(new float[]{px,py,0});
-        for(float[] c:curves) {
-            float x0=px,y0=py;
-            for(int i=1;i<=22;i++) {
-                float t=i/22f,s=1-t,x=s*s*s*x0+3*s*s*t*c[0]+3*s*t*t*c[2]+t*t*t*c[4];
-                float y=s*s*s*y0+3*s*s*t*c[1]+3*s*t*t*c[3]+t*t*t*c[5];
-                length+=(float)Math.hypot(x-px,y-py);points.add(new float[]{x,y,length});px=x;py=y;
-            }
-        }
-        for(float[] p:points)p[2]/=length;
-        return points.toArray(float[][]::new);
-    }
+    private static final String HELLO_PATH="M24 111 C42 99 63 77 72 48 C83 14 67 11 58 29 C48 49 49 86 41 121 C48 94 60 77 73 81 C92 88 64 127 88 124 C101 122 111 111 120 101 C139 80 143 95 128 104 C99 122 112 139 139 123 C160 111 176 80 185 48 C194 13 177 12 170 33 C162 57 159 100 157 113 C154 140 178 126 194 105 C211 82 222 51 224 32 C228 11 210 14 206 38 C201 65 196 102 199 116 C201 136 220 125 235 108 C253 85 268 91 262 112 C256 136 231 136 229 116 C227 98 243 87 255 96 C270 107 284 109 303 93";
+    private static final String FLOURISH_PATH="M97 145 C153 133 229 134 283 142 C302 145 316 143 329 136";
     private void welcome() {
         float seconds=(now-openedAt)/1_000_000_000f;
-        float alpha=seconds<2.6f?1:1-progress((long)((seconds-2.6f)*1_000_000_000),420_000_000L);
-        // Hide page content until the complete welcome has finished; its entrance starts afterwards.
-        d.gradientRoundRect(0,0,1260,850,28,withAlpha(0xffe9f4ff,alpha),withAlpha(0xfff0e9fc,alpha));
-        d.save();d.translate(421,302);d.canvas().scale(1.2727f,1.2727f);d.translate(165,80);d.canvas().rotate(-5);d.translate(-165,-80);
-        float write=clamp((seconds-.12f)/1.9f,0,1);
-        strokeCurve(HELLO,write,6.8f,alpha);
-        strokeCurve(FLOURISH,clamp((seconds-1.81f)/.35f,0,1),2.1f,alpha*.58f);
+        float fade=HubMotion.bezier(clamp((seconds-2.6f)/.42f,0,1),.42f,0,.58f,1);
+        beginAlpha(1-fade);
+        d.roundRect(0,0,1260,850,28,0xfff7f8ff);
+        d.radialGradientRoundRect(0,0,1260,850,28,352.8f,238,756,510,new int[]{0xc9d2ebff,0x00d2ebff},new float[]{0,.6f});
+        d.radialGradientRoundRect(0,0,1260,850,28,1008,637.5f,819,552.5f,new int[]{0xb8e1d4f9,0x00e1d4f9},new float[]{0,.65f});
+        d.save();d.translate(420,296);d.canvas().scale(420f/330,420f/330);d.translate(165,80);d.canvas().rotate(-5);d.translate(-165,-80);
+        float write=HubMotion.bezier(clamp((seconds-.12f)/1.9f,0,1),.32f,.08f,.35f,1);
+        strokeSvg(HELLO_PATH,write,6.8f,1);
+        strokeSvg(FLOURISH_PATH,HubMotion.easeOut(clamp((seconds-1.81f)/.35f,0,1)),2.1f,.58f);
         d.restore();
-        float signature=clamp((seconds-1.55f)/.5f,0,1)*alpha;
-        textCenter("P I X E L M C",630,549+5*(1-signature),10,withAlpha(0xff9292ad,signature),false);
+        float signature=HubMotion.ease(clamp((seconds-1.55f)/.5f,0,1));
+        beginAlpha(signature,420,525,420,30);trackedCenter("PIXELMC",632.5f,535+5*(1-signature),10,5,0xff9292ad,false,false);endAlpha();
+        endAlpha();
     }
-    private void strokeCurve(float[][] points,float fraction,float width,float alpha) {
+    private void strokeSvg(String svg,float fraction,float width,float alpha) {
         if(fraction<=0)return;
-        for(int i=1;i<points.length;i++) {
-            float[] a=points[i-1],b=points[i];if(a[2]>fraction)break;
-            float partial=Math.min(1,(fraction-a[2])/Math.max(.00001f,b[2]-a[2]));
-            float x=a[0]+(b[0]-a[0])*partial,y=a[1]+(b[1]-a[1])*partial;
-            float tint=clamp((x-24)/279,0,1);
-            int color=tint<.55f?mix(0xff5d84d6,0xff8970d8,tint/.55f):mix(0xff8970d8,0xffb184bf,(tint-.55f)/.45f);
-            d.line(a[0],a[1],x,y,width,withAlpha(color,alpha));
+        try(io.github.humbleui.skija.Path full=io.github.humbleui.skija.Path.makeFromSVGString(svg);
+            io.github.humbleui.skija.PathMeasure measure=new io.github.humbleui.skija.PathMeasure(full,false,4);
+            io.github.humbleui.skija.PathBuilder builder=new io.github.humbleui.skija.PathBuilder();
+            io.github.humbleui.skija.Paint paint=new io.github.humbleui.skija.Paint()) {
+            measure.getSegment(0,measure.getLength()*fraction,builder,true);
+            try(io.github.humbleui.skija.Path segment=builder.build();
+                io.github.humbleui.skija.Shader shader=io.github.humbleui.skija.Shader.makeLinearGradient(
+                    full.getBounds().getLeft(),0,full.getBounds().getRight(),0,
+                    new int[]{0xff5d84d6,0xff8970d8,0xffb184bf},new float[]{0,.55f,1})) {
+                paint.setAntiAlias(true).setMode(io.github.humbleui.skija.PaintMode.STROKE).setStrokeWidth(width)
+                    .setStrokeCap(io.github.humbleui.skija.PaintStrokeCap.ROUND).setStrokeJoin(io.github.humbleui.skija.PaintStrokeJoin.ROUND)
+                    .setColor(0xffffffff).setAlphaf(alpha).setShader(shader);
+                d.canvas().drawPath(segment,paint);
+            }
         }
     }
     private void toast() {
         float elapsed=(now-toastAt)/1_000_000_000f;if(elapsed>2.8f){toast=null;return;}
-        float entrance=reducedMotion?1:ease(clamp(elapsed/.2f,0,1));
-        float exit=elapsed>2.5f?clamp((2.8f-elapsed)/.3f,0,1):1;
-        float w=Math.min(720,Math.max(290,d.textWidth(toast,12,false)+73)),x=(1260-w)/2,y=18-14*(1-entrance);
-        shadow(x,y,w,49,18,withAlpha(0x35465482,exit));
-        d.roundRect(x,y,w,49,18,withAlpha(0xf7ffffff,exit));d.strokeRoundRect(x,y,w,49,18,1,withAlpha(0xffffffff,exit));
-        d.roundRect(x+12,y+12,26,26,9,withAlpha(0xffeee7ff,exit));
-        d.icon("check",x+18,y+18,14,withAlpha(0xff8f70ce,exit));
-        d.text(toast,x+49,y+30,12,withAlpha(0xff625582,exit),false);
+        float entrance=reducedMotion?1:HubMotion.ease(clamp(elapsed/.24f,0,1));
+        float w=Math.min(viewportW-36,d.textWidth(toast,12,400)+70),x=viewportX+(viewportW-w)/2,y=viewportY+25-12*(1-entrance);
+        d.captureGlassBackdrop(x,y,w,47);beginAlpha(entrance,x,y,w,47);
+        d.boxShadow(x,y,w,47,18,0,10,30,0,0x35465482);d.blurBackdrop(x,y,w,47,18,16,1);
+        d.roundRect(x,y,w,47,18,0xf0ffffff);d.strokeRoundRect(x,y,w,47,18,1,0xffffffff);
+        d.circle(x+29.5f,y+22.5f,10.5f,0xffeee7ff);d.icon("check",x+22,y+15,15,0xff8f70ce);
+        d.text(toast,x+49,y+28.5f,12,0xff625582,400);endAlpha();
     }
 
     private void group(int delayMs,int durationMs) {
-        float p=reducedMotion?1:progress(now-pageAt-delayMs*1_000_000L,durationMs*1_000_000L);
-        opacity=ease(p);offsetY=12*(1-opacity);d.save();d.translate(0,offsetY);
+        float p;
+        if(page!=0){p=reducedMotion?1:HubMotion.ease(progress(now-pageAt,240_000_000L));offsetY=5*(1-p);}
+        else {
+            float time=progress(now-pageAt-delayMs*1_000_000L,durationMs*1_000_000L);
+            p=reducedMotion?1:durationMs==440?HubMotion.bezier(time,.2f,.7f,.2f,1):HubMotion.easeOut(time);
+            offsetY=12*(1-p);
+        }
+        beginAlpha(p);push(Matrix33.makeTranslate(0,offsetY));pageTransform=logical;offsetY=0;
     }
-    private void ungroup(){d.restore();opacity=1;offsetY=0;}
+    private void ungroup(){pop();endAlpha();opacity=1;offsetY=0;}
+    private HubMotion.Tilt beginTilt(String id,float x,float y,float w,float h,float amplitude,float hoverScale,boolean intro,float shadowStrength,float radius) {
+        HubMotion.Tilt state=tilts.computeIfAbsent(id,ignored->new HubMotion.Tilt(intro&&!reducedMotion));
+        boolean hover=inside(x,y,w,h);float[] mouse=HubDraw.inversePoint(logical,mx,my);
+        float nx=clamp((mouse[0]-x-w/2)/(w/2),-1,1),ny=clamp((mouse[1]-y-h/2)/(h/2),-1,1);
+        state.update(dt,reducedMotion,hover,keyboardFocus&&Objects.equals(focusId,id),Objects.equals(pressedId,id)&&!pressMoved,nx,ny,amplitude);
+        float scale=state.scale(hoverScale),rx=(float)Math.toRadians(state.rx.value),ry=(float)Math.toRadians(state.ry.value);
+        float spread=scale*(.86f+.04f*state.lift.value),sw=w*spread,sh=h*spread;
+        float dx=-(float)Math.sin(ry)*22,dy=12+16*state.lift.value+(float)Math.sin(rx)*18-state.ty.value*.6f;
+        int shadow=withAlpha(0x8c000000,shadowStrength*state.shown()*(.6f+.4f*state.lift.value));
+        d.boxShadow(x+(w-sw)/2,y+(h-sh)/2,sw,sh,radius,dx,dy,40,0,shadow);
+        beginAlpha(state.shown(),x,y,w,h);push(HubDraw.cssPerspective(x+w/2,y+h/2,800,state.rx.value,state.ry.value,0,scale,0,state.ty.value));
+        return state;
+    }
+    private void endTilt(HubMotion.Tilt state,float x,float y,float w,float h,float radius,float amplitude,float glare) {
+        float gx=.5f+state.ry.value/Math.max(amplitude,1)*.46f,gy=.5f-state.rx.value/Math.max(amplitude,1)*.46f;
+        d.tiltGlare(x,y,w,h,radius,gx,gy,state.glare(glare,amplitude));pop();endAlpha();
+    }
+    private void push(Matrix33 matrix){matrixStack.push(logical);logical=logical.makeConcat(matrix);d.save();d.canvas().concat(matrix);}
+    private void pop(){d.restore();logical=matrixStack.pop();}
+    private void beginAlpha(float alpha){alphaStack.push(interactiveAlpha);interactiveAlpha*=alpha;d.saveLayerAlpha(-128,-128,1516,1106,alpha);}
+    private void beginAlpha(float alpha,float x,float y,float w,float h){alphaStack.push(interactiveAlpha);interactiveAlpha*=alpha;d.saveLayerAlpha(x,y,w,h,alpha);}
+    private void endAlpha(){d.restore();interactiveAlpha=alphaStack.pop();}
+    private float transition(String id,float target,int milliseconds){return transitions.computeIfAbsent(id,ignored->new HubMotion.Transition()).sample(target,now,milliseconds*1_000_000L,reducedMotion);}
+    private float stateTransition(String id,float target,int milliseconds){return transitions.computeIfAbsent(id,ignored->{HubMotion.Transition c=new HubMotion.Transition();c.value=c.target=c.from=target;c.initialized=true;c.started=now;return c;}).sample(target,now,milliseconds*1_000_000L,reducedMotion);}
     private void shadow(float x,float y,float w,float h,float r,int color) {
-        d.roundRect(x-3,y+5,w+6,h+4,r+3,a(withAlpha(color,.25f)));
-        d.roundRect(x-1,y+3,w+2,h+2,r+1,a(withAlpha(color,.4f)));
+        d.boxShadow(x,y,w,h,r,0,6,22,0,color);
     }
     private void glass(float x,float y,float w,float h,float radius,int from,int to) {
         shadow(x,y,w,h,radius,0x104b5d85);
-        d.gradientRoundRect(x,y,w,h,radius,a(from),a(to));
+        d.linearGradientRoundRect(x,y,w,h,radius,135,new int[]{from,to},new float[]{0,1});
         d.strokeRoundRect(x+.5f,y+.5f,w-1,h-1,radius,1,a(0xe9ffffff));
         if(h>28)d.line(x+radius,y+1,x+w-radius,y+1,1,a(0xd9ffffff));
     }
-    private void text(String s,float x,float baseline,float size,int color,boolean bold){d.text(s,x,baseline,size,a(color),bold);}
+    private void text(String s,float x,float baseline,float size,int color,boolean bold){d.text(s,x,baseline,size,a(color),bold?600:400);}
+    private void trackedCenter(String s,float x,float baseline,float size,float tracking,int color,boolean bold,boolean serif) {
+        float width=trackedWidth(s,size,tracking,bold?600:400,serif);tracked(s,x-width/2,baseline,size,tracking,color,bold?600:400,serif);
+    }
+    private float trackedWidth(String s,float size,float tracking,int weight,boolean serif) {
+        return d.textWidthTracked(s,size,weight,tracking,serif);
+    }
+    private void tracked(String s,float x,float baseline,float size,float tracking,int color,int weight,boolean serif) {
+        d.textTracked(s,x,baseline,size,color,weight,tracking,serif);
+    }
+    private String fitTracked(String s,float width,float size,float tracking,int weight,boolean serif) {
+        if(trackedWidth(s,size,tracking,weight,serif)<=width)return s;
+        int end=s.length();while(end>0&&trackedWidth(s.substring(0,end)+"…",size,tracking,weight,serif)>width)end=s.offsetByCodePoints(end,-1);
+        return s.substring(0,end)+"…";
+    }
+    private void titleLabel(HubData.Title title,float x,float baseline,float size,float tracking,boolean center,boolean locked) {
+        String label=title.name();if(center)x-=trackedWidth(label,size,tracking,600,false)/2;
+        if(locked){tracked(label,x,baseline,size,tracking,0xff78859b,600,false);return;}
+        if(title.id().equals("dew"))d.textGradient(label,x,baseline,size,600,tracking,95,new int[]{0xff168878,0xff69a648},new float[]{0,1},false);
+        else if(title.id().equals("star"))d.textGradient(label,x,baseline,size,600,tracking,100,new int[]{0xffa97929,0xffbf854a,0xff8a69bb},new float[]{0,.5f,1},false);
+        else tracked(label,x,baseline,size,tracking,HubData.titleText(title),600,false);
+    }
+    private List<String> trackedLines(String s,float width,float size,float tracking,int weight,boolean serif) {
+        List<String> result=new ArrayList<>();StringBuilder line=new StringBuilder();
+        for(int offset=0;offset<s.length();) {
+            int cp=s.codePointAt(offset);String glyph=new String(Character.toChars(cp));
+            if(!line.isEmpty()&&trackedWidth(line+glyph,size,tracking,weight,serif)>width&&"，。！？；：、）》】」』…,.!?;:".indexOf(cp)<0){result.add(line.toString());line.setLength(0);}
+            line.append(glyph);offset+=Character.charCount(cp);
+        }
+        if(!line.isEmpty())result.add(line.toString());return result;
+    }
+    private void trackedWrap(String s,float x,float baseline,float width,float size,float lineHeight,float tracking,int color,int weight,boolean serif) {
+        List<String> lines=trackedLines(s,width,size,tracking,weight,serif);
+        for(int i=0;i<lines.size();i++)tracked(lines.get(i),x,baseline+i*lineHeight,size,tracking,color,weight,serif);
+    }
     private void serif(String s,float x,float baseline,float size,int color,boolean bold){d.textSerif(s,x,baseline,size,a(color),bold);}
     private void serifCenter(String s,float x,float baseline,float size,int color,boolean bold){serif(s,x-d.textWidthSerif(s,size,bold)/2,baseline,size,color,bold);}
-    private void textCenter(String s,float x,float baseline,float size,int color,boolean bold){text(s,x-d.textWidth(s,size,bold)/2,baseline,size,color,bold);}
-    private void textRight(String s,float right,float baseline,float size,int color,boolean bold){text(s,right-d.textWidth(s,size,bold),baseline,size,color,bold);}
+    private void textCenter(String s,float x,float baseline,float size,int color,boolean bold){text(s,x-d.textWidth(s,size,bold?600:400)/2,baseline,size,color,bold);}
+    private void textRight(String s,float right,float baseline,float size,int color,boolean bold){text(s,right-d.textWidth(s,size,bold?600:400),baseline,size,color,bold);}
     private void icon(String name,float x,float y,float size,int color){d.icon(name,x,y,size,a(color));}
     private void image(String name,float x,float y,float w,float h,float alpha){d.image("textures/ui/"+name+".png",x,y,w,h,alpha*opacity);}
     private String fit(String s,float width,float size,boolean bold) {
-        if(d.textWidth(s,size,bold)<=width)return s;
-        int length=s.length();while(length>0&&d.textWidth(s.substring(0,length)+"…",size,bold)>width)length--;
+        if(d.textWidth(s,size,bold?600:400)<=width)return s;
+        int length=s.length();while(length>0&&d.textWidth(s.substring(0,length)+"…",size,bold?600:400)>width)length--;
         return s.substring(0,length)+"…";
     }
     private int wrap(String s,float x,float baseline,float width,float size,float lineHeight,int color,boolean bold) {
         StringBuilder line=new StringBuilder();List<String> lines=new ArrayList<>();
         for(int i=0;i<s.length();i++) {
             char c=s.charAt(i);
-            if(c=='\n'||d.textWidth(line.toString()+c,size,bold)>width) {
+            if(c=='\n'||d.textWidth(line.toString()+c,size,bold?600:400)>width) {
                 // Keep Chinese closing punctuation with its preceding text.
                 if(c!='\n'&&"，。！？；：、）》】」』…,.!?;:".indexOf(c)>=0&&!line.isEmpty()) {
                     line.append(c);continue;
@@ -692,45 +813,62 @@ public final class HubView {
         if(dot)d.circle(x+9,y+11,2,a(color));text(label,x+(dot?17:8),y+15,10,color,false);
     }
     private void button(String id,String label,float x,float y,float w,float h,boolean primary,boolean enabled,Runnable click) {
-        boolean hover=enabled&&inside(x,y,w,h);int from=primary?hover?0xff987af5:0xff8b6cf1:0xd4ffffff;
-        int to=primary?hover?0xff694acb:0xff6d53d6:0xabffffff;
-        if(!enabled){from=0x59ffffff;to=0x59ffffff;}
-        shadow(x,y,w,h,12,primary&&enabled?0x257558d1:0x126c6588);
-        d.gradientRoundRect(x,y,w,h,12,a(from),a(to));
-        d.strokeRoundRect(x,y,w,h,12,1,a(primary&&enabled?0xff8c71e6:0xcfffffff));
-        textCenter(label,x+w/2,y+(h+10)/2,12,!enabled?0xffa099b5:primary?0xffffffff:0xff64539e,enabled&&primary);
+        boolean hover=enabled&&inside(x,y,w,h),press=enabled&&Objects.equals(pressedId,id);
+        float hval=transition(id+"-hover",hover?1:0,140),move=transition(id+"-move",primary?(press?1:hover?-1:0):0,140);
+        boolean displayDisabled=!enabled&&id.equals("display-selected");
+        beginAlpha(enabled||displayDisabled?1:.42f,x,y,w,h);push(Matrix33.makeTranslate(0,move));
+        // CSS gradient-image values are discrete; only the color/shadow/transform
+        // longhands interpolate. Do not invent a gradient crossfade here.
+        int from=primary?(hover?0xff987af5:0xff8b6cf1):mix(0xb8ffffff,0xffffffff,hval);
+        int to=primary?(hover?0xff694acb:0xff6d53d6):mix(0xb8ffffff,0xffffffff,hval);
+        if(displayDisabled){from=0x59ffffff;to=0x59ffffff;}
+        d.boxShadow(x,y,w,h,12,0,primary?4+2*hval:3+2*hval,primary?10+6*hval:10+6*hval,0,
+            primary?mix(0x337558d1,0x4d7558d1,hval):mix(0x186c6588,0x2b6c6588,hval));
+        d.linearGradientRoundRect(x,y,w,h,12,primary?130:135,new int[]{from,to},new float[]{0,1});
+        d.insetBoxShadow(x,y,w,h,12,0,1,0,0,primary?mix(0x61ffffff,0x70ffffff,hval):0xffffffff);
+        d.strokeRoundRect(x,y,w,h,12,1,a(primary?0xff8c71e6:0xe6ffffff));
+        d.text(label,x+(w-d.textWidth(label,12,500))/2,y+(h+10)/2,12,displayDisabled?0xff9a90b3:primary?0xffffffff:0xff64539e,500);
         if(enabled)hit(id,label,x,y,w,h,click);
+        pop();endAlpha();
     }
     private void goldButton(String id,String label,float x,float y,float w,float h,Runnable click) {
-        boolean hover=inside(x,y,w,h);shadow(x,y,w,h,12,0x269c7e44);
-        d.gradientRoundRect(x,y,w,h,12,a(hover?0xffcda267:0xffbe9455),a(0xffa57e42));
-        d.strokeRoundRect(x,y,w,h,12,1,a(0xffc5a477));textCenter(label,x+w/2,y+24,11,0xffffffff,true);hit(id,label,x,y,w,h,click);
+        boolean hover=inside(x,y,w,h);float value=transition(id+"-hover",hover?1:0,140);
+        float move=transition(id+"-move",Objects.equals(pressedId,id)?1:hover?-1:0,140);push(Matrix33.makeTranslate(0,move));
+        d.boxShadow(x,y,w,h,12,0,4+2*value,10+6*value,0,mix(0x269c7e44,0x4d7558d1,value));
+        d.linearGradientRoundRect(x,y,w,h,12,hover?130:140,new int[]{hover?0xff987af5:0xffbe9455,hover?0xff694acb:0xffa57e42},new float[]{0,1});
+        d.insetBoxShadow(x,y,w,h,12,0,1,0,0,mix(0x66ffffff,0x70ffffff,value));
+        d.strokeRoundRect(x,y,w,h,12,1,a(0xffc5a477));d.text(label,x+(w-d.textWidth(label,11,500))/2,y+24,11,0xffffffff,500);hit(id,label,x,y,w,h,click);pop();
     }
     private void textButton(String id,String label,float x,float y,float w,float h,Runnable click,boolean enabled) {
-        if(enabled&&inside(x,y,w,h))d.roundRect(x,y,w,h,8,a(0x88ffffff));
+        float value=transition(id+"-hover",enabled&&inside(x,y,w,h)?1:0,140);
+        if(value>0)d.roundRect(x,y,w,h,8,withAlpha(0x88ffffff,value));
         textCenter(label,x+w/2,y+(h+9)/2,11,enabled?0xff7a6a99:0xffb2aabc,false);
         if(enabled)hit(id,label,x,y,w,h,click);
     }
     private void iconButton(String id,String label,String name,float x,float y,float size,Runnable click,boolean enabled) {
-        if(enabled&&inside(x,y,size,size))d.roundRect(x,y,size,size,10,a(0xffe6e8f7));
-        icon(name,x+(size-18)/2,y+(size-18)/2,18,enabled?0xff6f7a92:0xffb9bdcd);
+        float value=transition(id+"-hover",enabled&&inside(x,y,size,size)?1:0,140);
+        if(value>0)d.roundRect(x,y,size,size,10,withAlpha(0xffe6e8f7,value));
+        icon(name,x+(size-18)/2,y+(size-18)/2,18,enabled?mix(0xff6f7a92,0xff5844b4,value):0xffb9bdcd);
         if(enabled)hit(id,label,x,y,size,size,click);
     }
     private void toggle(String id,boolean checked,float x,float y,Runnable click) {
-        d.roundRect(x,y,40,23,12,a(checked?0xff8e76d9:0xffd5daea));
-        d.strokeRoundRect(x,y,40,23,12,1,a(checked?0xff8770ce:0xffc5cbdd));
-        d.circle(x+(checked?29:11),y+11.5f,8.5f,a(0xffffffff));
-        hit(id,checked?"关闭":"开启",x-3,y-5,46,33,click);
+        HubMotion.Transition channel=transitions.computeIfAbsent(id+"-toggle",ignored->{HubMotion.Transition c=new HubMotion.Transition();c.value=c.target=c.from=checked?1:0;c.initialized=true;c.started=now;return c;});
+        float value=channel.sample(checked?1:0,now,180_000_000L,reducedMotion);
+        d.roundRect(x,y,33,18,20,mix(0xffd5daea,0xff8e76d9,value));
+        d.strokeRoundRect(x,y,33,18,20,1,checked?0xff8770ce:0xffc5cbdd);
+        d.circle(x+9+15*value,y+9,7,0xffffffff);
+        hit(id,checked?"关闭":"开启",x-3,y-5,39,28,click);
     }
     private void hit(String id,String label,float x,float y,float w,float h,Runnable click) {
-        if(opacity<.2f)return;
-        Hit region=new Hit(id,label,x,y+offsetY,w,h,click);nextHits.add(region);
-        if(Objects.equals(focusId,id))d.strokeRoundRect(x-3,y-3,w+6,h+6,12,2,a(0xff7758e8));
+        if(interactiveAlpha<.2f)return;
+        Hit region=new Hit(id,label,x,y,w,h,logical,id.startsWith("title-")?titleClipTransform:null,click);nextHits.add(region);
+        if(keyboardFocus&&Objects.equals(focusId,id))d.strokeRoundRect(x-4,y-4,w+8,h+8,12,3,a(0xff7758e8));
     }
-    private boolean inside(float x,float y,float w,float h){return mx>=x&&my>=y+offsetY&&mx<x+w&&my<y+offsetY+h;}
+    private boolean inside(float x,float y,float w,float h){float[] p=HubDraw.inversePoint(logical,mx,my);return p[0]>=x&&p[1]>=y&&p[0]<x+w&&p[1]<y+h;}
     private int a(int color){return withAlpha(color,opacity);}
     private static int withAlpha(int color,float alpha){return (Math.round((color>>>24)*clamp(alpha,0,1))<<24)|(color&0xffffff);}
     private static int lighten(int color,float amount){return amount>=0?mix(color,0xffffffff,amount):mix(color,0xff26344f,-amount);}
+    private static int desaturate(int color,float saturation){int r=(color>>>16)&255,g=(color>>>8)&255,b=color&255;int grey=Math.round(.2126f*r+.7152f*g+.0722f*b);return mix((color&0xff000000)|(grey<<16)|(grey<<8)|grey,color,saturation);}
     private static int mix(int from,int to,float fraction) {
         float f=clamp(fraction,0,1);int result=0;
         for(int shift=0;shift<=24;shift+=8){int start=(from>>>shift)&255,end=(to>>>shift)&255;result|=Math.round(start+(end-start)*f)<<shift;}
@@ -741,27 +879,33 @@ public final class HubView {
     private static float ease(float p){return 1-(1-p)*(1-p)*(1-p);}
     private static String shortDate(LocalDate date){return String.format(Locale.ROOT,"%02d/%02d",date.getMonthValue(),date.getDayOfMonth());}
     private String stateLabel(){return List.of("尚未抽签","等待解签","已经解签","已收进藏签匣").get(fortuneState);}
+    private void setReducedMotion(boolean value){
+        if(reducedMotion==value)return;reducedMotion=value;if(value)playWelcome=false;
+        navAt=System.nanoTime();tilts.clear();
+        for(HubMotion.Navigation state:navigation){state.enter.snap(value?1:0);state.hover.snap(0);state.press.snap(0);state.x.snap(0);state.y.snap(0);}
+    }
     private int welcomeIndex(){return Math.max(0,List.of("once","login","always").indexOf(welcomeMode));}
     private void notify(String value){toast=value;toastAt=System.nanoTime();}
-    private void navigate(int destination){page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;}
-    private void openOverlay(String value){restoreFocus=focusId;overlay=value;reading=null;focusId="modal-close";sliderDragging=false;hits.clear();}
-    private void openReading(HubData.Entry value){if(value==null)return;restoreFocus=focusId;reading=value;overlay=null;focusId="modal-close";hits.clear();}
+    private void navigate(int destination){page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;if(destination==2)monthAt=pageAt;if(destination==0)tilts.remove("medallion");}
+    private void openOverlay(String value){restoreFocus=focusId;overlay=value;reading=null;focusId="modal-close";sliderDragging=false;modalAt=System.nanoTime();hits.clear();}
+    private void openReading(HubData.Entry value){if(value==null)return;restoreFocus=focusId;reading=value;overlay=null;focusId="modal-close";modalAt=System.nanoTime();hits.clear();}
     public boolean dismissOverlay() {
         if(overlay==null&&reading==null)return false;
         overlay=null;reading=null;sliderDragging=false;focusId=restoreFocus;restoreFocus=null;hits.clear();return true;
     }
     private void setWelcomeFromX(float x) {
-        float start=modalX+111;int index=Math.round(clamp((x-start)/169,0,2));
+        float[] p=HubDraw.inversePoint(sliderTransform,x,my);float start=modalX+92;int index=Math.round(clamp((p[0]-start)/128,0,2));
         welcomeMode=List.of("once","login","always").get(index);
     }
 
     public boolean mouseClicked(float x,float y,int button) {
         if(button!=0)return false;
         if(isWelcomePlaying())return true;
-        mx=x;my=y;
+        mx=x;my=y;keyboardFocus=false;keyboardPress=false;pressMoved=false;pressX=x;pressY=y;
         for(int i=hits.size()-1;i>=0;i--) {
             Hit hit=hits.get(i);if(!hit.contains(x,y))continue;
-            focusId=hit.id();sliderDragging="frequency".equals(hit.id());hit.action().run();return true;
+            focusId=hit.id();pressedId=hit.id();pressedHit=hit;sliderDragging="frequency".equals(hit.id());sliderTransform=hit.transform();
+            if(sliderDragging||"search".equals(hit.id()))hit.action().run();return true;
         }
         if(overlay!=null||reading!=null) {
             if(x<modalX||x>modalX+modalW||y<modalY||y>modalY+modalH)dismissOverlay();
@@ -769,12 +913,23 @@ public final class HubView {
         }
         focusId=null;return true;
     }
-    public boolean mouseReleased(float x,float y,int button){boolean active=sliderDragging;sliderDragging=false;return active;}
-    public boolean mouseDragged(float x,float y,int button,float dx,float dy){if(sliderDragging&&button==0){setWelcomeFromX(x);return true;}return false;}
+    public boolean mouseReleased(float x,float y,int button){
+        if(button!=0)return false;
+        boolean active=sliderDragging||pressedHit!=null;
+        Hit released=pressedHit==null?null:hits.stream().filter(hit->hit.id().equals(pressedHit.id())).findFirst().orElse(null);
+        if(released!=null&&!sliderDragging&&!"search".equals(released.id())&&released.contains(x,y)&&(!released.id().startsWith("title-")||!pressMoved))released.action().run();
+        sliderDragging=false;pressedId=null;pressedHit=null;return active;
+    }
+    public boolean mouseDragged(float x,float y,int button,float dx,float dy){
+        mx=x;my=y;
+        if(button==0&&pressedId!=null&&Math.hypot(x-pressX,y-pressY)>6)pressMoved=true;
+        if(sliderDragging&&button==0){setWelcomeFromX(x);return true;}return pressedId!=null;
+    }
     public boolean mouseScrolled(float x,float y,double amount) {
         if(isWelcomePlaying()||overlay!=null||reading!=null)return true;
-        if(page==1&&x>=230&&x<=908&&y>=272&&y<=796){titleScroll-=amount*52;return true;}
-        if(page==2&&history&&x>=254&&x<=898&&y>=252&&y<=746){historyScroll-=amount*48;return true;}
+        float[] p=HubDraw.inversePoint(pageTransform,x,y);
+        if(page==1&&p[0]>=230&&p[0]<=908&&p[1]>=272&&p[1]<=796){titleScroll-=amount*52;return true;}
+        if(page==2&&history&&p[0]>=254&&p[0]<=898&&p[1]>=252&&p[1]<=746){historyScroll-=amount*48;return true;}
         return false;
     }
     public boolean keyPressed(int keyCode,int scanCode,int modifiers) {
@@ -782,6 +937,7 @@ public final class HubView {
         if(isWelcomePlaying())return true;
         if(keyCode==297){if(overlay==null&&reading==null)openOverlay("preview");else if("preview".equals(overlay))dismissOverlay();return true;}
         if(keyCode==258) {
+            keyboardFocus=true;
             if(hits.isEmpty())return true;int index=-1;
             for(int i=0;i<hits.size();i++)if(hits.get(i).id().equals(focusId)){index=i;break;}
             boolean shift=(modifiers&1)!=0;index=Math.floorMod(index+(shift?-1:1),hits.size());focusId=hits.get(index).id();return true;
@@ -805,9 +961,17 @@ public final class HubView {
             if(keyCode==263||keyCode==264)return true;
         }
         if(keyCode==257||keyCode==335||(keyCode==32&&!"search".equals(focusId))) {
-            for(Hit hit:hits)if(hit.id().equals(focusId)){hit.action().run();return true;}
+            for(Hit hit:hits)if(hit.id().equals(focusId)){
+                pressedId=hit.id();pressedHit=hit;keyboardPress=true;keyboardFocus=true;
+                if(keyCode!=32)hit.action().run();return true;
+            }
         }
         return textInputFocused()||overlay!=null||reading!=null;
+    }
+    public boolean keyReleased(int keyCode,int scanCode,int modifiers) {
+        if(!keyboardPress||(keyCode!=257&&keyCode!=335&&keyCode!=32))return false;
+        if(keyCode==32&&pressedHit!=null){Hit current=hits.stream().filter(hit->hit.id().equals(pressedHit.id())).findFirst().orElse(null);if(current!=null)current.action().run();}
+        pressedId=null;pressedHit=null;keyboardPress=false;return true;
     }
     public boolean charTyped(char codePoint,int modifiers) {
         if(textInputFocused()&&!Character.isISOControl(codePoint)&&(modifiers&6)==0) {
@@ -817,6 +981,11 @@ public final class HubView {
     }
     public boolean textInputFocused() {
         return page==1&&overlay==null&&reading==null&&"search".equals(focusId)&&!isWelcomePlaying();
+    }
+    public String pointerCursor() {
+        if(isWelcomePlaying())return "default";
+        for(int i=hits.size()-1;i>=0;i--)if(hits.get(i).contains(mx,my))return hits.get(i).id().equals("search")?"text":"pointer";
+        return "default";
     }
     /** Clipboard access belongs to the Minecraft screen; only sanitized text enters this UI. */
     public void pasteText(String value) {

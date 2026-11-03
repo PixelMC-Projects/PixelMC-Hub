@@ -69,23 +69,29 @@ public final class HubHead {
     }
 
     public static void draw(HubDraw draw, float x, float y, float size, float yawDegrees) {
-        if (!(size > 0) || !Float.isFinite(size) || !Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(yawDegrees)) return;
-        float yaw = (float) Math.toRadians(yawDegrees % 360);
-        Image texture = skin;
-        drawLayer(draw, texture, x, y, size, yaw, false);
-        // Do not merge the hat into the skin: transparent texels expose the real base cube.
-        if (texture != null) drawLayer(draw, texture, x, y, size, yaw, true);
+        draw(draw, x, y, size, yawDegrees, 0);
     }
 
-    private static void drawLayer(HubDraw draw, Image texture, float x, float y, float size, float yaw, boolean hat) {
+    /** Local roll is applied before yaw and pitch, exactly like CSS rotateX rotateY rotateZ. */
+    public static void draw(HubDraw draw, float x, float y, float size, float yawDegrees, float rollDegrees) {
+        if (!(size > 0) || !Float.isFinite(size) || !Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(yawDegrees) || !Float.isFinite(rollDegrees)) return;
+        float yaw = (float) Math.toRadians(yawDegrees % 360);
+        float roll = (float) Math.toRadians(rollDegrees % 360);
+        Image texture = skin;
+        drawLayer(draw, texture, x, y, size, yaw, roll, false);
+        // Do not merge the hat into the skin: transparent texels expose the real base cube.
+        if (texture != null) drawLayer(draw, texture, x, y, size, yaw, roll, true);
+    }
+
+    private static void drawLayer(HubDraw draw, Image texture, float x, float y, float size, float yaw, float roll, boolean hat) {
         float layerSize = size * (hat ? HAT_SCALE : 1);
         float half = layerSize / 2;
         float centerX = x + size / 2, centerY = y + size / 2;
         List<ProjectedFace> visible = new ArrayList<>(3);
         for (Face face : FACES) {
-            Point origin = project(face.x * half, face.y * half, face.z * half, yaw);
-            Point right = project(face.rx * layerSize, face.ry * layerSize, face.rz * layerSize, yaw);
-            Point down = project(face.dx * layerSize, face.dy * layerSize, face.dz * layerSize, yaw);
+            Point origin = project(face.x * half, face.y * half, face.z * half, yaw, roll);
+            Point right = project(face.rx * layerSize, face.ry * layerSize, face.rz * layerSize, yaw, roll);
+            Point down = project(face.dx * layerSize, face.dy * layerSize, face.dz * layerSize, yaw, roll);
             float determinant = right.x * down.y - right.y * down.x;
             if (determinant <= 0.0001f) continue; // CSS backface-visibility:hidden.
             visible.add(new ProjectedFace(face, origin, right, down, origin.z + (right.z + down.z) / 2));
@@ -130,13 +136,15 @@ public final class HubHead {
             0,0,0,1,0));
     }
 
-    private static Point project(float x, float y, float z, float yaw) {
+    private static Point project(float x, float y, float z, float yaw, float roll) {
         float cy = (float) Math.cos(yaw), sy = (float) Math.sin(yaw);
         float cp = (float) Math.cos(PITCH), sp = (float) Math.sin(PITCH);
-        float rotatedX = cy * x + sy * z;
-        float rotatedZ = -sy * x + cy * z;
-        // CSS transform: rotateX(-12deg) rotateY(yaw); orthographic, without perspective.
-        return new Point(rotatedX, cp * y - sp * rotatedZ, sp * y + cp * rotatedZ);
+        float cr = (float) Math.cos(roll), sr = (float) Math.sin(roll);
+        float rolledX = cr * x - sr * y, rolledY = sr * x + cr * y;
+        float rotatedX = cy * rolledX + sy * z;
+        float rotatedZ = -sy * rolledX + cy * z;
+        // CSS transform: rotateX(-12deg) rotateY(yaw) rotateZ(roll); local orthographic projection.
+        return new Point(rotatedX, cp * rolledY - sp * rotatedZ, sp * rolledY + cp * rotatedZ);
     }
 
     private record Point(float x, float y, float z) {}

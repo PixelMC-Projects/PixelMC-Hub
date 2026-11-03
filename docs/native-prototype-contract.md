@@ -8,7 +8,7 @@ Parallel ownership:
 - Asset agent: native UI resources, `com.pixelmc.hub.client.ui.HubHead` and asset-generation scripts. No other Java or build files.
 - Root: mod entrypoint, Minecraft Screen/input, settings/session lifecycle, integration, docs, verification and Git.
 
-Coordinates: fixed logical panel 1260 x 850. Root centers and uniformly scales panel to framebuffer with at least 24 physical px margin. UI mouse coordinates are in this logical space. HubDraw uses top-left shapes, text baseline coordinates, ARGB ints, floating point coordinates. Rendering runs on Minecraft render thread, canvas reset/GL state restore owned by renderer.
+Coordinates: fixed logical panel 1260 x 850. Root centers the panel and caps its size using monitor content scale (1 to 1.75), with a maximum occupancy of 90% viewport width and 84% height. Fullscreen does not enlarge the panel to fill the monitor. UI mouse coordinates use the inverse of this same scale. HubDraw uses top-left shapes, text baseline coordinates, ARGB ints, floating point coordinates. Rendering runs on Minecraft render thread, canvas reset/GL state restore owned by renderer. A local menu preview renders vanilla Minecraft panorama; when in a world, glass samples the actual scene already drawn by Minecraft.
 
 Renderer public API (agent may add methods, notify coordinator before changing signatures):
 ```java
@@ -47,7 +47,9 @@ public final class HubView {
   public boolean mouseDragged(float x,float y,int button,float dx,float dy);
   public boolean mouseScrolled(float x,float y,double amount);
   public boolean keyPressed(int keyCode,int scanCode,int modifiers);
+  public boolean keyReleased(int keyCode,int scanCode,int modifiers);
   public boolean charTyped(char codePoint,int modifiers);
+  public String pointerCursor(); // default / pointer / text, after transformed hit testing
   public boolean dismissOverlay(); // Esc closes modal first, false lets Screen close
   public void open(boolean playWelcome); // always returns home, resets entrance timing
   public void setPlayerName(String name);

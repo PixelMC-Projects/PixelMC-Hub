@@ -42,9 +42,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "f525b8db42c17f6a891eb4f03ecd0c60282f5527d792ca7f205dc7d27a0ee1a1"
+      "sha256": "f78ab6bb1726b37744c3f6f3772739c0112618e3dce0992d2844ad3c863f3915"
     },
     {
       "exportName": "Tag",
@@ -53,9 +60,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "f30fa606565899f2b1071371108c195cb75eb261f4863786d3e21407f8118fba"
+      "sha256": "065edf90aea2c9f4d91565846307fb501bd22b83f733ce43c94496abac4eceed"
     },
     {
       "exportName": "BookOpen",
@@ -64,9 +78,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "40d7878b559fe9a8a4e290b63547f57127a99b6018dd709dd0b87cc33d558ad3"
+      "sha256": "90faa6a184285c13c4576d132c6988251474a158dbf791efaf7d30f3d2cf00c6"
     },
     {
       "exportName": "Settings",
@@ -75,9 +96,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "16e30845ef43831a9fdab387239457b76ea68a736a3954b5a3c9a0d92fa65c92"
+      "sha256": "4794d8e8ae79278f172f0381b2de05204c2e1c14a926796ef3258bd38639ddbc"
     },
     {
       "exportName": "ChevronRight",
@@ -86,9 +114,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "40199f788e0bc42ee005df33eed66148e302c31e19253e361b84d9dccf425edf"
+      "sha256": "4fdc86ea691809fc4b9e85d473ec96822601522d35ed9ad76f13204590a70623"
     },
     {
       "exportName": "ChevronLeft",
@@ -97,9 +132,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "8cb2086b8320e8134fc427670a84d04ed7d2f34008d19b5c0a52ef673e379173"
+      "sha256": "c794628df7ffc7bb9d2f510ae463c209310db4ffef072a798c48160f11391161"
     },
     {
       "exportName": "ArrowUpRight",
@@ -108,9 +150,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "8ea472d41cd9245975f91d60fe7df69baf1e7a79f6adfe1cc164b0b592dce301"
+      "sha256": "4880f3fe9b9d575a2f19e575fb955d48d86e5569d5902027edf3c8054b2670d7"
     },
     {
       "exportName": "ArrowRight",
@@ -119,9 +168,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "510b5572a45d0690515dd811d65990191a5108e4610c922a1266fc3e04d783f6"
+      "sha256": "1003f734a1a91230037e59948782eb562feba4bcec0ead1a725ecfbf57b0e5c7"
     },
     {
       "exportName": "Check",
@@ -130,9 +186,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "287a38c3642a6eec5bf30bc44c8b6ecfe4980ace255aee67a9e34d806eaba879"
+      "sha256": "9d6e9c8e428742cef3a693933ead7cc92bd7583073d6ffa3ef06fbf160f41a53"
     },
     {
       "exportName": "X",
@@ -141,9 +204,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "4854034da9d11127b62a0d374c1b7a712a859939c5aa3bd65a56486ac866287f"
+      "sha256": "a90eba0206e2b91684f7fdf1d61e149d59fde526f49280f39650f2c8b6f3afb2"
     },
     {
       "exportName": "Leaf",
@@ -152,9 +222,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "1f657ed3780e3195464e5018ba9605a51c9b46c36498d1972d5e8f8610ff0e3c"
+      "sha256": "8c78aba044333c8db477ba66b25b08b44935c64fb0cea4f36526792c5534ae2a"
     },
     {
       "exportName": "Clock",
@@ -163,9 +240,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "439d408c1ad5fe51a9f75245440f13b01fd7911bc34a35349a617cc101601af7"
+      "sha256": "8e41499d50b415ae4caa7b3ff61443268c2b49f8e6c2998d87dc93a28404eca5"
     },
     {
       "exportName": "LogIn",
@@ -174,9 +258,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "71d1b1c2a6d5988f33e82f8b2f2788d32a8e0219b59f7dcb10191eed3aa4fd8c"
+      "sha256": "c77793fd32478a510c5be49635336266d543a7594bee3676d5001cf59c6560fe"
     },
     {
       "exportName": "CalendarDays",
@@ -185,9 +276,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "06f9ac6cd7ea63a7c339e2f1e0bfc5e9a7295dc3230222684038378170100e5a"
+      "sha256": "d4b41cab843744fbd8950359a4f02388bff061c23ec7fd86c5a94dcdfbe2c09a"
     },
     {
       "exportName": "Search",
@@ -196,9 +294,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "e2f2c766ba69b36d09e7873de30a9193f228efbf701eb153109d80bb02c74af0"
+      "sha256": "de5c0403a2755a4f211311d6ae2621ed8f383422e63398876af1ce8f139da917"
     },
     {
       "exportName": "SlidersHorizontal",
@@ -207,9 +312,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "bd07e1ee5a6f69338997663ce750d03dcd3f99095c384e9ecc47d64e8b7af20f"
+      "sha256": "520badf1c74d52ad5e95c55505d9162cc3297ab5831080d4acd9e110ce1de08e"
     },
     {
       "exportName": "Grid2X2",
@@ -218,9 +330,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "b3dadd8bfcc291f103b0b076d1df6e58c02e19d69d2a54a49bae97fb6c3b6948"
+      "sha256": "41a3fcb7d8844c772c5a2858778c49b998bccd7db8b7817b8849e81cc8caab80"
     },
     {
       "exportName": "List",
@@ -229,9 +348,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "deef61b2d0cc3699c9691bcc785bd3a5b4e3df3bff0ca0250b6a2f04f2fa0cee"
+      "sha256": "72ff76fb8f48b17f0e06aec97c5b9cb2f48748bffdaeb23150b935132e7ccc78"
     },
     {
       "exportName": "Eye",
@@ -240,9 +366,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "2f42c3eb990bfd57e8a7f5bb73f1fcb29650afac7a25a9a4d55b1bed383360ed"
+      "sha256": "ede12ad12fb9bbfcf3f9a6accde1a47a6df83f24df8b4152668b431bcd990898"
     },
     {
       "exportName": "EyeOff",
@@ -251,9 +384,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "dddc8c9d104a6b3bc2bf57c7371ec596692522b7bf4a17326964a94311eaac2a"
+      "sha256": "12e1b3fea8c9c45d323f1813c3dd5f38b4a4a2af619fc23641fb86a09096f5c7"
     },
     {
       "exportName": "MoreHorizontal",
@@ -262,9 +402,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "74dd161d3157bb1e24b6be1c479e989795fe1317d031621649e3c3492fab5606"
+      "sha256": "6af48fe1a3c5ceebdf0264788481eff47f68ffcf8f11b10b23ee99685a591d2c"
     },
     {
       "exportName": "Star",
@@ -273,9 +420,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "aeaf5936c970e0923654df2c14d55523ebcd3e388e0fe377fe961d14d0df7edd"
+      "sha256": "4fda2f0c3007dcb632e8975a04f87b3b414a68b189a06def08297e342fb2c8ac"
     },
     {
       "exportName": "Mountain",
@@ -284,9 +438,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "31e916a8440b9a5733b7da8a14a546465a5d3bd6ab4b52afd00762fb426644b5"
+      "sha256": "dbd4a77fb07846e22ffd788f043672842a9249af75668a00e03e9b7f0c06a0f1"
     },
     {
       "exportName": "Moon",
@@ -295,9 +456,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "e16ee6202daa9482d6084346175a187feb7b0e97cc7c740cca0570d21f3890a8"
+      "sha256": "2ac351758fc0163c39852e8e4d986f3dbd871912087225db2a99a138639058a7"
     },
     {
       "exportName": "Sun",
@@ -306,9 +474,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "6f445eaaef760385db9c6401d7bd40283f3867b2a4c64bed336bfce5f6d45bfa"
+      "sha256": "73f016a556e5b630dade5cd9fba322a28ba5c206618b36ac31312bae80f4370a"
     },
     {
       "exportName": "Wheat",
@@ -317,9 +492,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "d27fdd3db8ca7d7e8d63b472b57efd497b8ebc498a1710a16275c923cbd3dd5c"
+      "sha256": "47a8af5dddf303c4a0e094eedf852acc37e15222621c02499019373054ec9324"
     },
     {
       "exportName": "Cloud",
@@ -328,9 +510,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "45fe180b2c597ea3ab63f1941104475199cfc4be00dcd7413482b5520229c03d"
+      "sha256": "bd51f48110f351401e4a49bdff67fbecce332af23b73923e67bbf0b439114bfc"
     },
     {
       "exportName": "House",
@@ -339,9 +528,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "f525b8db42c17f6a891eb4f03ecd0c60282f5527d792ca7f205dc7d27a0ee1a1"
+      "sha256": "f78ab6bb1726b37744c3f6f3772739c0112618e3dce0992d2844ad3c863f3915"
     },
     {
       "exportName": "Lock",
@@ -350,9 +546,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "159a684c9fb3f30586a155fd6b724777f2bd59990666bc400a60620d8acef9ec"
+      "sha256": "698ef3e721b927f8d0043ddb936318a9a50001343e4a0cd68110f6d998d7275b"
     },
     {
       "exportName": "Sparkles",
@@ -361,9 +564,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "b2b13dc211df3f8f3cd2b51f4d13758602569536cab4362d34336096b539847c"
+      "sha256": "773c4f3df7058453fc741af93bc3f626de83e4ae154b8753b49fe401c0dc50b2"
     },
     {
       "exportName": "PanelLeftClose",
@@ -372,9 +582,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "c22373fbee675e25fed536eac7cf598808980e7458849382249b7bd2c78b7c0e"
+      "sha256": "fe66f47b1c5e84de44a3c554d8c0bbf55de1987f2d8fe76a1b61d17b137e74e2"
     },
     {
       "exportName": "Volume2",
@@ -383,9 +600,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "0f0dcdbbfa4981559472ea415c2cc298506ab6e9d663851ae5ea20fdd0297018"
+      "sha256": "05fc2d776ab0c8a774ff33123e60dcf1af403b110e50cc712c28bb542dc4b8e2"
     },
     {
       "exportName": "RotateCcw",
@@ -394,9 +618,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "58331ae388a7567a9690eee0fa2b656b119ac14fa96dca86927b3a0147d0a8a4"
+      "sha256": "daa545d7d1a16d013d7c463ee7f4a4d41b97d700d4248d30ecd98fe0c05daa00"
     },
     {
       "exportName": "Maximize2",
@@ -405,9 +636,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "8883bdabd4a4e732a42200242e0adeda752939d6fe5d84441105c3cd97b84800"
+      "sha256": "6f94b9ae186ad13f4702475721bcbf55f7170ef8309d44a00450938d288742df"
     },
     {
       "exportName": "Info",
@@ -416,9 +654,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "bd38e1b7586210769e8ecb43618a4acef7a69e5993d0e1206e68942f96e0febe"
+      "sha256": "9b4cb792fb05ce5fc59c29ff9fa5f3262845d8f51f91cbc5d568391e215400fd"
     },
     {
       "exportName": "Copy",
@@ -427,9 +672,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "93bb9ce60d06038b7922bc846537172bdd18e36a83d6539c201fc38f0e406402"
+      "sha256": "3be229f0344b6da97b8b99b1fe6d55a9c01f941d17ea7a23278c90cf593dcdb9"
     },
     {
       "exportName": "CheckCheck",
@@ -438,9 +690,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "879100a8c731e6b4a234d0ac0dd68fbd93674f169cd72b8420cc80767e776001"
+      "sha256": "eb2e0628091cecd232444c17e8c1303c53ce1b8aa865fde0b75d681172b24f83"
     },
     {
       "exportName": "ChevronsUpDown",
@@ -449,9 +708,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "114a4d29421a2e528d416fb42dd7fe52d25773e3bdd0207f4ecd356b6a7fde0d"
+      "sha256": "9ed1b749fe0f8d26863dae5e6eadd7f3f7cb4908c92e5f322085072041744761"
     },
     {
       "exportName": "Bookmark",
@@ -460,9 +726,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "42f0844a7d5a0f32b4c12e87b10e02657a7d751e7f0c4fd10d541d0f826e0fa0"
+      "sha256": "3a3cf3b525a3fce3d8b6451a3d0556be90e84dfb39a928a0476472dd3d285e22"
     },
     {
       "exportName": "Gift",
@@ -471,9 +744,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "fc845277d1e609bc95259df5cb71de8c3076fa4bdfd9d4a167c1a4d5115e5cbf"
+      "sha256": "d35bce87390568199738b5f216a2fa39eabc548213395f364255beda85b29270"
     },
     {
       "exportName": "Flower2",
@@ -482,9 +762,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "223192a030f5f51135bb36df404f8518cee378a6504100882fc94ca3e5dddea9"
+      "sha256": "14e2de14328fd5d3a36ddda8ebc70e95c3dfb833ccc3d269aabbdb81440bed61"
     },
     {
       "exportName": "Wind",
@@ -493,9 +780,16 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "93d014c3266ceddeb1429a2d4035246be8e9086456a72a9f1b76f5b7cd9f449f"
+      "sha256": "a4d26792460c41e98ffd35b90927809c2a98fa5d79a6b8ba78b1e90a51dcc7fe"
     },
     {
       "exportName": "UserRound",
@@ -504,9 +798,340 @@
         192,
         192
       ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
       "color": "white RGBA, transparent background",
       "license": "ISC",
-      "sha256": "a8a5cf45fa5661032718ea858601523c466fe9100fe3ef62a2248a410b56c595"
+      "sha256": "8d9b2d1cca7aebd02f3e8b3099e7d9fdf35e18adeb4f5bb0d319dd048c3616d7"
+    },
+    {
+      "exportName": "Leaf",
+      "target": "textures/icons/stroke-1.5/leaf.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "8c6325440c67b4cf2a1b107791e24d4bd9dc8f2febc2f6f9a4c3f7425c2716c8"
+    },
+    {
+      "exportName": "Leaf",
+      "target": "textures/icons/stroke-1.0/leaf.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "fc89cdb66569ba7a7bc6ae9c1110cec72d95db95d4b969b9e4cf030785aa5c03"
+    },
+    {
+      "exportName": "Mountain",
+      "target": "textures/icons/stroke-1.5/mountain.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "9b63525b9e88b736b75992a6429364f74e7257b9baecdb59d0b770fbabcb8383"
+    },
+    {
+      "exportName": "Mountain",
+      "target": "textures/icons/stroke-1.0/mountain.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "0cf87b19b65199f1e0d061edb6553441c8481d7ce8652d42bc52ef2c38a3fba3"
+    },
+    {
+      "exportName": "Star",
+      "target": "textures/icons/stroke-1.5/star.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "c65e26c0ca054c0de1d6774bc32c9774d776410ea51a5a36fb7beb8eaace54f0"
+    },
+    {
+      "exportName": "Star",
+      "target": "textures/icons/stroke-1.0/star.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "92fe80977f75abb22d0cc74b013646ef7b882be54a79c355f3251002f7f3758c"
+    },
+    {
+      "exportName": "House",
+      "target": "textures/icons/stroke-1.5/house.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "bb982a5e965ad06cb51404e5d0115b615bb519338fc8d9a127481f677fc750e1"
+    },
+    {
+      "exportName": "House",
+      "target": "textures/icons/stroke-1.0/house.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "8e82a684b1985b0f173f8279bad4533d5dc4b0ded12514cfe25da08e31c29bdd"
+    },
+    {
+      "exportName": "Moon",
+      "target": "textures/icons/stroke-1.5/moon.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "6db95fcf7e36c6789222ebbf8e53d477ed0b1cdafbc7d14263e2e2e8c6100624"
+    },
+    {
+      "exportName": "Moon",
+      "target": "textures/icons/stroke-1.0/moon.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "672b0123ad0ffe3dfa096495862caf80e3c2083aeb66170a2f0cf6aea7e1ebf7"
+    },
+    {
+      "exportName": "Wheat",
+      "target": "textures/icons/stroke-1.5/wheat.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "b87348c1f5a1441554d8309917f9c9ac3e0d53f2cd98d6073d55f36cf345bcdf"
+    },
+    {
+      "exportName": "Wheat",
+      "target": "textures/icons/stroke-1.0/wheat.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "c7282c727601b736bfb08491547320b8cde754d9860096762ed7d6c788f81ae4"
+    },
+    {
+      "exportName": "Sun",
+      "target": "textures/icons/stroke-1.5/sun.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "82651b393fc83329e2f393cc9d3a855b7b67556560fa59211fb78182976755c3"
+    },
+    {
+      "exportName": "Sun",
+      "target": "textures/icons/stroke-1.0/sun.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "fc53aef57da06950ecba6805bbee7fd53a3d395359f17d9360188f04c0d948ea"
+    },
+    {
+      "exportName": "Cloud",
+      "target": "textures/icons/stroke-1.5/cloud.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "d19c75463c4400e4e74012651db0f1185fc73d1974ae2c3602300a9c630709c6"
+    },
+    {
+      "exportName": "Cloud",
+      "target": "textures/icons/stroke-1.0/cloud.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "e59a89821638545dcf50067db2b050f6557b46430708ec4e69b2a0af2ee0051f"
+    },
+    {
+      "exportName": "UserRound",
+      "target": "textures/icons/stroke-1.5/user-round.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.5,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "7215a116370f4284dbc27b9085c845f11251a8af512928b1bf33900f1961e62f"
+    },
+    {
+      "exportName": "UserRound",
+      "target": "textures/icons/stroke-1.0/user-round.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "f1d491c7e1213730d4817aa126da356181787b5cc30c226fc8f6183178211da6"
     }
   ],
   "data": [

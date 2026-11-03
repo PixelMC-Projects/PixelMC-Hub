@@ -19,9 +19,6 @@ public final class HubRenderer implements AutoCloseable {
     private BackendRenderTarget target;
     private Surface surface;
     private HubDraw draw;
-    private Paint backdropPaint;
-    private ImageFilter backdropBlur;
-    private float blurScale = -1;
     private int width, height, sourceFramebuffer = -1, sourceColor = -1;
     private int aliasFramebuffer, stencilBuffer;
     private long glContext;
@@ -54,7 +51,6 @@ public final class HubRenderer implements AutoCloseable {
                 renderThread = Thread.currentThread(); glContext = currentContext;
                 stage("creating local font and image resources");
                 draw = new HubDraw();
-                backdropPaint = new Paint().setAntiAlias(true);
             }
             context.resetGLAll();
             stage("preparing Minecraft color target");
@@ -67,11 +63,10 @@ public final class HubRenderer implements AutoCloseable {
             canvas = surface.getCanvas();
             saveCount = canvas.save();
             canvas.resetMatrix();
-            stage("capturing GPU backdrop and scheduling blur");
-            backdrop(canvas, panelX, panelY, scale);
-            checkFirstFrameGl("GPU backdrop");
             canvas.translate(panelX, panelY).scale(scale, scale);
-            draw.begin(canvas);
+            stage("capturing immutable GPU game backdrop");
+            draw.begin(canvas,surface);
+            checkFirstFrameGl("GPU backdrop");
             stage("drawing Hub content");
             content.accept(draw);
             stage("Hub content scheduled");
@@ -101,25 +96,6 @@ public final class HubRenderer implements AutoCloseable {
         int error = glGetError();
         if (error != GL_NO_ERROR)
             throw new IllegalStateException("OpenGL error after Hub " + stage + ": 0x" + Integer.toHexString(error));
-    }
-
-    private void backdrop(Canvas canvas, float x, float y, float scale) {
-        if (Float.compare(blurScale, scale) != 0) {
-            backdropPaint.setImageFilter(null);
-            if (backdropBlur != null) backdropBlur.close();
-            float sigma = Math.min(24, Math.max(1, 15 * scale));
-            backdropBlur = ImageFilter.makeBlur(sigma, sigma, FilterTileMode.CLAMP);
-            backdropPaint.setImageFilter(backdropBlur);
-            blurScale = scale;
-        }
-        // GPU copy-on-write snapshot: no glReadPixels, CPU readback, or framebuffer-size upload.
-        // Skia limits the blur result to the rounded panel clip and its required filter padding.
-        try (Image background = surface.makeImageSnapshot()) {
-            int count = canvas.save();
-            canvas.clipRRect(RRect.makeXYWH(x, y, 1260 * scale, 850 * scale, 28 * scale), true);
-            canvas.drawImage(background, 0, 0, backdropPaint);
-            canvas.restoreToCount(count);
-        }
     }
 
     private void prepareTarget(int framebuffer, int newWidth, int newHeight) {
@@ -178,8 +154,6 @@ public final class HubRenderer implements AutoCloseable {
         try {
             if (!hasContext) context.abandon();
             if (draw != null) draw.close();
-            if (backdropPaint != null) backdropPaint.close();
-            if (backdropBlur != null) backdropBlur.close();
             releaseTarget();
             context.close();
         } finally {
