@@ -8,3 +8,10 @@ public/assets/local-preview/
 !.env.example
 .DS_Store
 Thumbs.db
+**/.gradle/
+minecraft/build/
+minecraft/run/
+minecraft/run-*/
+**/hs_err_pid*.log
+**/replay_pid*.log
+*.hprof

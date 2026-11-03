@@ -17,4 +17,11 @@ DailyFortunes 素材及签文的 AGPL-3.0-only 全文见 `licenses/AGPL-3.0-asse
 
 Artwork and fortune text are reused from the local PixelMC projects under their original license. The avatar is a bundled demo placeholder. Third-party dependencies retain their own licenses. System fonts are referenced, not redistributed.
 
+## Native client / 原生客户端
+
+- `minecraft/` 的原生 UI 与绘制桥接为本项目实现，使用 Apache-2.0；网页中的 React Bits 组件没有作为浏览器运行时嵌入游戏，网页组件仍保留原有许可。Native UI and rendering integration are original application code; the web React Bits components retain their own terms.
+- Skija `0.143.18` / HumbleUI types `0.2.0`：Apache-2.0；Windows x64 本地库包含 Skia，使用其 BSD 许可及上游声明。依赖以原始 Jar-in-Jar 分发，未重定位或改写 JNI 包。The original dependency jars are bundled without JNI relocation.
+- 上游许可副本及 Skija NOTICE 保存于 `minecraft/src/main/resources/assets/pixelmc_hub/licenses/`，并包含在客户端 JAR 中。Native dependency license and notice copies are included in the client JAR.
+- `minecraft/src/main/resources/assets/pixelmc_hub/` 下复用的图像、签文和 Lucide 图标沿用上文对应许可；素材清单记录来源与文件摘要。运行时玩家皮肤只读取游戏内已加载的纹理，不保存或发布玩家皮肤文件。Reused native assets keep their original licenses; runtime skin textures are not published with the project.
+
 Original application code is Apache-2.0. React Bits is Copyright © 2026 David Haz, under its separate MIT + Commons Clause terms; it is not relicensed here. GlassIcons and TiltedCard were adapted on 2026-11-03 for application motion preferences and accessibility state. These components form part of the player application and are not offered as a standalone component library. The static build includes notices and license copies under `licenses/`.

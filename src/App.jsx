@@ -392,7 +392,7 @@ export default function App() {
               <img className="server-brand-logo" src="/assets/server-logo.png" alt="PixelMC 服务器 Logo" />
               <span>
                 <strong>旅人手册</strong>
-                <small>PixelMC Player Hub</small>
+                <small>PixelMC-Hub</small>
               </span>
             </button>
             <div className="nav-label">我的空间</div>

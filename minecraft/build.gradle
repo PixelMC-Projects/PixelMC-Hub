@@ -1,0 +1,96 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.aliyun.com/repository/public' }
+        maven { url = 'https://maven.minecraftforge.net' }
+        maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+        mavenCentral()
+    }
+    dependencies { classpath 'net.minecraftforge.gradle:ForgeGradle:6.0.54' }
+}
+apply plugin: 'net.minecraftforge.gradle'
+
+group = 'com.pixelmc.hub'
+version = '0.1.0-native-prototype'
+base { archivesName = 'pixelmc-hub-forge-1.20.1' }
+java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+    runs {
+        client {
+            workingDirectory project.file('run-native')
+            property 'forge.logging.console.level', 'info'
+            property 'pixelmc_hub.previewEntry', 'true'
+            mods { pixelmc_hub { source sourceSets.main } }
+            args '--username', 'HubTester', '--width', '1440', '--height', '1000'
+            // The caller can select isolated prototype verification hooks without editing source.
+            System.properties.findAll { key, value -> key.startsWith('pixelmc.hub.') }.each { key, value ->
+                property key, value.toString()
+            }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    maven { url = 'https://bmclapi2.bangbang93.com/maven' }
+}
+// Same Forge/Minecraft mirrors as the already verified neighbouring local toolchain.
+repositories.configureEach { repo ->
+    if (repo instanceof MavenArtifactRepository && repo.url.host in ['maven.minecraftforge.net', 'libraries.minecraft.net']) {
+        repo.url = 'https://bmclapi2.bangbang93.com/maven'
+    }
+}
+
+def skijaVersion = '0.143.18'
+jarJar.enable()
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.3.33'
+    // Forge's userdev launcher only exposes libraries registered in this configuration;
+    // a plain implementation/runtimeOnly dependency compiles but is invisible to game modules.
+    minecraftLibrary "io.github.humbleui:skija-shared:${skijaVersion}"
+    minecraftLibrary "io.github.humbleui:skija-windows-x64:${skijaVersion}"
+
+    // Keep upstream modules and JNI package names intact. Flattening or relocating Skija
+    // breaks native symbols; Jar-in-Jar lets Forge negotiate shared dependency versions.
+    jarJar("io.github.humbleui:skija-shared:${skijaVersion}") {
+        transitive = false
+        jarJar.ranged(it, '[0.143.18,0.143.19)')
+    }
+    jarJar('io.github.humbleui:types:0.2.0') {
+        transitive = false
+        jarJar.ranged(it, '[0.2.0,0.2.1)')
+    }
+    jarJar("io.github.humbleui:skija-windows-x64:${skijaVersion}") {
+        transitive = false
+        jarJar.ranged(it, '[0.143.18,0.143.19)')
+    }
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.named('jar', Jar).configure {
+    archiveClassifier = 'thin-dev'
+    from('../LICENSE', '../NOTICE.md')
+    manifest.attributes('Implementation-Title': 'PixelMC-Hub', 'Implementation-Version': project.version)
+}
+tasks.named('jarJar', Jar).configure {
+    archiveClassifier = ''
+    from('../LICENSE', '../NOTICE.md')
+    manifest.attributes('Implementation-Title': 'PixelMC-Hub', 'Implementation-Version': project.version)
+}
+reobf { jarJar {} }
+tasks.named('build') { dependsOn 'reobfJarJar' }
+
+sourceSets {
+    renderChecks {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+tasks.register('nativeRendererChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeRendererChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}

@@ -1,0 +1,526 @@
+{
+  "product": "PixelMC-Hub",
+  "generatedBy": "tools/generate-native-assets.mjs",
+  "description": "Native preview copies of the current web reference; local-preview private skin is deliberately excluded.",
+  "artwork": [
+    {
+      "source": "public/assets/avatar.png",
+      "target": "textures/ui/avatar.png",
+      "sha256": "774a9626596bb9cb4653cf946f42448b9eee7620a251ff9a2a08c4100f656b4e",
+      "license": "Original MemorialTitles demo placeholder, see NOTICE.md"
+    },
+    {
+      "source": "public/assets/collection-chest.png",
+      "target": "textures/ui/collection-chest.png",
+      "sha256": "b8a0eca290d456a92e40c172f5883feba5be56fce6dc0f12f0f820414eca1301",
+      "license": "AGPL-3.0-only"
+    },
+    {
+      "source": "public/assets/fortune-barrel.png",
+      "target": "textures/ui/fortune-barrel.png",
+      "sha256": "006208086c7027701c4a847785c10faf3b7d8632676099dd79ee334febb6f888",
+      "license": "AGPL-3.0-only"
+    },
+    {
+      "source": "public/assets/fortune-slip.png",
+      "target": "textures/ui/fortune-slip.png",
+      "sha256": "1ed75a08b569a08c78f9fb834c7f68fec858cdbc01ecd97544009afaf3aaa6b3",
+      "license": "AGPL-3.0-only"
+    },
+    {
+      "source": "public/assets/server-logo.png",
+      "target": "textures/ui/server-logo.png",
+      "sha256": "da2c9e176853e78014ba685f6009b0c084749ba5511f33d1eff10e109bd22ac5",
+      "license": "User-provided brand asset, see NOTICE.md"
+    }
+  ],
+  "icons": [
+    {
+      "exportName": "Home",
+      "target": "textures/icons/home.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "f525b8db42c17f6a891eb4f03ecd0c60282f5527d792ca7f205dc7d27a0ee1a1"
+    },
+    {
+      "exportName": "Tag",
+      "target": "textures/icons/tag.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "f30fa606565899f2b1071371108c195cb75eb261f4863786d3e21407f8118fba"
+    },
+    {
+      "exportName": "BookOpen",
+      "target": "textures/icons/book-open.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "40d7878b559fe9a8a4e290b63547f57127a99b6018dd709dd0b87cc33d558ad3"
+    },
+    {
+      "exportName": "Settings",
+      "target": "textures/icons/settings.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "16e30845ef43831a9fdab387239457b76ea68a736a3954b5a3c9a0d92fa65c92"
+    },
+    {
+      "exportName": "ChevronRight",
+      "target": "textures/icons/chevron-right.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "40199f788e0bc42ee005df33eed66148e302c31e19253e361b84d9dccf425edf"
+    },
+    {
+      "exportName": "ChevronLeft",
+      "target": "textures/icons/chevron-left.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "8cb2086b8320e8134fc427670a84d04ed7d2f34008d19b5c0a52ef673e379173"
+    },
+    {
+      "exportName": "ArrowUpRight",
+      "target": "textures/icons/arrow-up-right.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "8ea472d41cd9245975f91d60fe7df69baf1e7a79f6adfe1cc164b0b592dce301"
+    },
+    {
+      "exportName": "ArrowRight",
+      "target": "textures/icons/arrow-right.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "510b5572a45d0690515dd811d65990191a5108e4610c922a1266fc3e04d783f6"
+    },
+    {
+      "exportName": "Check",
+      "target": "textures/icons/check.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "287a38c3642a6eec5bf30bc44c8b6ecfe4980ace255aee67a9e34d806eaba879"
+    },
+    {
+      "exportName": "X",
+      "target": "textures/icons/x.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "4854034da9d11127b62a0d374c1b7a712a859939c5aa3bd65a56486ac866287f"
+    },
+    {
+      "exportName": "Leaf",
+      "target": "textures/icons/leaf.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "1f657ed3780e3195464e5018ba9605a51c9b46c36498d1972d5e8f8610ff0e3c"
+    },
+    {
+      "exportName": "Clock",
+      "target": "textures/icons/clock.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "439d408c1ad5fe51a9f75245440f13b01fd7911bc34a35349a617cc101601af7"
+    },
+    {
+      "exportName": "LogIn",
+      "target": "textures/icons/log-in.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "71d1b1c2a6d5988f33e82f8b2f2788d32a8e0219b59f7dcb10191eed3aa4fd8c"
+    },
+    {
+      "exportName": "CalendarDays",
+      "target": "textures/icons/calendar-days.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "06f9ac6cd7ea63a7c339e2f1e0bfc5e9a7295dc3230222684038378170100e5a"
+    },
+    {
+      "exportName": "Search",
+      "target": "textures/icons/search.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "e2f2c766ba69b36d09e7873de30a9193f228efbf701eb153109d80bb02c74af0"
+    },
+    {
+      "exportName": "SlidersHorizontal",
+      "target": "textures/icons/sliders-horizontal.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "bd07e1ee5a6f69338997663ce750d03dcd3f99095c384e9ecc47d64e8b7af20f"
+    },
+    {
+      "exportName": "Grid2X2",
+      "target": "textures/icons/grid-2x2.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "b3dadd8bfcc291f103b0b076d1df6e58c02e19d69d2a54a49bae97fb6c3b6948"
+    },
+    {
+      "exportName": "List",
+      "target": "textures/icons/list.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "deef61b2d0cc3699c9691bcc785bd3a5b4e3df3bff0ca0250b6a2f04f2fa0cee"
+    },
+    {
+      "exportName": "Eye",
+      "target": "textures/icons/eye.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "2f42c3eb990bfd57e8a7f5bb73f1fcb29650afac7a25a9a4d55b1bed383360ed"
+    },
+    {
+      "exportName": "EyeOff",
+      "target": "textures/icons/eye-off.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "dddc8c9d104a6b3bc2bf57c7371ec596692522b7bf4a17326964a94311eaac2a"
+    },
+    {
+      "exportName": "MoreHorizontal",
+      "target": "textures/icons/more-horizontal.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "74dd161d3157bb1e24b6be1c479e989795fe1317d031621649e3c3492fab5606"
+    },
+    {
+      "exportName": "Star",
+      "target": "textures/icons/star.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "aeaf5936c970e0923654df2c14d55523ebcd3e388e0fe377fe961d14d0df7edd"
+    },
+    {
+      "exportName": "Mountain",
+      "target": "textures/icons/mountain.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "31e916a8440b9a5733b7da8a14a546465a5d3bd6ab4b52afd00762fb426644b5"
+    },
+    {
+      "exportName": "Moon",
+      "target": "textures/icons/moon.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "e16ee6202daa9482d6084346175a187feb7b0e97cc7c740cca0570d21f3890a8"
+    },
+    {
+      "exportName": "Sun",
+      "target": "textures/icons/sun.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "6f445eaaef760385db9c6401d7bd40283f3867b2a4c64bed336bfce5f6d45bfa"
+    },
+    {
+      "exportName": "Wheat",
+      "target": "textures/icons/wheat.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "d27fdd3db8ca7d7e8d63b472b57efd497b8ebc498a1710a16275c923cbd3dd5c"
+    },
+    {
+      "exportName": "Cloud",
+      "target": "textures/icons/cloud.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "45fe180b2c597ea3ab63f1941104475199cfc4be00dcd7413482b5520229c03d"
+    },
+    {
+      "exportName": "House",
+      "target": "textures/icons/house.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "f525b8db42c17f6a891eb4f03ecd0c60282f5527d792ca7f205dc7d27a0ee1a1"
+    },
+    {
+      "exportName": "Lock",
+      "target": "textures/icons/lock.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "159a684c9fb3f30586a155fd6b724777f2bd59990666bc400a60620d8acef9ec"
+    },
+    {
+      "exportName": "Sparkles",
+      "target": "textures/icons/sparkles.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "b2b13dc211df3f8f3cd2b51f4d13758602569536cab4362d34336096b539847c"
+    },
+    {
+      "exportName": "PanelLeftClose",
+      "target": "textures/icons/panel-left-close.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "c22373fbee675e25fed536eac7cf598808980e7458849382249b7bd2c78b7c0e"
+    },
+    {
+      "exportName": "Volume2",
+      "target": "textures/icons/volume-2.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "0f0dcdbbfa4981559472ea415c2cc298506ab6e9d663851ae5ea20fdd0297018"
+    },
+    {
+      "exportName": "RotateCcw",
+      "target": "textures/icons/rotate-ccw.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "58331ae388a7567a9690eee0fa2b656b119ac14fa96dca86927b3a0147d0a8a4"
+    },
+    {
+      "exportName": "Maximize2",
+      "target": "textures/icons/maximize-2.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "8883bdabd4a4e732a42200242e0adeda752939d6fe5d84441105c3cd97b84800"
+    },
+    {
+      "exportName": "Info",
+      "target": "textures/icons/info.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "bd38e1b7586210769e8ecb43618a4acef7a69e5993d0e1206e68942f96e0febe"
+    },
+    {
+      "exportName": "Copy",
+      "target": "textures/icons/copy.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "93bb9ce60d06038b7922bc846537172bdd18e36a83d6539c201fc38f0e406402"
+    },
+    {
+      "exportName": "CheckCheck",
+      "target": "textures/icons/check-check.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "879100a8c731e6b4a234d0ac0dd68fbd93674f169cd72b8420cc80767e776001"
+    },
+    {
+      "exportName": "ChevronsUpDown",
+      "target": "textures/icons/chevrons-up-down.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "114a4d29421a2e528d416fb42dd7fe52d25773e3bdd0207f4ecd356b6a7fde0d"
+    },
+    {
+      "exportName": "Bookmark",
+      "target": "textures/icons/bookmark.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "42f0844a7d5a0f32b4c12e87b10e02657a7d751e7f0c4fd10d541d0f826e0fa0"
+    },
+    {
+      "exportName": "Gift",
+      "target": "textures/icons/gift.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "fc845277d1e609bc95259df5cb71de8c3076fa4bdfd9d4a167c1a4d5115e5cbf"
+    },
+    {
+      "exportName": "Flower2",
+      "target": "textures/icons/flower-2.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "223192a030f5f51135bb36df404f8518cee378a6504100882fc94ca3e5dddea9"
+    },
+    {
+      "exportName": "Wind",
+      "target": "textures/icons/wind.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "93d014c3266ceddeb1429a2d4035246be8e9086456a72a9f1b76f5b7cd9f449f"
+    },
+    {
+      "exportName": "UserRound",
+      "target": "textures/icons/user-round.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "a8a5cf45fa5661032718ea858601523c466fe9100fe3ef62a2248a410b56c595"
+    }
+  ],
+  "data": [
+    {
+      "source": "src/fortunes.json",
+      "target": "data/fortunes.json",
+      "count": 60,
+      "sha256": "645dda1beb847eb613b0b09c6980c502be9e2fcc9f9ee4be7a067aeccaba8539",
+      "license": "AGPL-3.0-only"
+    },
+    {
+      "source": "src/data.js",
+      "target": "data/demo-data.json",
+      "demonstratorOnly": true
+    }
+  ]
+}

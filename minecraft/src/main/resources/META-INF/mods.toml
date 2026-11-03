@@ -1,0 +1,32 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="Apache-2.0; bundled artwork and dependencies retain their own notices"
+issueTrackerURL="https://github.com/PixelMC-Projects/PixelMC-Hub/issues"
+
+[[mods]]
+modId="pixelmc_hub"
+version="${file.jarVersion}"
+displayName="PixelMC-Hub"
+displayURL="https://github.com/PixelMC-Projects/PixelMC-Hub"
+logoFile="assets/pixelmc_hub/textures/ui/server-logo.png"
+authors="zhan_cpu / PixelMC Projects"
+displayTest="IGNORE_ALL_VERSION"
+description='''
+旅人手册：个人主页、称号与签笺的原生玩家面板。
+当前为本地客户端实验版；业务数据为演示，不连接管理后台。
+Native personal player hub. Local client prototype with sample gameplay data.
+'''
+
+[[dependencies.pixelmc_hub]]
+modId="forge"
+mandatory=true
+versionRange="[47.3.33,)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.pixelmc_hub]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="CLIENT"

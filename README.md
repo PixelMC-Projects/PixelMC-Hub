@@ -1,18 +1,22 @@
-# PixelMC Player Hub · 旅人手册
+# PixelMC-Hub · 旅人手册
 
-面向玩家的个人面板：查看旅程记录、佩戴称号、翻阅收藏的签笺。浅色液态玻璃界面，配合彩色玻璃导航、立体收藏卡片与 Minecraft 头像和物品。
+Minecraft 玩家个人面板：查看旅程信息、佩戴称号、翻阅收藏的签笺。浅色玻璃界面，包含立体头像、手写开屏与页面动效。
 
-当前为**本地交互原型**，包含个人主页、我的称号、我的签笺和界面设置。数据均为演示；不会连接服务器或修改游戏。抽签、解签与存签仍由游戏内物品和方块完成。
+项目包含网页设计原型，以及 `minecraft/` 中的 **Forge 1.20.1 / Java 17 原生 Skija 客户端原型**。当前打包 Windows x64 渲染库；其余平台尚未提供。称号、签笺和旅程信息使用本地演示数据，尚未连接 Manager 或插件接口。抽签、解签与存签仍由游戏内物品和方块完成。
 
-运行：安装 Node.js 22.12+，在项目目录执行 `npm install`、`npm run dev`，打开 <http://127.0.0.1:4176>。`npm run build` 生成静态页面。页面下方的“预览选项”可切换今日签笺状态及还原演示。
+在 `minecraft/` 运行 `gradlew build`，将 `build/libs/pixelmc-hub-forge-1.20.1-0.1.0-native-prototype.jar` 放入独立客户端的 `mods/`（不要使用 `thin-dev.jar`）。进入世界后按 **H** 打开、**Esc** 返回；设置保存在该客户端的 `config/pixelmc-hub-client.json`。本原型只安装客户端，无需数据库或网页服务。原生玻璃折射、透视和部分布局仍在对齐网页设计。
+
+网页原型需要 Node.js 22.12+：在项目根目录执行 `npm ci`、`npm run dev`，打开 <http://127.0.0.1:4176>；`npm run build` 生成静态页面。
 
 ## English
 
-A personal player panel for PixelMC: view your journey, equip titles, and revisit collected daily fortunes. Light liquid-glass surfaces, colorful glass navigation, and dimensional collection cards retain Minecraft avatars and item artwork.
+A Minecraft player panel for journey information, equipped titles, and collected fortunes, with light glass surfaces, layered skin heads, a handwritten greeting, and animated pages.
 
-This is a **local interactive prototype**, with Home, Titles, Fortunes, and interface settings. All data is simulated; no game server is connected. Drawing, interpreting, and archiving fortunes remain in-game interactions.
+This repository contains the web design reference and a **Forge 1.20.1 / Java 17 native Skija client prototype** under `minecraft/`. The current package includes Windows x64 native libraries only. Titles, fortunes, and journey information use local demo data; Manager and plugin integrations are not connected. Drawing, interpreting, and archiving fortunes remain in-game interactions.
 
-With Node.js 22.12+, run `npm install` and `npm run dev`, then visit <http://127.0.0.1:4176>. Use `npm run build` for a static build. Preview controls switch fortune states and restore demo data.
+Run `gradlew build` in `minecraft/`, then put `build/libs/pixelmc-hub-forge-1.20.1-0.1.0-native-prototype.jar` in an isolated client's `mods/` directory, excluding the `thin-dev.jar`. Press **H** in a world to open the panel and **Esc** to return. Preferences are saved to that client's `config/pixelmc-hub-client.json`. No server installation, database, or web service is required. Native glass refraction, perspective, and some layout details are still being aligned with the web reference.
+
+For the web reference, use Node.js 22.12+, run `npm ci` and `npm run dev` from the repository root, and visit <http://127.0.0.1:4176>. `npm run build` creates a static build.
 
 ## License / 许可
 
