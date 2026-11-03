@@ -32,6 +32,7 @@
 | 导航颜色 | HSL 精确转色：蓝 `#569dfb → #1949e6`，紫 `#bf72f3 → #6f34d5`，橙 `#ffb83d → #f8651b` | 已使用对应 8bit 颜色；不是先前低饱和颜色加大面积白片的替代方案 |
 | 称号徽章 | 60px / right21 / top43；外层 -9°；back 子层 rotate12° + translate(4,-5)，front 145° 白 `.651 → .278` + backdrop blur4 | 原生分别变换两层，并捕获徽章 ROI 后真实模糊；未获得卡整体 alpha.8，back saturation.35 |
 | 佩戴预览底座 | `::before` 140×42 / bottom32 / `border-radius:50%` / `#f6f8ff9c` / white1px，shadow `0 5px 12px #7184b827`、inset `0 -5px 7px #b0a8d017`；ground 111×26 / bottom46 / `#a3b4d54d` | 使用真正椭圆及各自水平/垂直半径，补齐双层台面、外阴影、底部内阴影与白边；替换此前缺少 ground 的扁平胶囊近似，头像投影底缘对齐台面中心 |
+| 佩戴预览文字 | 内容 top26；称号21px/600、line-height31.5、margin-bottom5；玩家名13px/500、tracking.5、normal行高17 | 在本机隐藏浏览器读取实际网页行框，三行 baseline 相对预览顶部为50 /76.5 /194.5；原生分别用275 /301.5 /419.5，补回原先漏掉的行高与间距，玩家名字重和字距也按源设置 |
 | 普通卡片 | 135° `#ffffffec → #ffffffab`，22px，`0 6px 22px #4b5d8520` | 通过共享卡片 helper 绘制；特殊纸面、徽章、展示卡继续使用各自参数 |
 | 阅读弹窗背景 | `#34405c36` + backdrop blur9；modal 135° `#fcfdfff5 → #f5f3ffef`、r25、shadow `0 28px 90px #35416c42` | 先捕获当前已合成 viewport（包含 UI 和面板外背景），再分组应用 fade、blur、遮罩；普通 modal 宽440、reading 宽720 |
 
@@ -99,6 +100,7 @@ GPU 图层使用实际组合 alpha。进入动画不是逐个 primitive 乘 alph
 | 导航视觉审查后的修复 | 首图出现尖角导航，不能算玻璃对应完成。原因是 RuntimeEffectBuilder 的 int/float 重载误把整数 bit 写给 float radius/bevel uniform；改为显式 float 后，`fidelity-pass2-rounded-fix/home-gpu.png` 已恢复 source 的 radius15、bevel7、前层玻璃与高光，已实际查看回归图 |
 | 小图标缩小采样 | 原五页中的12px calendar 图标曾损失水平线。GPU mipmaps + FAST full-image sampling 修正后，`fidelity-pass2-targeted-fixes/titles-calendar-mipmap-gpu.png` 日历轮廓/横线已恢复；只有 fortune-barrel / collection-chest 保持 nearest，fortune-slip / Logo / 其他普通图像使用 mipmap 缩小采样，头像由 HubHead 保持像素采样；已实际查看回归图 |
 | 佩戴预览底座补齐 | 用户反馈旧底座仍是胶囊形，并提供网页佩戴预览作为参照。本次替换为双层椭圆、白边、外阴影与底部内阴影，头像底缘落在台面，说明文字依参照置于台沿下方。`.runtime/native-previews/pedestal-fix/titles-pedestal-gpu.png` 已自动生成并查看，无 GL 错误；这只确认隔离 GPU 画面，本次新包的游戏观感仍由用户复核 |
+| 佩戴预览文字基线 | 用户已确认底座在游戏里正确，随后指出顶部文字偏高。隐藏浏览器测得同一网页226px预览的三行实际 baseline 为50 /76.5 /194.5px，原生据此修正称号、玩家名和说明文字；`.runtime/native-previews/preview-text-baseline-fix/titles-pedestal-gpu.png` 已查看，无 GL 错误。此次文字修正的游戏内验收仍交给用户 |
 | 完整 viewport 遮罩 | probe传入 `setViewportBounds(-90,-75,1440,1000)`；`fidelity-pass2-targeted-fixes/reading-full-viewport-gpu.png` 确认面板外背景也被模糊及遮罩，modal 本体保持中央，未以原始 game snapshot 替代已绘制 UI；已实际查看回归图 |
 | 字体匹配 | 当前主机实际匹配 Segoe UI Variable Text（400/700）、Microsoft YaHei UI（400）、Noto Serif SC（400/600）；这仅是该主机的匹配证据，不保证其他电脑一定安装相同字体 |
 | 源码收口 | `HubView` /`HubMotion` 的最新 viewport、reverse-transition、gradient-image离散状态代码已编译；owned文件 `git diff --check` 无空白错误 |
