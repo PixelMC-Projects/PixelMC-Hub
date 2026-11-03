@@ -389,9 +389,15 @@ public final class HubView {
         icon("stroke-1.0/"+t.icon(),931,292,106,withAlpha(t.color(),.14f));
         titleLabel(t,1077,267,21,2,true,false);
         textCenter(fit(playerName,230,13,true),1077,290,13,0xff62718f,true);
-        d.roundRect(1011,389,132,28,14,a(0x9cf6f8ff));d.strokeRoundRect(1011,389,132,28,14,1,a(0xc8ffffff));
-        if(opacity>.04f)HubHead.draw(d,1051,321,51,-23);
-        textCenter("游戏内效果示意 · 本地样例",1077,435,10,0xff7d87a1,false);
+        // .nameplate-preview::before + .preview-ground: two true ellipses form the source pedestal.
+        d.ovalShadow(1007,377,140,42,0,5,12,a(0x277184b8));
+        d.oval(1007,377,140,42,a(0x9cf6f8ff));
+        d.insetOvalShadow(1008,378,138,40,0,-5,7,a(0x17b0a8d0));
+        d.strokeOval(1007.5f,377.5f,139,41,1,a(0xffffffff));
+        d.oval(1021.5f,379,111,26,a(0x4da3b4d5));
+        // The projected cube's bottom meets the ground ellipse at y=392, as in the web preview.
+        if(opacity>.04f)HubHead.draw(d,1051,335,51,-23);
+        textCenter("游戏内效果示意",1077,420,10,0xff7d87a1,false);
         icon(t.icon(),940,473,18,mix(t.color(),INK,.55f));text(t.name(),966,488,14,mix(t.color(),INK,.55f),true);
         wrap(t.description(),940,516,274,12,22,0xff748098,false);
         glass(940,568,274,73,10,0xfff7f7fc,0xfff7f7fc);

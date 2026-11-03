@@ -144,6 +144,38 @@ public final class HubDraw implements AutoCloseable {
             canvas().drawRRect(RRect.makeXYWH(x, y, w, h, radius), fill(color).setMode(PaintMode.STROKE).setStrokeWidth(stroke));
     }
 
+    /** CSS border-radius:50% uses independent horizontal/vertical radii, not a capsule. */
+    public void oval(float x, float y, float w, float h, int color) {
+        if (w > 0 && h > 0) canvas().drawOval(Rect.makeXYWH(x,y,w,h),fill(color));
+    }
+
+    public void strokeOval(float x, float y, float w, float h, float stroke, int color) {
+        if (w > 0 && h > 0 && stroke > 0)
+            canvas().drawOval(Rect.makeXYWH(x,y,w,h),fill(color).setMode(PaintMode.STROKE).setStrokeWidth(stroke));
+    }
+
+    public void ovalShadow(float x,float y,float w,float h,float offsetX,float offsetY,float blur,int color) {
+        if(w<=0||h<=0)return;
+        int count=canvas().save();
+        // CSS outer shadows are clipped outside the border box, even with a translucent fill.
+        canvas.clipRRect(RRect.makeXYWH(x,y,w,h,w*.5f,h*.5f),ClipMode.DIFFERENCE,true);
+        try(ImageFilter shadow=ImageFilter.makeDropShadowOnly(offsetX,offsetY,Math.max(0,blur)*.5f,Math.max(0,blur)*.5f,color)) {
+            canvas.drawOval(Rect.makeXYWH(x,y,w,h),fill(0xFFFFFFFF).setImageFilter(shadow));
+        } finally {paint.reset();canvas.restoreToCount(count);}
+    }
+
+    public void insetOvalShadow(float x,float y,float w,float h,float offsetX,float offsetY,float blur,int color) {
+        if(w<=0||h<=0)return;
+        int count=canvas().save();canvas.clipRRect(RRect.makeXYWH(x,y,w,h,w*.5f,h*.5f),true);
+        float pad=Math.max(16,blur*3+Math.abs(offsetX)+Math.abs(offsetY));
+        try(PathBuilder builder=new PathBuilder(PathFillMode.EVEN_ODD);
+            MaskFilter filter=blur>0?MaskFilter.makeBlur(FilterBlurMode.NORMAL,blur*.5f):null) {
+            builder.addRect(Rect.makeXYWH(x-pad,y-pad,w+pad*2,h+pad*2));
+            builder.addOval(Rect.makeXYWH(x+offsetX,y+offsetY,w,h));
+            try(Path path=builder.build()) {canvas.drawPath(path,fill(color).setMaskFilter(filter));}
+        } finally {paint.reset();canvas.restoreToCount(count);}
+    }
+
     public void gradientRoundRect(float x, float y, float w, float h, float radius, int topLeft, int bottomRight) {
         if (w <= 0 || h <= 0) return;
         try (Shader shader = Shader.makeLinearGradient(x, y, x + w, y + h, new int[]{topLeft, bottomRight})) {
