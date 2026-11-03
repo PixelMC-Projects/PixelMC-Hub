@@ -4,6 +4,7 @@ import GlassSurface from "./vendor/react-bits/GlassSurface.jsx";
 import TiltedCard from "./vendor/react-bits/TiltedCard.jsx";
 import PlayerHead from "./PlayerHead.jsx";
 import WelcomeSplash from "./WelcomeSplash.jsx";
+import WelcomeFrequency, { shouldShowWelcome, welcomeModes } from "./WelcomeFrequency.jsx";
 import { titleIcons } from "./title-icons.js";
 import {
   Home,
@@ -63,25 +64,22 @@ import {
 
 const storageKey = "pixelmc-player-hub-preview-v1";
 function initial() {
+  const defaults = {
+    equipped: "dew",
+    visible: true,
+    fortuneState: "archived",
+    displayDate: todayKey,
+    reducedMotion: false,
+    welcomeMode: "always",
+    hasSeenWelcome: false,
+  };
   try {
-    return {
-      ...{
-        equipped: "dew",
-        visible: true,
-        fortuneState: "archived",
-        displayDate: todayKey,
-        reducedMotion: false,
-      },
-      ...JSON.parse(localStorage.getItem(storageKey) || "{}"),
-    };
+    const saved = { ...defaults, ...JSON.parse(localStorage.getItem(storageKey) || "{}") };
+    if (!welcomeModes.some((mode) => mode.id === saved.welcomeMode)) saved.welcomeMode = defaults.welcomeMode;
+    saved.hasSeenWelcome = saved.hasSeenWelcome === true;
+    return saved;
   } catch {
-    return {
-      equipped: "dew",
-      visible: true,
-      fortuneState: "archived",
-      displayDate: todayKey,
-      reducedMotion: false,
-    };
+    return defaults;
   }
 }
 function Symbol({ name, ...props }) {
@@ -284,13 +282,19 @@ export default function App() {
   const [reading, setReading] = useState(null);
   const [toast, setToast] = useState(null);
   const [closed, setClosed] = useState(false);
-  const [opening, setOpening] = useState(true);
+  // One page load represents one login in this browser-only prototype.
+  const seenThisLogin = useRef(false);
+  const [opening, setOpening] = useState(() => shouldShowWelcome(state.welcomeMode, {
+    reducedMotion: reduceMotion, seenThisLogin: false, seenBefore: state.hasSeenWelcome,
+  }));
   useEffect(() => {
     if (closed || reduceMotion) {
       setOpening(false);
       return;
     }
     if (!opening) return;
+    seenThisLogin.current = true;
+    setState((current) => current.hasSeenWelcome ? current : { ...current, hasSeenWelcome: true });
     const timer = setTimeout(() => setOpening(false), 3060);
     return () => clearTimeout(timer);
   }, [closed, reduceMotion, opening]);
@@ -317,11 +321,13 @@ export default function App() {
   const openHandbook = () => {
     setPage("home");
     location.hash = "/home";
-    setOpening(!reduceMotion);
+    setOpening(shouldShowWelcome(state.welcomeMode, {
+      reducedMotion: reduceMotion, seenThisLogin: seenThisLogin.current, seenBefore: state.hasSeenWelcome,
+    }));
     setClosed(false);
   };
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(state));
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { /* Keep in-memory preferences when storage is unavailable. */ }
     document.documentElement.dataset.motion = reduceMotion
       ? "reduced"
       : "full";
@@ -352,7 +358,7 @@ export default function App() {
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
-  }, [modal, reading, closed, reduceMotion]);
+  }, [modal, reading, closed, reduceMotion, state.welcomeMode, state.hasSeenWelcome]);
   function equip(title) {
     update({ equipped: title.id });
     notify(`已佩戴「${title.name}」`);
@@ -376,7 +382,7 @@ export default function App() {
           <aside className="sidebar" inert={opening}>
             <GlassSurface width="100%" height="100%" borderRadius={0}
               borderWidth={0.08} brightness={65} opacity={0.9} blur={12} displace={0.5}
-              backgroundOpacity={0.48} saturation={1.15} distortionScale={-12}
+              backgroundOpacity={0.32} saturation={1.15} distortionScale={-12}
               redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="sidebar-material" />
             <button
               className="brand"
@@ -841,10 +847,12 @@ export default function App() {
           onClose={() => setModal(null)}
         >
           <div className="settings-content">
+            <WelcomeFrequency value={state.welcomeMode} onChange={(welcomeMode) => update({ welcomeMode })}
+              reducedMotion={reduceMotion} />
             <div className="setting-row">
               <div>
                 <strong>减少动态效果</strong>
-                <p>关闭卡片倾斜、图标动效与页面过渡</p>
+                <p>关闭开屏动画、卡片倾斜与页面过渡</p>
               </div>
               <Toggle
                 checked={state.reducedMotion}
@@ -895,12 +903,11 @@ export default function App() {
             <button
               className="btn subtle"
               onClick={() => {
-                setState({
+                update({
                   equipped: "dew",
                   visible: true,
                   fortuneState: "archived",
                   displayDate: todayKey,
-                  reducedMotion: false,
                 });
                 notify("已还原演示状态");
               }}
