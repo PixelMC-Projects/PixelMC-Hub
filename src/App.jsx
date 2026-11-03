@@ -4,6 +4,7 @@ import GlassSurface from "./vendor/react-bits/GlassSurface.jsx";
 import TiltedCard from "./vendor/react-bits/TiltedCard.jsx";
 import PlayerHead from "./PlayerHead.jsx";
 import WelcomeSplash from "./WelcomeSplash.jsx";
+import { titleIcons } from "./title-icons.js";
 import {
   Home,
   Tag,
@@ -60,16 +61,6 @@ import {
   stateLabels,
 } from "./data.js";
 
-const icons = {
-  leaf: Leaf,
-  mountain: Mountain,
-  star: Star,
-  house: House,
-  moon: Moon,
-  wheat: Wheat,
-  sun: Sun,
-  cloud: Cloud,
-};
 const storageKey = "pixelmc-player-hub-preview-v1";
 function initial() {
   try {
@@ -94,7 +85,7 @@ function initial() {
   }
 }
 function Symbol({ name, ...props }) {
-  const C = icons[name] || Leaf;
+  const C = titleIcons[name] || Leaf;
   return <C {...props} />;
 }
 function Avatar({ large = false }) {
@@ -392,9 +383,7 @@ export default function App() {
               onClick={() => navigate("home")}
               aria-label="旅人手册首页"
             >
-              <span className="brand-mark">
-                <span />
-              </span>
+              <img className="server-brand-logo" src="/assets/server-logo.png" alt="PixelMC 服务器 Logo" />
               <span>
                 <strong>旅人手册</strong>
                 <small>PixelMC Player Hub</small>

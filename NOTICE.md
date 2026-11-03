@@ -6,6 +6,7 @@ Copyright © 2026 zhan_cpu / PixelMC Projects. 本项目自有应用代码使用
 
 - `public/assets/fortune-slip.png`、`fortune-barrel.png`、`collection-chest.png`：来自本地 DailyFortunes 项目的签笺及默认像素模型物品图。Copyright © 2026 zhan_cpu / PixelMC Projects，AGPL-3.0-only。
 - `src/fortunes.json`：DailyFortunes 六十签文案，同上。
+- `public/assets/server-logo.png`：用户提供的 PixelMC 服务器 Logo，原文件用于品牌展示；该品牌标识不因应用代码使用 Apache-2.0 而被重新授权。 / User-provided PixelMC server logo; the application license does not relicense this brand asset.
 - `public/assets/avatar.png`：MemorialTitles 附带的默认演示头像。同项目来源；仅作为无完整皮肤时的占位。完整皮肤可通过本地 `VITE_PREVIEW_SKIN` 配置，`public/assets/local-preview/` 中的测试皮肤不纳入仓库，也不受本项目许可证重新授权。
 - Lucide 图标：ISC license，版权见安装包中的 LICENSE。
 - React：MIT license。Vite：MIT license。依赖版权声明保留于各依赖的许可证文件。

@@ -14,6 +14,7 @@
 .sidebar-material::before { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(145deg,#f8fcff78,#eaf1ff61 50%,#eee9ff70); }
 .sidebar-material::after { content:''; position:absolute; inset:5px 0 5px 5px; border-radius:22px 0 0 22px; border-left:1px solid #fff9; background:linear-gradient(118deg,#ffffff42,transparent 32%,transparent 72%,#bcc0e31f); }
 .brand { gap:10px; padding:0 4px; margin-bottom:38px; } .brand strong { font-size:18px; } .brand small { color:#687491; }
+.server-brand-logo { display:block; width:44px; height:44px; object-fit:contain; flex:none; mix-blend-mode:multiply; }
 .brand-mark { background:linear-gradient(150deg,#9bb1ff,#695de3 66%,#5042ba); border:1px solid #ffffffb8; border-radius:10px 10px 10px 4px; box-shadow:0 5px 10px #6553c83b,inset 2px 2px 3px #ffffff7d; }
 .brand-mark span { background:#b8fcff; }
 .nav-label { color:#677591; padding-left:9px; margin-bottom:25px; }
