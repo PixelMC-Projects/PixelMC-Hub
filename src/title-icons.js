@@ -1,7 +1,8 @@
 import { Leaf, Mountain, Star, House, Moon, Wheat, Sun, Cloud, UserRound } from "lucide-react";
 
-// Stable preset IDs for the future admin editor and the player UI to share.
-// A title's existing `icon` field stores the ID, never display text or SVG markup.
+// Stable badge IDs shared by the admin editor and player UI.
+// Real definitions use `presentation.badge`; integer `icon` remains CustomModelData.
+// The explicit web demo keeps its legacy mock `icon` string until its data adapter changes.
 export const titleIconPresets = [
   { id: "leaf", label: "草木", Icon: Leaf },
   { id: "mountain", label: "山野", Icon: Mountain },

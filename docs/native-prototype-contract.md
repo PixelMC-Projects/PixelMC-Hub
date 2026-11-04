@@ -1,5 +1,7 @@
 # PixelMC-Hub native prototype contract
 
+Historical prototype-stage scope and ownership, retained for renderer/layout reference. The current optional client/server player integration, live data behavior and work boundaries are defined by [player-integration-contract.md](player-integration-contract.md) and supersede the client-only/demo statements below. Renderer geometry, input transforms, materials and GL lifecycle requirements remain applicable. Dedicated Linux startup has not been executed.
+
 Scope: Forge 1.20.1 / Java 17 client-only native Skija experiment, under `minecraft/` in this repository. Existing web preview stays available as the visual reference. No production server, database, sync or installed play-instance mutations. Use an isolated local run directory. Original code Apache-2.0, preserve asset notices. No embedded browser. Product name PixelMC-Hub, mod ID `pixelmc_hub`, base package `com.pixelmc.hub`.
 
 Parallel ownership:

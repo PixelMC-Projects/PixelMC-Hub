@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import GlassIcons from "./vendor/react-bits/GlassIcons.jsx";
 import GlassSurface from "./vendor/react-bits/GlassSurface.jsx";
 import TiltedCard from "./vendor/react-bits/TiltedCard.jsx";
+import SwipeToast from "./vendor/react-bits/SwipeToast.jsx";
 import PlayerHead from "./PlayerHead.jsx";
 import WelcomeSplash from "./WelcomeSplash.jsx";
 import WelcomeFrequency, { shouldShowWelcome, welcomeModes } from "./WelcomeFrequency.jsx";
@@ -70,7 +71,7 @@ function initial() {
     fortuneState: "archived",
     displayDate: todayKey,
     reducedMotion: false,
-    welcomeMode: "always",
+    welcomeMode: "login",
     hasSeenWelcome: false,
   };
   try {
@@ -332,12 +333,6 @@ export default function App() {
       ? "reduced"
       : "full";
   }, [state, reduceMotion]);
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 2800);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
   useEffect(() => {
     const f = () =>
       setPage(
@@ -746,6 +741,9 @@ export default function App() {
               )}
             </main>
           </div>
+          {toast && <SwipeToast key={toast.key} title={toast.text} icon={<Check size={18} />}
+            className="hub-swipe-toast" background="#ffffff" color="#505875" closeButton
+            reducedMotion={reduceMotion} onClose={() => setToast(current => current?.key === toast.key ? null : current)} />}
         </div>
       ) : (
         <div className="closed-state">
@@ -773,14 +771,6 @@ export default function App() {
           预览选项
         </button>
       </div>
-      {toast && (
-        <div key={toast.key} className="toast" role="status">
-          <span>
-            <Check size={15} />
-          </span>
-          {toast.text}
-        </div>
-      )}
       {reading && (
         <FortuneReading
           fortune={reading}

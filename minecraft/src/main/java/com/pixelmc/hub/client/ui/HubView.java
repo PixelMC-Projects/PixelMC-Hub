@@ -18,8 +18,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import com.google.gson.JsonObject;
 
-/** Native, client-only rendering of the approved local handbook prototype. */
+/** Native rendering of the approved handbook, with explicitly separate live and demo data. */
 public final class HubView {
     private static final int INK=0xff26344f, MUTED=0xff73809a, PURPLE=0xff765bd4;
     private static final float LEFT=236, WIDTH=996, RIGHT=922;
@@ -36,21 +37,106 @@ public final class HubView {
     private Matrix33 titleClipTransform=Matrix33.IDENTITY,pageTransform=Matrix33.IDENTITY,sliderTransform=Matrix33.IDENTITY;
     private HubDraw d;
     private float mx,my,opacity=1,offsetY,interactiveAlpha=1,dt=1f/60;
-    private long now=System.nanoTime(),openedAt=now,pageAt=now,monthAt=now,toastAt,lastFrame=now,modalAt,navAt=now;
+    private long now=System.nanoTime(),openedAt=now,pageAt=now,monthAt=now,lastFrame=now,modalAt,navAt=now;
     private int page,filter,sort,fortuneState=3,searchCaret;
-    private String playerName="zhan_cpu",equipped="dew",selectedTitle="dew",query="",welcomeMode="always";
+    private String playerName="zhan_cpu",equipped="dew",selectedTitle="dew",query="",welcomeMode="login";
     private boolean visible=true,reducedMotion,closeRequest,playWelcome,compact,history,sliderDragging,searchSelectAll;
     private float titleScroll,historyScroll;
-    private YearMonth month=YearMonth.from(HubData.TODAY);
+    private YearMonth month=YearMonth.from(data.today);
     private int monthDirection=1;
-    private LocalDate selectedDate=HubData.TODAY,displayDate=HubData.TODAY;
-    private String overlay,focusId,restoreFocus,toast,pressedId;
+    private LocalDate selectedDate=data.today,displayDate=data.today;
+    private String overlay,focusId,restoreFocus,pressedId;
+    private final HubToast toast=new HubToast();
     private Hit pressedHit;
     private boolean keyboardFocus,pressMoved,keyboardPress;
     private float pressX,pressY;
     private HubData.Entry reading;
     private float modalX,modalY,modalW,modalH;
     private float viewportX,viewportY,viewportW=1260,viewportH=850;
+    @FunctionalInterface public interface PlayerAction {void request(String module,String action,JsonObject payload);}
+    private PlayerAction actions;
+    private final Map<String,String> moduleStates=new HashMap<>();
+    private final java.util.Set<String> pendingModules=new java.util.HashSet<>();
+    private boolean catalogueComplete=true;
+    private JsonObject titleDraft;
+    private boolean calendarLoading,chooseLatestOnCalendar;
+    private String connectionName="当前存档";
+    private byte[] serverIcon;
+    public void setConnection(String name,byte[] icon){connectionName=name==null||name.isBlank()?"当前存档":name;serverIcon=icon==null?null:icon.clone();}
+    public void live(PlayerAction actions) {
+        this.actions=actions;data.clearLive();equipped=null;selectedTitle="";displayDate=null;fortuneState=0;
+        month=YearMonth.from(data.today);selectedDate=data.today;catalogueComplete=false;titleDraft=null;calendarLoading=true;pendingModules.clear();
+        for(String module:List.of("manager","titles","fortunes"))moduleStates.put(module,"正在读取玩家资料…");
+    }
+    public void moduleStatus(String module,String status){
+        moduleStates.put(module,status);
+        if(!status.isEmpty()){
+            if(module.equals("titles"))titleDraft=null;
+            if(hasSnapshot(module))feedbackError(status);
+        }
+    }
+    public void pending(String module,boolean pending){if(pending)pendingModules.add(module);else pendingModules.remove(module);}
+    public void feedback(String value){notify(value);}
+    public void feedbackError(String value){toast.show(value,HubToast.Kind.ERROR,System.nanoTime());}
+    public void feedbackSuccess(String value){toast.show(value,HubToast.Kind.SUCCESS,System.nanoTime());}
+    public String currentMonth(){return month.toString();}
+    public boolean needsCalendar(){return page==2;}
+    public String dayIdentity(){return (data.fortunesLoaded?data.timezone:data.managerTimezone)+"|"+data.today;}
+    public long nextMidnightEpochMillis(){return data.today.plusDays(1).atStartOfDay(data.fortunesLoaded?data.zone():data.profileZone()).toInstant().toEpochMilli();}
+    public void advanceDay(long serverMillis){if(!data.fortunesLoaded)data.today=java.time.Instant.ofEpochMilli(serverMillis).atZone(data.profileZone()).toLocalDate();}
+    public boolean compact(){return compact;}
+    public void setCompact(boolean value){compact=value;}
+    public void catalogueComplete(){if(titleDraft==null&&data.titlesLoaded)catalogueComplete=true;}
+    public void catalogueInvalidated(){titleDraft=null;}
+    public boolean isCatalogueComplete(){return catalogueComplete;}
+    private boolean live(){return actions!=null;}
+    private boolean hasSnapshot(String module){return switch(module){case "manager"->data.managerLoaded;case "titles"->data.titlesLoaded;case "fortunes"->data.fortunesLoaded;default->false;};}
+    private boolean ready(String module){return !live()||hasSnapshot(module)||moduleStates.getOrDefault(module,"").isEmpty();}
+    private boolean privacyKnown(){return !live()||catalogueComplete&&(equipped==null||equipped.isEmpty()||data.title(equipped)!=null);}
+    private boolean canChangeVisibility(){return !live()||privacyKnown()&&ready("titles")&&equipped!=null&&!equipped.isEmpty()&&!pendingModules.contains("titles");}
+    private void changeVisibility(){
+        if(live()){if(!canChangeVisibility())return;JsonObject p=mutation("titles");p.addProperty("visible",!visible);request("titles","visibility",p);return;}
+        visible=!visible;notify(visible?"已开启称号展示 · 本地演示":"展示已隐藏，佩戴状态保留");
+    }
+    private String moduleLabel(String module){return !live()?"演示":moduleStates.getOrDefault(module,"").isEmpty()?"已连接":moduleStates.get(module);}
+    private int titleCount(){return (int)data.titles.stream().filter(HubData.Title::owned).count();}
+    private int archiveCount(){return live()?data.archiveCount:archive().size();}
+    private String timestamp(long at,String pattern){return at<=0?"暂无记录":java.time.Instant.ofEpochMilli(at).atZone(data.profileZone()).format(DateTimeFormatter.ofPattern(pattern));}
+    private String titleDate(HubData.Title title){return live()?timestamp(title.acquiredAt(),"yyyy/MM/dd"):title.date();}
+    private long journeyDays(){return data.firstJoinedAt<=0?0:Math.max(1,java.time.temporal.ChronoUnit.DAYS.between(java.time.Instant.ofEpochMilli(data.firstJoinedAt).atZone(data.profileZone()).toLocalDate(),data.today)+1);}
+    private void request(String module,String action,JsonObject payload){if(actions!=null)actions.request(module,action,payload);}
+    private JsonObject mutation(String module){JsonObject p=new JsonObject();p.addProperty("expectedRevision",data.revisions.getOrDefault(module,""));return p;}
+    private void calendarRequest(){if(live()&&ready("fortunes")){calendarLoading=true;JsonObject p=new JsonObject();p.addProperty("month",month.toString());request("fortunes","calendar",p);}}
+    private boolean calendarInitialLoading(){return live()&&calendarLoading&&!data.calendarMonths.contains(month);}
+    public void acceptLive(String module,String action,JsonObject result) {
+        if(module.equals("manager")){data.manager(result);setPlayerName(HubData.string(HubData.object(result,"player"),"name",playerName));}
+        if(module.equals("titles")) {
+            if(!action.equals("catalogue"))titleDraft=result.deepCopy();
+            else {
+                if(titleDraft==null||!HubData.string(titleDraft,"revision","").equals(HubData.string(result,"revision",""))) {
+                    titleDraft=null;throw new IllegalStateException("称号资料在读取期间发生变化，请重新读取");
+                }
+                if(result.has("titles"))titleDraft.getAsJsonArray("titles").addAll(result.getAsJsonArray("titles"));
+            }
+            if(!HubData.string(result,"nextCursor","").isEmpty())return;
+            data.titles(titleDraft,false);equipped=HubData.string(titleDraft,"equippedTitle","");titleDraft=null;catalogueComplete=true;
+            HubData.Title worn=data.title(equipped);visible=worn!=null&&worn.publicDisplay();
+            if(data.title(selectedTitle)==null&&!data.titles.isEmpty())selectedTitle=data.titles.get(0).id();
+        }
+        if(module.equals("fortunes")) {
+            if(action.equals("calendar")) {
+                data.calendar(result);if(month.toString().equals(HubData.string(result,"month",""))){calendarLoading=false;if(chooseLatestOnCalendar)selectedDate=archive().keySet().stream().filter(date->YearMonth.from(date).equals(month)).max(Comparator.naturalOrder()).orElse(month.atDay(1));chooseLatestOnCalendar=false;}
+            } else if(action.equals("read")) {
+                HubData.Entry record=data.record(result.has("record")?result.get("record"):result);if(record!=null)showReading(record);
+            } else {
+                boolean initial=!data.fortunesLoaded;data.fortunes(result);
+                calendarLoading=true;
+                fortuneState=List.of("undrawn","unread","read","archived").indexOf(HubData.string(result,"todayState","undrawn"));if(fortuneState<0)fortuneState=0;
+                if(initial){month=YearMonth.from(data.today);selectedDate=data.today;}
+                displayDate=data.featured==null?null:data.featured.date();
+            }
+        }
+    }
 
     private record Hit(String id,String label,float x,float y,float w,float h,Matrix33 transform,Matrix33 viewport,Runnable action) {
         boolean contains(float px,float py) {
@@ -62,7 +148,7 @@ public final class HubView {
     public void setPlayerName(String name) { if(name!=null&&!name.isBlank()) playerName=name; }
     public void setViewportBounds(float x,float y,float w,float h){if(w>0&&h>0){viewportX=x;viewportY=y;viewportW=w;viewportH=h;}}
     public void setSettings(String mode,boolean reduced) {
-        welcomeMode=List.of("once","login","always").contains(mode)?mode:"always";
+        welcomeMode=List.of("once","login","always").contains(mode)?mode:"login";
         setReducedMotion(reduced);
     }
     public String welcomeMode() { return welcomeMode; }
@@ -70,6 +156,7 @@ public final class HubView {
     public boolean consumeCloseRequest() { boolean value=closeRequest;closeRequest=false;return value; }
     public boolean isWelcomePlaying() { return playWelcome&&!reducedMotion&&System.nanoTime()-openedAt<3_060_000_000L; }
     public void open(boolean welcome) {
+        toast.clear();
         page=0;overlay=null;reading=null;focusId=null;closeRequest=false;
         openedAt=System.nanoTime();navAt=openedAt;lastFrame=openedAt;playWelcome=welcome&&!reducedMotion;
         pageAt=openedAt+(playWelcome?3_060_000_000L:0);hits.clear();
@@ -100,7 +187,7 @@ public final class HubView {
         d.strokeRoundRect(.5f,.5f,1259,849,28,1,0xe6ffffff);
         pop();endAlpha();
         if(!welcomeActive&&(overlay!=null||reading!=null))modal();
-        if(toast!=null)toast();
+        toast.render(d,mx,my,now,reducedMotion,viewportX,viewportY,viewportW,viewportH);
         hits.clear();hits.addAll(nextHits);
         d=null;
     }
@@ -114,7 +201,7 @@ public final class HubView {
         d.insetBoxShadow(0,0,208,850,0,-3,0,7,0,0x42abb9e1);
         d.boxShadow(0,0,208,850,0,6,0,20,0,0x0c65719e);
         d.rect(5,5,1,840,0x88ffffff);d.rect(207,0,1,850,0x88b3bfdf);
-        image("server-logo",22,27,44,44,1);
+        if(live()&&serverIcon!=null)d.serverIcon(serverIcon,22,27,44);else image("server-logo",22,27,44,44,1);
         tracked("旅人手册",77,46,18,1.2f,INK,650,false);text("PixelMC-Hub",77,65,10,0xff687491,false);
         hit("brand","旅人手册首页",18,20,174,61,()->navigate(0));
         text("我的空间",25,118,11,0xff677591,false);
@@ -141,8 +228,8 @@ public final class HubView {
             hit("nav-"+i,labels[i],20,y-8,173,64,()->navigate(destination));
         }
         glass(24,718,36,40,12,0xc9e7fff2,0x7ab4e9d7);icon("flower-2",32,728,21,0xff458c80);
-        text("香草纪元",70,731,12,0xff52627b,true);
-        d.circle(72,748,2,0xff6a9c8b);text("当前存档 · 演示",80,752,10,0xff708098,false);
+        text(live()?fit(data.packName.isBlank()?connectionName:data.packName,112,12,true):"香草纪元",70,731,12,0xff52627b,true);
+        d.circle(72,748,2,0xff6a9c8b);text(live()?(data.packVersion.isBlank()?"当前存档":fit(data.packVersion,105,10,false)):"当前存档 · 演示",80,752,10,0xff708098,false);
         d.line(24,777,184,777,1,0x55b7c2dc);
         float settingsHover=transition("settings-hover",inside(20,791,172,40)?1:0,140);
         if(settingsHover>0)d.roundRect(20,791,172,40,10,withAlpha(0x99ffffff,settingsHover));
@@ -153,7 +240,7 @@ public final class HubView {
         d.rect(208,0,1052,54,0x36ffffff);d.line(208,54,1260,54,1,0xb8ffffff);
         text("我的空间",236,33,12,0xff8a94aa,false);icon("chevron-right",301,22,13,0xffa1aac0);
         text(pageName(),326,33,12,0xff63718c,false);
-        d.circle(1095,28,2.5f,0xff529c8c);text("本地原型",1105,32,11,0xff64748b,false);
+        d.circle(1095,28,2.5f,0xff529c8c);text(live()?"玩家手册":"本地原型",1105,32,11,0xff64748b,false);
         d.line(1183,21,1183,35,1,0x7ac7cfe0);
         iconButton("close","收起手册","x",1200,12,32,()->closeRequest=true,true);
     }
@@ -162,15 +249,15 @@ public final class HubView {
         tracked(title,LEFT,108,25,1,INK,720,false);
         if(count>=0){String number=Integer.toString(count);float x=LEFT+trackedWidth(title,25,1,720,false)+12,w=d.textWidth(number,13,500)+18;d.roundRect(x,84,w,28,10,0xffe9e1ff);d.strokeRoundRect(x,84,w,28,10,1,0xffffffff);d.text(number,x+9,103,13,0xff7361c3,500);}
         text(subtitle,LEFT,137,13,0xff6c7891,false);
-        if(module!=null)textRight(module,1232,105,10,0xff7c72a6,false);
+        if(module!=null)textRight(fit(module,460,10,false),1232,105,10,0xff7c72a6,false);
         ungroup();
     }
     private String pageName(){return page==0?"个人主页":page==1?"我的称号":"我的签笺";}
 
     private void home() {
-        heading("个人主页","很高兴又见到你，今天是旅程的第 18 天。",null,-1);
+        heading("个人主页",live()?(journeyDays()>0?"很高兴又见到你，今天是旅程的第 "+journeyDays()+" 天。":"很高兴又见到你。") :"很高兴又见到你，今天是旅程的第 18 天。",null,-1);
         group(0,340);
-        icon("sun",1062,88,18,0xffbf8a37);text("11 月 3 日，星期二",1089,103,12,0xff6e7990,false);
+        icon("sun",1062,88,18,0xffbf8a37);text(live()?data.today.format(DateTimeFormatter.ofPattern("M 月 d 日，EEEE",Locale.CHINA)):"11 月 3 日，星期二",1089,103,12,0xff6e7990,false);
         ungroup();
         group(50,440);
         d.boxShadow(LEFT,174,WIDTH,276,22,0,10,30,0,0x288980c5);
@@ -187,10 +274,10 @@ public final class HubView {
         text("你好",263,211,12,0xff586987,false);
         String name=fitTracked(playerName,390,35,-1,700,false);tracked(name,263,255,35,-1,0xff253657,700,false);
         float nameWidth=trackedWidth(name,35,-1,700,false);
-        pill("本地角色",277+nameWidth,232,0xbceffff2,0xff25816a,true);
-        HubData.Title worn=HubData.title(equipped);
-        if(worn==null)text("暂未佩戴称号",263,287,14,MUTED,true);else titleLabel(worn,263,287,14,1.4f,false,false);
-        if(!visible&&worn!=null){icon("eye-off",371,276,13,MUTED);text("展示已隐藏",390,287,10,MUTED,false);}
+        pill(live()?"我的角色":"本地角色",277+nameWidth,232,0xbceffff2,0xff25816a,true);
+        HubData.Title worn=data.title(equipped);
+        if(worn==null)text(live()&&!ready("titles")?"称号资料未连接":live()&&!catalogueComplete?"正在读取称号…":"暂未佩戴称号",263,287,14,MUTED,true);else titleLabel(worn,263,287,14,1.4f,false,false);
+        if(privacyKnown()&&!visible&&worn!=null){icon("eye-off",live()?750:371,276,13,MUTED);text("展示已隐藏",live()?769:390,287,10,MUTED,false);}
         button("profile","个人资料  ↗",263,315,106,31,false,true,()->openOverlay("profile"));
         d.save();d.translate(1080,268);d.canvas().rotate(-29);
         d.strokeRoundRect(-120,-57,240,114,57,2,a(0x70ffffff));d.restore();
@@ -198,22 +285,22 @@ public final class HubView {
         HubMotion.Tilt medallion=beginTilt("medallion",987,187,190,160,10,1.04f,true,.16f,26);
         glass(987,187,190,160,26,0x66ffffff,0x24e7e5ff);
         HubHead.draw(d,1055,214,54,-23,-2);
-        pill("✧ 旅程第 18 天",1020,309,0x6bffffff,0xff5d5491,false);
+        pill(live()?(journeyDays()>0?"✧ 旅程第 "+journeyDays()+" 天":"✧ 今天也有新旅程"):"✧ 旅程第 18 天",1020,309,0x6bffffff,0xff5d5491,false);
         endTilt(medallion,987,187,190,160,26,10,.75f);pop();
         text("✦",1190,222,27,0xffffffff,false);text("✧",967,321,21,0xffffffff,false);
-        stat(263,391,"clock","累计在线 · 演示","128", "小时  42 分钟",0xff6b7dd6,0xffe8eeff);
+        stat(263,391,"clock",live()?"当前存档 · 累计在线":"累计在线 · 演示",live()?(data.managerLoaded?Long.toString(data.onlineMillis(now)/3600000):"—"):"128",live()?"小时  "+(data.onlineMillis(now)/60000%60)+" 分钟":"小时  42 分钟",0xff6b7dd6,0xffe8eeff);
         d.line(566,388,566,430,1,a(0x4ab7c1e0));
-        stat(590,391,"log-in","登录次数 · 演示","36","次",0xffaa75c6,0xfff1e9ff);
+        stat(590,391,"log-in",live()?"当前存档 · 登录次数":"登录次数 · 演示",live()?(data.managerLoaded?Long.toString(data.joinCount):"—"):"36","次",0xffaa75c6,0xfff1e9ff);
         d.line(887,388,887,430,1,a(0x4ab7c1e0));
         glass(910,392,33,33,11,0xfff8f0df,0xfff8f0df);icon("calendar-days",918,400,17,0xffb29047);
-        text("上次登录 · 演示",955,400,11,0xff72809c,false);
-        text("2026/11/02",955,424,16,0xff344566,true);text("20:26:14",1060,424,12,0xff71809b,false);
+        text(live()?"上次登录":"上次登录 · 演示",955,400,11,0xff72809c,false);
+        text(live()?timestamp(data.previousLoginAt,"yyyy/MM/dd"):"2026/11/02",955,424,16,0xff344566,true);text(live()?(data.previousLoginAt<=0?"":timestamp(data.previousLoginAt,"HH:mm:ss")):"20:26:14",1060,424,12,0xff71809b,false);
         ungroup();
         group(110,440);
         homeToday();homeKeepsakes();ungroup();
         group(170,340);
         icon("leaf",LEFT,811,13,0xff8a93a8);text("每一份收藏，都记得来时的路。",256,823,11,0xff8a93a8,false);
-        textRight("样例统计与收藏 · F8 预览选项",1232,823,10,0xff8a93a8,false);ungroup();
+        textRight(live()?(ready("manager")?"当前存档的个人资料":moduleLabel("manager")):"样例统计与收藏 · F8 预览选项",1232,823,10,0xff8a93a8,false);ungroup();
     }
     private void stat(float x,float y,String name,String label,String main,String unit,int color,int background) {
         d.roundRect(x,y,33,33,11,a(background));icon(name,x+8,y+8,17,color);
@@ -225,11 +312,14 @@ public final class HubView {
         d.radialGradientRoundRect(LEFT,470,515,310,22,751,600,335,202,new int[]{0x9cffe9bf,0x00ffe9bf},new float[]{0,1});
         icon("leaf",259,493,19,0xffbc9345);text("今日签笺",287,510,16,INK,true);
         textRight("每日一签",728,508,10,MUTED,false);
-        HubData.Fortune f=data.fortune(1);
-        if(fortuneState>=2) {
+        HubData.Fortune f=live()?(data.todayRecord==null?null:data.todayRecord.fortune()):data.fortune(1);
+        if(live()&&!ready("fortunes")) {
+            text("今日签笺暂不可用",259,593,23,0xff4e4f42,true);
+            wrap(moduleLabel("fortunes"),259,630,280,12,23,0xff928675,false);
+        } else if(fortuneState>=2&&f!=null) {
             text(f.grade()+"  ·  第"+f.id()+"签",259,551,11,HubData.gradeColor(f.grade()),false);
             tracked(f.title(),259,597,29,2,0xff4e4f42,600,true);
-            tracked(f.poem().get(0),259,630,13,1.3f,0xff828069,400,true);tracked(f.poem().get(1),259,655,13,1.3f,0xff828069,400,true);
+            if(!f.poem().isEmpty())tracked(f.poem().get(0),259,630,13,1.3f,0xff828069,400,true);if(f.poem().size()>1)tracked(f.poem().get(1),259,655,13,1.3f,0xff828069,400,true);
         } else {
             text("今日机缘",259,551,11,0xffae8132,false);
             text(fortuneState==0?"有一签，等你开启":"签已入手，静候解读",259,593,24,0xff4e4f42,true);
@@ -244,43 +334,58 @@ public final class HubView {
         icon(fortuneState==3?"check-check":"info",259,731,15,0xff7f8e81);
         text(stateLabel(),281,743,10,0xff7f8e81,false);
         goldButton("today-read",fortuneState>=2?"查看签文  →":fortuneState==0?"如何抽签  →":"如何解签  →",608,721,120,37,
-            ()->{if(fortuneState>=2)openReading(todayEntry());else openOverlay("fortune-help");});
+            ()->{if(live()&&!ready("fortunes")){notify(moduleLabel("fortunes"));return;}if(fortuneState>=2)openReading(todayEntry());else openOverlay("fortune-help");});
     }
     private void homeKeepsakes() {
         glass(771,470,461,310,22,0xecffffff,0xabffffff);
         icon("bookmark",793,493,18,0xff8c74c4);text("最近收藏",820,510,16,INK,true);
         textRight("旅途的印记",1210,508,10,MUTED,false);
-        HubData.Entry latest=archive().values().stream().reduce((a,b)->b).orElse(null);
-        if(latest!=null)keepsake(537,latest.fortune().title(),"收藏签笺 · "+shortDate(latest.date())+" "+latest.time(),"fortune-slip",0xfff8edda,HubData.gradeColor(latest.fortune().grade()),latest.fortune().grade(),()->openReading(latest));
-        keepsake(601,"朝露行者","获得新称号 · 11/02 18:42","leaf",0xffd8f3e6,0xff53a484,null,()->navigate(1));
-        keepsake(665,"拾星之人","获得新称号 · 10/30 21:16","star",0xffe3dbff,0xff9875d5,null,()->{selectedTitle="star";navigate(1);});
+        List<HubData.Keepsake> recent=data.recentKeepsakes(live()?data.recentArchive:archive());
+        for(int i=0;i<recent.size();i++) {
+            HubData.Keepsake item=recent.get(i);float y=537+i*64;
+            if(item.title()!=null) {
+                HubData.Title t=item.title();keepsake(y,fit(t.name(),280,13,false),"获得称号 · "+titleDate(t),t.icon(),t.light(),t.color(),null,()->{selectedTitle=t.id();navigate(1);},t);
+            } else {
+                HubData.Entry entry=item.entry();keepsake(y,entry.fortune().title(),"收藏签笺 · "+shortDate(entry.date())+" "+entry.time(),"fortune-slip",0xfff8edda,HubData.gradeColor(entry.fortune().grade()),entry.fortune().grade(),()->openReading(entry));
+            }
+        }
+        if(recent.isEmpty()) {
+            boolean loading=live()&&(!data.titlesLoaded||!data.fortunesLoaded);
+            String empty=loading?"正在读取收藏…":"还没有留下收藏";
+            if(live()&&(!ready("titles")||!ready("fortunes")))empty="收藏资料尚未就绪";
+            textCenter(empty,1001,619,14,MUTED,false);
+        }
         d.line(793,731,1210,731,1,a(0xffe4e5f1));
-        text("6",793,760,17,0xff5c5790,true);text("枚称号",810,760,10,0xff80899f,false);
+        text(live()&&!catalogueComplete?"—":Integer.toString(titleCount()),793,760,17,0xff5c5790,true);text("枚称号",810,760,10,0xff80899f,false);
         d.line(866,746,866,762,1,a(0xffd9dcec));
-        text(Integer.toString(archive().size()),884,760,17,0xff5c5790,true);text("张签笺",911,760,10,0xff80899f,false);
+        text(live()&&!data.fortunesLoaded?"—":Integer.toString(archiveCount()),884,760,17,0xff5c5790,true);text("张签笺",911,760,10,0xff80899f,false);
         iconButton("archive-link","打开签笺月历","arrow-up-right",1177,740,30,()->navigate(2),true);
     }
     private void keepsake(float y,String title,String subtitle,String art,int bg,int color,String grade,Runnable click) {
+        keepsake(y,title,subtitle,art,bg,color,grade,click,null);
+    }
+    private void keepsake(float y,String title,String subtitle,String art,int bg,int color,String grade,Runnable click,HubData.Title style) {
         float hover=transition("keepsake-hover-"+y,inside(793,y-1,417,60)?1:0,140);
         if(hover>0)d.roundRect(793,y-1,417,60,0,withAlpha(0x80f5f2ff,hover));
         glass(793,y+5,36,39,12,bg,lighten(bg,.1f));
         if(art.equals("fortune-slip"))image(art,797,y+7,28,34,1);else icon(art,800,y+13,22,color);
-        text(title,841,y+19,13,0xff4c5570,false);
-        if(grade!=null){float x=848+d.textWidth(title,13,false);d.strokeRoundRect(x,y+6,44,17,4,.7f,a(0xffeadfc7));text(grade,x+5,y+18,9,color,false);}
+        if(style==null)text(title,841,y+19,13,0xff4c5570,false);else titleLabel(style,841,y+19,13,0,false,false,340);
+        if(grade!=null){float x=848+d.textWidth(title,13,false);d.strokeRoundRect(x,y+6,d.textWidth(grade,9,false)+10,17,4,.7f,a(0xffeadfc7));text(grade,x+5,y+18,9,color,false);}
         text(subtitle,841,y+40,10,0xff8490a5,false);icon("chevron-right",1195,y+19,16,0xffa5a9c0);
         if(y<665)d.line(793,y+59,1210,y+59,1,a(0x57e5e7f3));
         hit("keepsake-"+y,title,793,y-1,417,60,click);
     }
 
     private List<HubData.Title> titleList() {
-        List<HubData.Title> list=new ArrayList<>(HubData.TITLES.stream().filter(t->
+        List<HubData.Title> list=new ArrayList<>(data.titles.stream().filter(t->
             (filter==1||(filter==0?t.owned():!t.owned()))&&(t.name()+t.category()).contains(query.strip())).toList());
-        if(sort==0)list.sort(Comparator.comparing(HubData.Title::date).reversed());
+        if(sort==0)list.sort(live()?Comparator.comparingLong(HubData.Title::acquiredAt).reversed():Comparator.comparing(HubData.Title::date).reversed());
         else {Collator collator=Collator.getInstance(Locale.CHINA);list.sort((a,b)->collator.compare(a.name(),b.name()));}
         return list;
     }
     private void titles() {
-        heading("我的称号","选一个喜欢的称号，让名字多一点自己的颜色。","MemorialTitles · 演示",6);
+        heading("我的称号","选一个喜欢的称号，让名字多一点自己的颜色。","MemorialTitles · "+moduleLabel("titles"),live()&&!catalogueComplete?-1:titleCount());
+        if(live()&&!ready("titles")){unavailable("titles");return;}
         group(30,350);
         glass(LEFT,174,234,36,13,0x5cdce0f0,0x5cdce0f0);
         String[] labels={"已拥有","全部","未获得"};
@@ -324,12 +429,14 @@ public final class HubView {
             float thumb=Math.max(45,viewportHeight*viewportHeight/contentHeight);
             d.roundRect(902,278+titleScroll/(contentHeight-viewportHeight)*(viewportHeight-thumb),3,thumb,2,a(0x99a6b0cf));
         }
-        if(list.isEmpty()) {
+        if(list.isEmpty()&&!catalogueComplete) {
+            icon("tag",548,374,28,0xff9d90b4);textCenter("正在读取称号目录…",567,437,17,0xff8c8495,true);
+        } else if(list.isEmpty()) {
             icon("search",548,374,28,0xff9d90b4);textCenter("没有找到这个称号",567,437,17,0xff8c8495,true);
             textCenter("换个关键词，或查看全部称号。",567,466,12,MUTED,false);
             button("reset-filter","查看全部",512,492,110,37,false,true,()->{filter=1;query="";titleScroll=0;});
         }
-        text(list.size()+" 枚称号 · "+(filter==2?"还有新的旅程等你开启":"每一个名字，都有它的故事"),LEFT,816,11,0xff8993a9,false);
+        text(list.size()+" 枚称号 · "+(!catalogueComplete?"目录正在加载，请稍候":filter==2?"还有新的旅程等你开启":"每一个名字，都有它的故事"),LEFT,816,11,0xff8993a9,false);
         titleDetail();ungroup();
     }
     private void titleTile(HubData.Title t,float x,float y,float w,float h) {
@@ -341,20 +448,20 @@ public final class HubView {
         d.strokeRoundRect(x,y,w,h,18,selected?1.5f:1,a(selected?mix(t.color(),0xff6452ad,.2f):0xfaffffff));
         if(compact) {
             emblem(t,x+16,y+13,42);
-            titleLabel(t,x+75,y+30,17,1,false,!t.owned());
+            titleLabel(t,x+75,y+30,17,1,false,!t.owned(),w-178);
             text(t.category(),x+75,y+50,10,0xff7c859a,false);
             if(Objects.equals(equipped,t.id()))pill("✓ 已佩戴",x+w-84,y+22,0xa3ffffff,0xff448772,false);
             else if(!t.owned())icon("lock",x+w-36,y+26,14,0xff8d97ad);
         } else {
             text(t.category(),x+20,y+32,10,0xff7c859a,false);
-            titleLabel(t,x+20,y+66,20,1,false,!t.owned());
-            d.circle(x+23,y+88,2,a(t.color()));text(t.rarity(),x+32,y+92,10,mix(t.color(),INK,.5f),false);
+            titleLabel(t,x+20,y+66,20,1,false,!t.owned(),w-111);
+            if(!t.rarity().isEmpty()){d.circle(x+23,y+88,2,a(t.rarityColor()));text(t.rarity(),x+32,y+92,10,t.rarityColor(),false);}
             emblem(t,x+w-81,y+43,60);
             if(Objects.equals(equipped,t.id()))pill("✓ 已佩戴",x+w-86,y+12,0xa3ffffff,0xff448772,false);
             else if(!t.owned())icon("lock",x+w-31,y+17,14,0xff8d97ad);
             d.line(x+20,y+124,x+w-20,y+124,1,a(mix(t.color(),0x00ffffff,.75f)));
             icon("calendar-days",x+20,y+136,12,0xff7b859c);
-            text(t.owned()?t.date():"尚未解锁",x+38,y+146,10,0xff7b859c,false);
+            text(t.owned()?titleDate(t):"尚未解锁",x+38,y+146,10,0xff7b859c,false);
             if(selected){icon("check",x+w-77,y+135,12,mix(t.color(),INK,.4f));text("已选中",x+w-60,y+146,10,mix(t.color(),INK,.4f),false);}
             else icon("arrow-up-right",x+w-34,y+135,14,mix(t.color(),INK,.4f));
         }
@@ -376,7 +483,8 @@ public final class HubView {
         icon("stroke-1.5/"+t.icon(),-size*.27f,-size*.27f,size*.54f,mix(t.color(),0xff25364c,.32f));d.restore();
     }
     private void titleDetail() {
-        HubData.Title t=HubData.title(selectedTitle);if(t==null)t=HubData.TITLES.get(0);
+        HubData.Title t=data.title(selectedTitle);if(t==null&&!data.titles.isEmpty())t=data.titles.get(0);
+        if(t==null){glass(RIGHT,174,310,626,22,0xecffffff,0xabffffff);textCenter("选择称号查看详情",1077,450,15,MUTED,false);return;}
         final HubData.Title selected=t;
         glass(RIGHT,174,310,626,22,0xecffffff,0xabffffff);
         text("佩戴预览",940,207,13,0xff4f5a73,true);
@@ -402,30 +510,41 @@ public final class HubView {
         // The projected cube's bottom meets the ground ellipse at y=392, as in the web preview.
         if(opacity>.04f)HubHead.draw(d,1051,335,51,-23);
         textCenter("游戏内效果示意",1077,419.5f,10,0xff7d87a1,false);
-        icon(t.icon(),940,473,18,mix(t.color(),INK,.55f));text(t.name(),966,488,14,mix(t.color(),INK,.55f),true);
+        icon(t.icon(),940,473,18,mix(t.color(),INK,.55f));titleLabel(t,966,488,14,0,false,false);hit("full-title","查看称号全文",940,466,274,28,()->openOverlay("title-name"));
         wrap(t.description(),940,516,274,12,22,0xff748098,false);
         glass(940,568,274,73,10,0xfff7f7fc,0xfff7f7fc);
         icon("gift",952,580,13,0xff8990a5);text(t.owned()?"获得方式":"解锁条件",973,591,10,0xff8990a5,false);
         wrap(t.condition(),952,615,250,11,18,0xff6d7890,false);
-        if(t.owned()) {icon("calendar-days",942,655,13,MUTED);text(t.date()+"  获得",962,667,10,MUTED,false);}
+        if(t.owned()) {icon("calendar-days",942,655,13,MUTED);text(titleDate(t)+"  获得",962,667,10,MUTED,false);}
         String equipText=!t.owned()?"尚未获得":worn?"✓ 已佩戴 · 点击摘下":"佩戴这个称号  →";
-        button("equip",equipText,940,687,274,38,!worn,t.owned(),()->{
+        button("equip",pendingModules.contains("titles")?"等待服务器确认…":equipText,940,687,274,38,!worn,t.owned()&&!pendingModules.contains("titles")&&catalogueComplete,()->{
+            if(live()){JsonObject p=mutation("titles");p.addProperty("title",Objects.equals(equipped,selected.id())?"":selected.id());request("titles","equip",p);return;}
             equipped=Objects.equals(equipped,selected.id())?null:selected.id();
             notify(equipped==null?"已摘下称号 · 本地演示":"已佩戴「"+selected.name()+"」· 本地演示");
         });
         text("展示给其他玩家",940,754,11,0xff65718b,false);
-        text(visible?"本地展示示意":"已隐藏展示，佩戴状态保留",940,774,10,0xff8a94aa,false);
-        toggle("visibility",visible,1174,746,()->{visible=!visible;notify(visible?"已开启称号展示 · 本地演示":"展示已隐藏，佩戴状态保留");});
+        if(live())iconButton("display-settings","称号展示位置","settings",1128,742,25,()->openOverlay("title-display"),!pendingModules.contains("titles"));
+        String visibilityNote=!privacyKnown()?(catalogueComplete?"称号展示状态暂不可用":"正在读取称号展示状态…"):live()&&(equipped==null||equipped.isEmpty())?"先佩戴称号后可设置":visible?(live()?"仅修改当前佩戴称号的展示":"本地展示示意"):"已隐藏展示，佩戴状态保留";
+        text(visibilityNote,940,774,10,0xff8a94aa,false);
+        toggle("visibility",privacyKnown()&&visible,1174,746,this::changeVisibility,canChangeVisibility());
     }
 
     private Map<LocalDate,HubData.Entry> archive() {
+        if(live())return data.archive;
         if(fortuneState==3)return data.archive;
-        Map<LocalDate,HubData.Entry> copy=new java.util.LinkedHashMap<>(data.archive);copy.remove(HubData.TODAY);return copy;
+        Map<LocalDate,HubData.Entry> copy=new java.util.LinkedHashMap<>(data.archive);copy.remove(data.today);return copy;
     }
-    private HubData.Entry todayEntry(){return new HubData.Entry(HubData.TODAY,"20:26",data.fortune(1));}
+    private HubData.Entry todayEntry(){return live()?data.todayRecord:new HubData.Entry(data.today,"20:26",data.fortune(1));}
+    private void unavailable(String module) {
+        group(30,350);glass(LEFT,174,WIDTH,626,22,0xecffffff,0xabffffff);
+        icon("info",692,351,34,0xff9d90b4);textCenter(fit(moduleLabel(module),800,16,true),734,422,16,MUTED,true);
+        textCenter("其他页面仍可使用",734,455,12,MUTED,false);
+        button("retry-"+module,"重新读取",679,485,110,37,false,true,()->request(module,"snapshot",new JsonObject()));ungroup();
+    }
     private void fortunes() {
         Map<LocalDate,HubData.Entry> records=archive();
-        heading("我的签笺","一日一签，把沿途的机缘慢慢收藏。","DailyFortunes · 演示",records.size());
+        heading("我的签笺","一日一签，把沿途的机缘慢慢收藏。","DailyFortunes · "+moduleLabel("fortunes"),archiveCount());
+        if(live()&&!ready("fortunes")){unavailable("fortunes");return;}
         group(35,360);
         glass(LEFT,174,662,626,22,0xecffffff,0xabffffff);
         int stored=(int)records.keySet().stream().filter(date->YearMonth.from(date).equals(month)).count();
@@ -435,19 +554,19 @@ public final class HubView {
         beginAlpha(monthHeading,LEFT,174,430,78);
         text(String.format(Locale.ROOT,"%02d",month.getMonthValue()),258+monthOffset,231,39,0xff67549b,true);
         text(month.getYear()+" 年 "+month.getMonthValue()+" 月",320+monthOffset,211,13,0xff505b76,true);
-        icon("bookmark",321+monthOffset,223,12,0xff8a8fa5);text("本月收藏 "+stored+" 张",339+monthOffset,234,10,0xff8a8fa5,false);
+        icon("bookmark",321+monthOffset,223,12,0xff8a8fa5);text(calendarInitialLoading()?"正在读取本月收藏…":"本月收藏 "+stored+" 张",339+monthOffset,234,10,0xff8a8fa5,false);
         endAlpha();
         glass(704,195,171,37,11,0xfff0edf8,0xfff0edf8);
-        textButton("current-month","本月",707,198,45,30,()->{monthDirection=1;month=YearMonth.from(HubData.TODAY);selectedDate=HubData.TODAY;monthAt=System.nanoTime();historyScroll=0;},true);
+        textButton("current-month","本月",707,198,45,30,()->{monthDirection=1;month=YearMonth.from(data.today);selectedDate=data.today;chooseLatestOnCalendar=false;monthAt=System.nanoTime();historyScroll=0;calendarRequest();},true);
         iconButton("previous-month","上个月","chevron-left",752,198,29,()->shiftMonth(-1),true);
-        iconButton("next-month","下个月","chevron-right",782,198,29,()->shiftMonth(1),month.isBefore(YearMonth.from(HubData.TODAY)));
+        iconButton("next-month","下个月","chevron-right",782,198,29,()->shiftMonth(1),month.isBefore(YearMonth.from(data.today)));
         d.line(816,205,816,225,1,a(0xffdbd7e7));
         iconButton("fortune-mode",history?"切换月历显示":"切换签笺列表",history?"grid-2x2":"list",829,198,30,()->{history=!history;historyScroll=0;monthAt=System.nanoTime();},true);
         d.save();d.clipRoundRect(255,252,624,498,0);
         float monthBody=reducedMotion?1:HubMotion.bezier(monthProgress,.18f,.75f,.22f,1);
         float slide=monthDirection*28*(1-monthBody);
         beginAlpha(monthBody);push(Matrix33.makeTranslate(slide,0));
-        if(history)fortuneHistory(records,0);else calendar(records,0);
+        if(calendarInitialLoading())textCenter("正在读取本月收藏…",567,485,14,MUTED,false);else if(history)fortuneHistory(records,0);else calendar(records,0);
         pop();endAlpha();d.restore();
         String[] grades={"上上签","上吉签","中平签","小凶签","下下签"};
         for(int i=0;i<grades.length;i++) {float x=258+i*122;d.circle(x+3,775,3,a(HubData.gradeColor(grades[i])));text(grades[i],x+15,779,10,0xff808aa0,false);}
@@ -463,7 +582,7 @@ public final class HubView {
             int day=i-start+1;if(day<1||day>month.lengthOfMonth())continue;
             LocalDate date=month.atDay(day);HubData.Entry entry=records.get(date);
             float x=258+(i%7)*(cellW+gap),y=292+(i/7)*(cellH+gap);
-            boolean future=date.isAfter(HubData.TODAY),selected=date.equals(selectedDate),today=date.equals(HubData.TODAY);
+            boolean future=date.isAfter(data.today),selected=date.equals(selectedDate),today=date.equals(data.today);
             int grade=entry==null?0xffa0a7bb:HubData.gradeColor(entry.fortune().grade());
             if(entry!=null)d.gradientRoundRect(x,y,cellW,cellH,11,a(0xffffffff),a(lighten(grade,.43f)));
             else d.roundRect(x,y,cellW,cellH,11,a(future?0xfff5f5fa:0xfff4f4fa));
@@ -502,11 +621,11 @@ public final class HubView {
         HubData.Entry entry=records.get(selectedDate);
         glass(RIGHT,174,310,450,22,0xf2fffdf9,0xc7ffffff);
         text(selectedDate.format(DATE),939,204,11,0xff85879a,false);
-        if(selectedDate.equals(HubData.TODAY))pill("今天",1160,187,0xbceffff2,0xff25816a,true);
+        if(selectedDate.equals(data.today))pill("今天",1160,187,0xbceffff2,0xff25816a,true);
         if(entry==null) {
-            image("fortune-slip",1039,314,76,97,.3f);textCenter("这一天，没有留下签笺",1077,456,15,0xff8c8495,true);
-            wrap("打开藏签匣时，背包中属于你的已解签会按对应日期归档。",957,491,240,12,22,0xffa39bab,false);
-            if(selectedDate.equals(HubData.TODAY)&&fortuneState<3)textCenter(stateLabel()+" · 尚未归档",1077,562,11,0xffa39bab,false);
+            image("fortune-slip",1039,314,76,97,.3f);textCenter(calendarInitialLoading()?"正在读取这一天的签笺…":"这一天，没有留下签笺",1077,456,15,0xff8c8495,true);
+            wrap(calendarInitialLoading()?"等待服务器确认收藏记录。":"打开藏签匣时，背包中属于你的已解签会按对应日期归档。",957,491,240,12,22,0xffa39bab,false);
+            if(selectedDate.equals(data.today)&&fortuneState<3)textCenter(stateLabel()+" · 尚未归档",1077,562,11,0xffa39bab,false);
         } else {
             HubData.Fortune f=entry.fortune();
             paper(937,219,280,331);
@@ -522,12 +641,13 @@ public final class HubView {
         }
         glass(RIGHT,640,310,160,19,0x99e6eaff,0xd1f6edff);
         glass(938,656,53,56,14,0xd4ffffff,0x45ffffff);image("collection-chest",936,653,57,61,1);
-        HubData.Entry display=records.get(displayDate);
+        HubData.Entry display=live()?data.featured:records.get(displayDate);
         text("手册展示",1004,668,10,0xff7b869b,false);
+        if(live()&&data.featured!=null)iconButton("clear-feature","清除手册展示","x",1187,651,24,()->{JsonObject p=mutation("fortunes");p.addProperty("date","");request("fortunes","feature",p);},!pendingModules.contains("fortunes"));
         text(display==null?"还没有选择签笺":display.fortune().title(),1004,691,13,0xff625c80,true);
         text(display==null?"选择一张已收藏的签":shortDate(display.date())+" · 已收藏",1004,709,10,0xff9290aa,false);
         boolean current=Objects.equals(displayDate,selectedDate)&&entry!=null;
-        button("display-selected",current?"当前选择已展示  ✓":"展示选中的签  ↗",938,725,278,33,false,entry!=null&&!current,()->displaySelected(entry));
+        button("display-selected",pendingModules.contains("fortunes")?"等待服务器确认…":current?"当前选择已展示  ✓":"展示选中的签  ↗",938,725,278,33,false,entry!=null&&!current&&!pendingModules.contains("fortunes"),()->displaySelected(entry));
         textCenter("仅用于手册，方块展示在游戏内设置",1077,783,9,0xff948ba6,false);
     }
     private void paper(float x,float y,float w,float h) {
@@ -536,12 +656,15 @@ public final class HubView {
         d.strokeRoundRect(x+6,y+6,w-12,h-12,9,1,a(0x2bcdb57e));
     }
     private void shiftMonth(int amount) {
-        YearMonth target=month.plusMonths(amount);if(target.isAfter(YearMonth.from(HubData.TODAY)))return;
+        YearMonth target=month.plusMonths(amount);if(target.isAfter(YearMonth.from(data.today)))return;
         month=target;monthDirection=Integer.signum(amount);monthAt=System.nanoTime();historyScroll=0;
+        chooseLatestOnCalendar=true;
         selectedDate=archive().keySet().stream().filter(date->YearMonth.from(date).equals(month)).max(Comparator.naturalOrder()).orElse(month.atDay(1));
+        calendarRequest();
     }
     private void displaySelected(HubData.Entry entry) {
         if(entry==null||!archive().containsKey(entry.date())||Objects.equals(displayDate,entry.date()))return;
+        if(live()){JsonObject p=mutation("fortunes");p.addProperty("date",entry.date().toString());request("fortunes","feature",p);return;}
         displayDate=entry.date();notify("已更新手册展示的签笺 · 本地演示");
     }
 
@@ -561,14 +684,14 @@ public final class HubView {
         d.boxShadow(modalX,modalY,modalW,modalH,25,0,28,90,0,0x4235416c);
         d.linearGradientRoundRect(modalX,modalY,modalW,modalH,25,135,new int[]{0xf5fcfdff,0xeff5f3ff},new float[]{0,1});
         d.strokeRoundRect(modalX,modalY,modalW,modalH,25,1,0xffffffff);
-        String title=wide?"签笺详情":switch(overlay){case "settings"->"界面设置";case "profile"->"个人资料";case "preview"->"预览选项";default->fortuneState==0?"如何抽签":"如何解签";};
-        String subtitle=wide?reading.date().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))+" · "+playerName+" 所得":switch(overlay){case "settings"->"让手册更符合你的习惯";case "profile"->"你在这段旅程中留下的足迹";case "preview"->"仅用于体验不同状态，不会修改游戏数据";default->"DailyFortunes · 玩法提示";};
+        String title=wide?"签笺详情":switch(overlay){case "settings"->"界面设置";case "profile"->"个人资料";case "preview"->"预览选项";case "title-name"->"称号全文";case "title-display"->"称号展示位置";default->fortuneState==0?"如何抽签":"如何解签";};
+        String subtitle=wide?reading.date().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))+" · "+playerName+" 所得":switch(overlay){case "settings"->"让手册更符合你的习惯";case "profile"->"你在这段旅程中留下的足迹";case "preview"->"仅用于体验不同状态，不会修改游戏数据";case "title-name"->"完整文字与原始样式";case "title-display"->"个人偏好与服务器展示规则";default->"DailyFortunes · 玩法提示";};
         text(title,modalX+27,modalY+39,19,0xff35415e,true);
         text(subtitle,modalX+27,modalY+63,12,0xff8c8fa5,false);
         iconButton("modal-close","关闭弹窗","x",modalX+modalW-58,modalY+22,32,this::dismissOverlay,true);
         d.line(modalX+26,modalY+84,modalX+modalW-26,modalY+84,1,0xffe7e6f1);
         if(wide)readingModal();else switch(overlay) {
-            case "settings"->settingsModal();case "profile"->profileModal();case "preview"->previewModal();default->fortuneHelp();
+            case "settings"->settingsModal();case "profile"->profileModal();case "preview"->previewModal();case "title-name"->titleNameModal();case "title-display"->titleDisplayModal();default->fortuneHelp();
         }
         pop();endAlpha();endAlpha();
     }
@@ -600,19 +723,19 @@ public final class HubView {
         d.line(x,y+252,x+384,y+252,1,0xffe7e6f1);
         text("界面主题",x,y+284,14,INK,true);text("Liquid Glass · 浅色",x,y+309,12,0xff8c8fa5,false);
         glass(x+345,y+270,39,38,11,0xffe0e9ff,0xfff3e0ff);icon("check",x+357,y+282,14,0xff817393);
-        icon("info",x,y+345,15,0xff8c8fa5);wrap("偏好保存在当前测试实例；统计与收藏为本地演示。",x+25,y+357,359,11,18,0xff8c8fa5,false);
+        icon("info",x,y+345,15,0xff8c8fa5);wrap(live()?"偏好按玩家与当前服务器／存档隔离保存。":"偏好保存在当前测试实例；统计与收藏为本地演示。",x+25,y+357,359,11,18,0xff8c8fa5,false);
     }
     private void profileModal() {
         float cx=630,top=modalY+115;
         glass(cx-46,top,92,92,24,0xffe5ecff,0xffeae1ff);HubHead.draw(d,cx-27,top+21,54,-23);
         textCenter(fit(playerName,480,24,true),cx,top+130,24,INK,true);
-        HubData.Title worn=HubData.title(equipped);if(worn==null)textCenter("暂未佩戴称号",cx,top+160,14,MUTED,true);else titleLabel(worn,cx,top+160,14,1.4f,true,false);
-        String[][] rows={{"首次加入 · 演示","2026/10/17"},{"累计在线 · 演示","128 小时 42 分钟"},{"累计登录 · 演示","36 次"},{"玩家 UUID · 演示身份","7f1a0000-0000-4000-8000-000000000001"}};
+        HubData.Title worn=data.title(equipped);if(worn==null)textCenter("暂未佩戴称号",cx,top+160,14,MUTED,true);else titleLabel(worn,cx,top+160,14,1.4f,true,false);
+        String[][] rows=live()?new String[][]{{"首次加入",timestamp(data.firstJoinedAt,"yyyy/MM/dd HH:mm:ss")},{"当前存档 · 累计在线",data.managerLoaded?data.onlineMillis(now)/3600000+" 小时 "+data.onlineMillis(now)/60000%60+" 分钟":"暂无记录"},{"当前存档 · 累计登录",data.managerLoaded?data.joinCount+" 次":"暂无记录"},{"玩家 UUID",data.playerUuid.isEmpty()?"正在读取":data.playerUuid}}:new String[][]{{"首次加入 · 演示","2026/10/17"},{"累计在线 · 演示","128 小时 42 分钟"},{"累计登录 · 演示","36 次"},{"玩家 UUID · 演示身份","7f1a0000-0000-4000-8000-000000000001"}};
         for(int i=0;i<rows.length;i++) {
             float y=top+207+i*48;d.line(modalX+28,y-21,modalX+modalW-28,y-21,1,0xffe7e6f1);
             text(rows[i][0],modalX+28,y,11,0xff8c8fa5,false);textRight(rows[i][1],modalX+modalW-28,y,i==3?10:12,0xff59657f,false);
         }
-        textCenter("名字与头像取自本地角色，其他资料均为样例。",cx,modalY+modalH-28,11,MUTED,false);
+        textCenter(live()?"统计来自当前服务器／存档。":"名字与头像取自本地角色，其他资料均为样例。",cx,modalY+modalH-28,11,MUTED,false);
     }
     private void previewModal() {
         float x=modalX+28,y=modalY+120;
@@ -623,7 +746,7 @@ public final class HubView {
             button("preview-state-"+i,(fortuneState==i?"✓ ":"")+labels[i],bx,by,187,42,fortuneState==i,true,()->{fortuneState=state;notify("今日状态："+stateLabel()+" · 本地演示");});
         }
         wrap("未解签不会显示结果；已解但未归档的签不会出现在收藏和月历中。",x,y+164,384,12,22,0xff8c8fa5,false);
-        button("reset-demo","还原演示数据",x,y+236,148,37,false,true,()->{equipped="dew";visible=true;fortuneState=3;displayDate=HubData.TODAY;selectedDate=HubData.TODAY;notify("样例已还原，界面偏好保留");});
+        button("reset-demo","还原演示数据",x,y+236,148,37,false,true,()->{equipped="dew";visible=true;fortuneState=3;displayDate=data.today;selectedDate=data.today;notify("样例已还原，界面偏好保留");});
         text("F8 打开此面板 · 界面偏好不参与演示还原",x,y+295,11,MUTED,false);
     }
     private void fortuneHelp() {
@@ -631,7 +754,7 @@ public final class HubView {
         image(fortuneState==0?"fortune-barrel":"fortune-slip",x,y,94,106,1);
         wrap(fortuneState==0?"拿起签筒，为今天留一份期许。":"带上未解的签，前往解签龛。",x+119,y+20,235,13,21,0xff807789,true);
         wrap(fortuneState==0?"在游戏中手持签筒使用，即可抽取今日的签。抽到之后仍需解签，才会看见结果。":"签文尚未解读，因此手册不会提前展示内容。完成解签后，打开藏签匣即可归档收藏。",x+119,y+68,235,12,23,0xff807789,false);
-        text("这里是本地界面原型，不会触发游戏抽签。",x,modalY+modalH-40,11,0xff9992a4,false);
+        text(live()?"请在游戏内完成抽签、解签与归档。":"这里是本地界面原型，不会触发游戏抽签。",x,modalY+modalH-40,11,0xff9992a4,false);
     }
     private void readingModal() {
         HubData.Entry entry=reading;HubData.Fortune f=entry.fortune();
@@ -694,16 +817,6 @@ public final class HubView {
             }
         }
     }
-    private void toast() {
-        float elapsed=(now-toastAt)/1_000_000_000f;if(elapsed>2.8f){toast=null;return;}
-        float entrance=reducedMotion?1:HubMotion.ease(clamp(elapsed/.24f,0,1));
-        float w=Math.min(viewportW-36,d.textWidth(toast,12,400)+70),x=viewportX+(viewportW-w)/2,y=viewportY+25-12*(1-entrance);
-        d.captureGlassBackdrop(x,y,w,47);beginAlpha(entrance,x,y,w,47);
-        d.boxShadow(x,y,w,47,18,0,10,30,0,0x35465482);d.blurBackdrop(x,y,w,47,18,16,1);
-        d.roundRect(x,y,w,47,18,0xf0ffffff);d.strokeRoundRect(x,y,w,47,18,1,0xffffffff);
-        d.circle(x+29.5f,y+22.5f,10.5f,0xffeee7ff);d.icon("check",x+22,y+15,15,0xff8f70ce);
-        d.text(toast,x+49,y+28.5f,12,0xff625582,400);endAlpha();
-    }
 
     private void group(int delayMs,int durationMs) {
         float p;
@@ -765,11 +878,49 @@ public final class HubView {
         return s.substring(0,end)+"…";
     }
     private void titleLabel(HubData.Title title,float x,float baseline,float size,float tracking,boolean center,boolean locked) {
+        titleLabel(title,x,baseline,size,tracking,center,locked,center?250:x>=RIGHT?246:450);
+    }
+    private void titleLabel(HubData.Title title,float x,float baseline,float size,float tracking,boolean center,boolean locked,float maxWidth) {
+        if(live()) {
+            List<HubData.Glyph> glyphs=title.glyphs();float width=richWidth(glyphs,size,tracking);
+            float actual=Math.max(11,Math.min(size,size*maxWidth/Math.max(1,width)));
+            width=richWidth(glyphs,actual,tracking);boolean clipped=width>maxWidth;
+            float start=center?x-Math.min(width,maxWidth)*.5f:x;
+            d.save();d.clipRoundRect(start-2,baseline-actual*1.3f,maxWidth+4,actual*1.7f,0);
+            float cursor=start;
+            for(HubData.Glyph glyph:glyphs) {
+                float advance=d.textWidth(glyph.text(),actual,glyph.bold()?700:400);
+                if(clipped&&cursor+advance>start+maxWidth-actual){text("…",cursor,baseline,actual,INK,false);break;}
+                d.richGlyph(glyph.text(),cursor,baseline,actual,a(glyph.color()),glyph.bold(),glyph.italic(),glyph.underline(),glyph.strike());cursor+=advance+tracking;
+            }
+            d.restore();return;
+        }
         String label=title.name();if(center)x-=trackedWidth(label,size,tracking,600,false)/2;
         if(locked){tracked(label,x,baseline,size,tracking,0xff78859b,600,false);return;}
         if(title.id().equals("dew"))d.textGradient(label,x,baseline,size,600,tracking,95,new int[]{0xff168878,0xff69a648},new float[]{0,1},false);
         else if(title.id().equals("star"))d.textGradient(label,x,baseline,size,600,tracking,100,new int[]{0xffa97929,0xffbf854a,0xff8a69bb},new float[]{0,.5f,1},false);
         else tracked(label,x,baseline,size,tracking,HubData.titleText(title),600,false);
+    }
+    private float richWidth(List<HubData.Glyph> glyphs,float size,float tracking){float width=0;for(HubData.Glyph glyph:glyphs)width+=d.textWidth(glyph.text(),size,glyph.bold()?700:400)+tracking;return Math.max(0,width-tracking);}
+    private void titleNameModal() {
+        HubData.Title title=data.title(selectedTitle);if(title==null)return;
+        float left=modalX+28,right=modalX+modalW-28,x=left,y=modalY+137;
+        for(HubData.Glyph glyph:title.glyphs()) {
+            float advance=d.textWidth(glyph.text(),18,glyph.bold()?700:400);
+            if(x+advance>right){x=left;y+=29;}
+            d.richGlyph(glyph.text(),x,y,18,glyph.color(),glyph.bold(),glyph.italic(),glyph.underline(),glyph.strike());x+=advance+1;
+        }
+    }
+    private void titleDisplayModal() {
+        String[] keys={"head","chat","tab"},labels={"头顶称号","聊天称号","玩家列表称号"};
+        for(int i=0;i<keys.length;i++) {
+            String key=keys[i];float y=modalY+122+i*66;boolean allowed=HubData.bool(data.globalDisplay,key,true),shown=HubData.bool(data.displayPreferences,key,true);
+            text(labels[i],modalX+28,y,14,INK,true);text(allowed?"使用个人展示偏好":"管理员已关闭此位置",modalX+28,y+22,11,MUTED,false);
+            toggle("title-location-"+key,shown,modalX+modalW-61,y-12,()->{
+                if(pendingModules.contains("titles")){notify("正在等待服务器确认");return;}
+                JsonObject p=mutation("titles");for(String location:keys)p.addProperty(location,location.equals(key)?!shown:HubData.bool(data.displayPreferences,location,true));request("titles","displayPreferences",p);
+            });
+        }
     }
     private List<String> trackedLines(String s,float width,float size,float tracking,int weight,boolean serif) {
         List<String> result=new ArrayList<>();StringBuilder line=new StringBuilder();
@@ -862,12 +1013,15 @@ public final class HubView {
         if(enabled)hit(id,label,x,y,size,size,click);
     }
     private void toggle(String id,boolean checked,float x,float y,Runnable click) {
+        toggle(id,checked,x,y,click,true);
+    }
+    private void toggle(String id,boolean checked,float x,float y,Runnable click,boolean enabled) {
         HubMotion.Transition channel=transitions.computeIfAbsent(id+"-toggle",ignored->{HubMotion.Transition c=new HubMotion.Transition();c.value=c.target=c.from=checked?1:0;c.initialized=true;c.started=now;return c;});
         float value=channel.sample(checked?1:0,now,180_000_000L,reducedMotion);
         d.roundRect(x,y,33,18,20,mix(0xffd5daea,0xff8e76d9,value));
         d.strokeRoundRect(x,y,33,18,20,1,checked?0xff8770ce:0xffc5cbdd);
         d.circle(x+9+15*value,y+9,7,0xffffffff);
-        hit(id,checked?"关闭":"开启",x-3,y-5,39,28,click);
+        if(enabled)hit(id,checked?"关闭":"开启",x-3,y-5,39,28,click);
     }
     private void hit(String id,String label,float x,float y,float w,float h,Runnable click) {
         if(interactiveAlpha<.2f)return;
@@ -895,10 +1049,11 @@ public final class HubView {
         for(HubMotion.Navigation state:navigation){state.enter.snap(value?1:0);state.hover.snap(0);state.press.snap(0);state.x.snap(0);state.y.snap(0);}
     }
     private int welcomeIndex(){return Math.max(0,List.of("once","login","always").indexOf(welcomeMode));}
-    private void notify(String value){toast=value;toastAt=System.nanoTime();}
-    private void navigate(int destination){page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;if(destination==2)monthAt=pageAt;if(destination==0)tilts.remove("medallion");}
+    private void notify(String value){toast.show(value,HubToast.Kind.INFO,System.nanoTime());}
+    private void navigate(int destination){if(destination==0||destination==1)request("titles","refresh",new JsonObject());if(destination==0)request("fortunes","refresh",new JsonObject());if(destination==2)calendarRequest();page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;if(destination==2)monthAt=pageAt;if(destination==0)tilts.remove("medallion");}
     private void openOverlay(String value){restoreFocus=focusId;overlay=value;reading=null;focusId="modal-close";sliderDragging=false;modalAt=System.nanoTime();hits.clear();}
-    private void openReading(HubData.Entry value){if(value==null)return;restoreFocus=focusId;reading=value;overlay=null;focusId="modal-close";modalAt=System.nanoTime();hits.clear();}
+    private void openReading(HubData.Entry value){if(value==null)return;if(live()){JsonObject p=new JsonObject();p.addProperty("date",value.date().toString());request("fortunes","read",p);return;}showReading(value);}
+    private void showReading(HubData.Entry value){restoreFocus=focusId;reading=value;overlay=null;focusId="modal-close";modalAt=System.nanoTime();hits.clear();}
     public boolean dismissOverlay() {
         if(overlay==null&&reading==null)return false;
         overlay=null;reading=null;sliderDragging=false;focusId=restoreFocus;restoreFocus=null;hits.clear();return true;
@@ -910,6 +1065,7 @@ public final class HubView {
 
     public boolean mouseClicked(float x,float y,int button) {
         if(button!=0)return false;
+        if(toast.press(x,y,System.nanoTime()))return true;
         if(isWelcomePlaying())return true;
         mx=x;my=y;keyboardFocus=false;keyboardPress=false;pressMoved=false;pressX=x;pressY=y;
         for(int i=hits.size()-1;i>=0;i--) {
@@ -925,6 +1081,7 @@ public final class HubView {
     }
     public boolean mouseReleased(float x,float y,int button){
         if(button!=0)return false;
+        if(toast.release(x,y,System.nanoTime()))return true;
         boolean active=sliderDragging||pressedHit!=null;
         Hit released=pressedHit==null?null:hits.stream().filter(hit->hit.id().equals(pressedHit.id())).findFirst().orElse(null);
         if(released!=null&&!sliderDragging&&!"search".equals(released.id())&&released.contains(x,y)&&(!released.id().startsWith("title-")||!pressMoved))released.action().run();
@@ -932,6 +1089,7 @@ public final class HubView {
     }
     public boolean mouseDragged(float x,float y,int button,float dx,float dy){
         mx=x;my=y;
+        if(button==0&&toast.drag(y,System.nanoTime()))return true;
         if(button==0&&pressedId!=null&&Math.hypot(x-pressX,y-pressY)>6)pressMoved=true;
         if(sliderDragging&&button==0){setWelcomeFromX(x);return true;}return pressedId!=null;
     }
@@ -945,7 +1103,7 @@ public final class HubView {
     public boolean keyPressed(int keyCode,int scanCode,int modifiers) {
         if(keyCode==256)return dismissOverlay();
         if(isWelcomePlaying())return true;
-        if(keyCode==297){if(overlay==null&&reading==null)openOverlay("preview");else if("preview".equals(overlay))dismissOverlay();return true;}
+        if(keyCode==297&&!live()){if(overlay==null&&reading==null)openOverlay("preview");else if("preview".equals(overlay))dismissOverlay();return true;}
         if(keyCode==258) {
             keyboardFocus=true;
             if(hits.isEmpty())return true;int index=-1;
@@ -993,6 +1151,7 @@ public final class HubView {
         return page==1&&overlay==null&&reading==null&&"search".equals(focusId)&&!isWelcomePlaying();
     }
     public String pointerCursor() {
+        if(toast.pointer(mx,my))return "pointer";
         if(isWelcomePlaying())return "default";
         for(int i=hits.size()-1;i>=0;i--)if(hits.get(i).contains(mx,my))return hits.get(i).id().equals("search")?"text":"pointer";
         return "default";

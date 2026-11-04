@@ -28,6 +28,10 @@ public final class HubRenderer implements AutoCloseable {
 
     public void render(int framebufferWidth, int framebufferHeight, float panelX, float panelY,
                        float scale, Consumer<HubDraw> content) {
+        render(framebufferWidth,framebufferHeight,panelX,panelY,scale,false,content);
+    }
+    public void render(int framebufferWidth,int framebufferHeight,float panelX,float panelY,float scale,
+                       boolean blurGameScene,Consumer<HubDraw> content) {
         Objects.requireNonNull(content, "content");
         if (closed) throw new IllegalStateException("HubRenderer was closed");
         if (framebufferWidth <= 0 || framebufferHeight <= 0 || !Float.isFinite(scale) || scale <= 0) return;
@@ -66,6 +70,7 @@ public final class HubRenderer implements AutoCloseable {
             canvas.translate(panelX, panelY).scale(scale, scale);
             stage("capturing immutable GPU game backdrop");
             draw.begin(canvas,surface);
+            if(blurGameScene)draw.blurGameScene(3f*scale);
             checkFirstFrameGl("GPU backdrop");
             stage("drawing Hub content");
             content.accept(draw);

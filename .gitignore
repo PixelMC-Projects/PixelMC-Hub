@@ -10,6 +10,7 @@ public/assets/local-preview/
 Thumbs.db
 **/.gradle/
 minecraft/build/
+minecraft/logs/
 minecraft/run/
 minecraft/run-*/
 **/hs_err_pid*.log

@@ -30,15 +30,20 @@ public final class ClientBootstrap {
     private static HubView view;
     private static boolean shownThisLogin;
     private static boolean automaticPreviewOpened;
+    private static String activeScope="";
+    private static String fallbackScope="";
+    private static boolean scopeApplied;
+    private static final LoginNotice loginNotice=new LoginNotice();
 
     private ClientBootstrap() {}
 
     public static void initialize() {
+        com.pixelmc.hub.network.HubNetwork.clientReceiver(ClientHubSession::receive);
         MinecraftForge.EVENT_BUS.addListener(ClientBootstrap::tick);
         MinecraftForge.EVENT_BUS.addListener(ClientBootstrap::login);
         MinecraftForge.EVENT_BUS.addListener(ClientBootstrap::logout);
         MinecraftForge.EVENT_BUS.addListener(ClientBootstrap::screenInitialized);
-        LogUtils.getLogger().info("PixelMC-Hub native local preview initialized; press H in-game");
+        LogUtils.getLogger().info("PixelMC-Hub native player panel initialized; press H in-game");
     }
 
     private static HubPreferences preferences() {
@@ -49,18 +54,32 @@ public final class ClientBootstrap {
     private static void tick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft minecraft = Minecraft.getInstance();
+        if(minecraft.player!=null&&minecraft.getConnection()!=null&&loginNotice.claim(minecraft.getConnection().getConnection(),System.nanoTime())) {
+            Component key=OPEN.isUnbound()?Component.literal("未绑定"):OPEN.getTranslatedKeyMessage();
+            minecraft.player.sendSystemMessage(Component.literal("我们为你准备了一个全新的统一菜单")
+                .withStyle(style -> style.withColor(0xf2c66d).withBold(false))
+                .append(Component.literal("，在这里可以快捷管理您个人的").withStyle(style -> style.withColor(0xb6c4d7)))
+                .append(Component.literal("统计数据及收藏信息").withStyle(style -> style.withColor(0x5dd4ed)))
+                .append(Component.literal("，按下 ").withStyle(style -> style.withColor(0xb6c4d7)))
+                .append(key.copy().withStyle(style -> style.withColor(0x5dd4ed)))
+                .append(Component.literal(" 体验，").withStyle(style -> style.withColor(0xb6c4d7)))
+                .append(Component.literal("我们将持续丰富这个菜单的体验并探索更多功能。").withStyle(style -> style.withColor(0x80caa2))));
+        }
         if (Boolean.getBoolean("pixelmc.hub.autoOpen") && !automaticPreviewOpened
                 && minecraft.screen instanceof TitleScreen && minecraft.getOverlay() == null) {
             automaticPreviewOpened = true;
             open();
         }
         while (OPEN.consumeClick()) if (minecraft.player != null && minecraft.screen == null) open();
+        if(minecraft.screen instanceof HubScreen)ClientHubSession.tick();
     }
 
-    private static void login(ClientPlayerNetworkEvent.LoggingIn event) { resetSession(); }
+    private static void login(ClientPlayerNetworkEvent.LoggingIn event) { resetSession();loginNotice.start(event.getConnection(),System.nanoTime()); }
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) { resetSession(); }
     private static void resetSession() {
+        loginNotice.cancel();
         shownThisLogin = false;
+        ClientHubSession.close();activeScope="";fallbackScope="";scopeApplied=false;
         view = null;
         Minecraft.getInstance().execute(HubHead::clearSkin);
     }
@@ -75,12 +94,21 @@ public final class ClientBootstrap {
     public static void open() {
         Minecraft minecraft = Minecraft.getInstance();
         HubPreferences prefs = preferences();
-        if (view == null) view = new HubView();
+        boolean live=minecraft.player!=null;
+        if (view == null||!live) view = new HubView();
+        if(live&&fallbackScope.isEmpty())fallbackScope=scope(minecraft);
+        if(live&&activeScope.isEmpty())activeScope=fallbackScope;
+        String scope=live?activeScope:scope(minecraft);
+        if(!live)prefs.migrateLegacyDemo(scope);
+        prefs.select(scope);
+        prefs.fallbackScope(live?fallbackScope:"");
         view.setSettings(prefs.welcomeMode(), prefs.reducedMotion());
+        view.setCompact(prefs.compact());
         view.setPlayerName(minecraft.player == null ? minecraft.getUser().getName() : minecraft.player.getGameProfile().getName());
-        String scope = scope(minecraft);
-        boolean welcome = prefs.shouldPlay(scope, shownThisLogin);
+        boolean welcome = (!live||!scope.isEmpty())&&prefs.shouldPlay(scope, shownThisLogin);
         view.open(welcome);
+        if(live)ClientHubSession.open(view);
+        if(live){var server=minecraft.getCurrentServer();view.setConnection(server==null?"本地存档":server.name,server==null?null:server.getIconBytes());}
         minecraft.setScreen(new HubScreen(view, scope, welcome, minecraft.screen));
     }
 
@@ -88,12 +116,26 @@ public final class ClientBootstrap {
         HubPreferences prefs = preferences();
         prefs.setWelcomeMode(current.welcomeMode());
         prefs.setReducedMotion(current.reducedMotion());
+        prefs.setCompact(current.compact());
         prefs.save();
     }
 
     static void markWelcomeSeen(String scope) {
         shownThisLogin = true;
         preferences().markSeen(scope);
+    }
+    static String activeScope(){return activeScope;}
+    static void acceptScope(com.google.gson.JsonObject snapshot) {
+        try {
+            var player=snapshot.getAsJsonObject("player");var server=snapshot.getAsJsonObject("scope");
+            String identity=player.get("uuid").getAsString()+"\n"+server.get("serverId").getAsString()+"\n"+server.get("archiveId").getAsString();
+            String resolved=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(identity.getBytes(StandardCharsets.UTF_8)));
+            if(resolved.equals(activeScope)&&scopeApplied)return;
+            HubPreferences prefs=preferences();persist(view);prefs.copyScope(activeScope,resolved);
+            activeScope=resolved;scopeApplied=true;prefs.select(resolved);prefs.fallbackScope(fallbackScope);
+            view.setSettings(prefs.welcomeMode(),prefs.reducedMotion());view.setCompact(prefs.compact());
+            if(shownThisLogin)prefs.markSeen(resolved);prefs.save();
+        }catch(Exception invalid){LogUtils.getLogger().debug("PixelMC-Hub stable player scope unavailable",invalid);}
     }
 
     private static String scope(Minecraft minecraft) {

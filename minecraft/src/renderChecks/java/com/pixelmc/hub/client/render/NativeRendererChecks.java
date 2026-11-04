@@ -85,7 +85,7 @@ public final class NativeRendererChecks {
         glClearColor(0.12f, 0.22f, 0.32f, 1); glClear(GL_COLOR_BUFFER_BIT);
         glEnable(GL_SCISSOR_TEST); glScissor(200, 100, 20, 20);
         glClearColor(1, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); glDisable(GL_SCISSOR_TEST);
-        renderer.render(640, 480, 10, 10, 0.5f, d -> {});
+        renderer.render(640, 480, 10, 10, 0.5f, d -> d.blurBackdrop(0,0,1260,850,0,24,1));
         try (MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer pixel = stack.malloc(4);
             glReadPixels(210, 110, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);

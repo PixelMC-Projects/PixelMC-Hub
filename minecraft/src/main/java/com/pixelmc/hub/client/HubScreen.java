@@ -16,7 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
 
-/** Native GPU composition and input bridge; no browser, HTTP listener or gameplay mutations. */
+/** Native GPU composition and input bridge. Player requests use the authenticated optional channel. */
 public final class HubScreen extends Screen {
     private final HubView view;
     private final String scope;
@@ -31,6 +31,7 @@ public final class HubScreen extends Screen {
     private long lastSkinAttempt;
     private long firstFrameAt;
     private boolean automaticScreenshot;
+    private boolean welcomeMarked;
     private final PanoramaRenderer menuPanorama = new PanoramaRenderer(
         new CubeMap(new ResourceLocation("textures/gui/title/background/panorama")));
     private final float[] contentScaleX = {1}, contentScaleY = {1};
@@ -74,14 +75,17 @@ public final class HubScreen extends Screen {
         try {
             capturePlayerSkin();
             if (renderer == null) renderer = new HubRenderer();
-            renderer.render(framebufferWidth, framebufferHeight, panelX, panelY, panelScale,
+            renderer.render(framebufferWidth, framebufferHeight, panelX, panelY, panelScale,minecraft.level!=null,
                 draw -> view.render(draw, localX, localY, System.nanoTime()));
             updateCursor(view.pointerCursor());
             if (firstFrame) {
                 firstFrame = false;
                 firstFrameAt = System.nanoTime();
-                if (welcomeRequested && !view.reducedMotion()) ClientBootstrap.markWelcomeSeen(scope);
                 LogUtils.getLogger().info("PixelMC-Hub native frame rendered: {}x{}, logical scale {}", framebufferWidth, framebufferHeight, panelScale);
+            }
+            if(!welcomeMarked&&view.isWelcomePlaying()) {
+                welcomeMarked=true;
+                ClientBootstrap.markWelcomeSeen(minecraft.player==null?scope:ClientBootstrap.activeScope());
             }
             if (Boolean.getBoolean("pixelmc.hub.capturePreview") && !automaticScreenshot && !view.isWelcomePlaying()
                     && System.nanoTime() - firstFrameAt > 4_000_000_000L) {
@@ -169,6 +173,7 @@ public final class HubScreen extends Screen {
     @Override public boolean isPauseScreen() { return false; }
     @Override public void onClose() { ClientBootstrap.persist(view); minecraft.setScreen(previous); }
     @Override public void removed() {
+        ClientHubSession.close();
         ClientBootstrap.persist(view);
         updateCursor("default");
         if (handCursor != 0) { GLFW.glfwDestroyCursor(handCursor); handCursor = 0; }

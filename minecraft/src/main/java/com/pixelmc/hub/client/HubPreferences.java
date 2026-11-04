@@ -16,8 +16,12 @@ import java.util.Set;
 /** Local presentation preferences only; no gameplay or remote credentials. */
 final class HubPreferences {
     private final Path path;
-    private final Set<String> seenScopes = new LinkedHashSet<>();
-    private String welcomeMode = "always";
+    private final JsonObject scopes = new JsonObject();
+    private JsonObject legacyDemo;
+    private String scope="";
+    private String fallbackScope="";
+    private boolean seen,compact;
+    private String welcomeMode = "login";
     private boolean reducedMotion;
 
     HubPreferences(Path path) {
@@ -25,38 +29,66 @@ final class HubPreferences {
         if (!Files.isRegularFile(path)) return;
         try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             JsonObject data = JsonParser.parseReader(reader).getAsJsonObject();
-            if (data.has("welcomeMode")) setWelcomeMode(data.get("welcomeMode").getAsString());
-            if (data.has("reducedMotion")) reducedMotion = data.get("reducedMotion").getAsBoolean();
-            if (data.has("seenScopes")) for (var scope : data.getAsJsonArray("seenScopes")) {
-                String value = scope.getAsString();
-                if (value.matches("[a-f0-9]{64}")) seenScopes.add(value);
-            }
+            if(data.has("legacyDemo")&&data.get("legacyDemo").isJsonObject())legacyDemo=data.getAsJsonObject("legacyDemo");
+            else if(data.has("welcomeMode"))legacyDemo=data.deepCopy();
+            if(data.has("scopes")&&data.get("scopes").isJsonObject())
+                for(var entry:data.getAsJsonObject("scopes").entrySet())if(entry.getKey().matches("[a-f0-9]{64}")&&entry.getValue().isJsonObject())scopes.add(entry.getKey(),entry.getValue());
         } catch (Exception exception) {
             LogUtils.getLogger().warn("PixelMC-Hub preferences could not be read; using safe local defaults", exception);
         }
     }
 
+    void select(String value) {
+        scope=value==null?"":value;fallbackScope="";welcomeMode="login";reducedMotion=false;seen=false;compact=false;
+        if(scopes.has(scope)) {
+            JsonObject entry=scopes.getAsJsonObject(scope);
+            if(entry.has("welcomeMode"))setWelcomeMode(entry.get("welcomeMode").getAsString());
+            reducedMotion=entry.has("reducedMotion")&&entry.get("reducedMotion").getAsBoolean();
+            seen=entry.has("seen")&&entry.get("seen").getAsBoolean();compact=entry.has("compact")&&entry.get("compact").getAsBoolean();
+        }
+    }
+    void migrateLegacyDemo(String scope) {
+        if(legacyDemo==null||scopes.has(scope))return;
+        JsonObject entry=new JsonObject();entry.addProperty("welcomeMode",legacyDemo.has("welcomeMode")?legacyDemo.get("welcomeMode").getAsString():"login");
+        entry.addProperty("reducedMotion",legacyDemo.has("reducedMotion")&&legacyDemo.get("reducedMotion").getAsBoolean());
+        boolean seen=false;if(legacyDemo.has("seenScopes"))for(var value:legacyDemo.getAsJsonArray("seenScopes"))if(value.getAsString().equals(scope))seen=true;
+        entry.addProperty("seen",seen);scopes.add(scope,entry);
+    }
+    void copyScope(String from,String to) {
+        if(!scopes.has(to)&&scopes.has(from)) {
+            JsonObject source=scopes.getAsJsonObject(from);
+            if(source.has("canonicalOrigin")&&!source.get("canonicalOrigin").getAsString().equals(to))return;
+            JsonObject copy=source.deepCopy();copy.remove("canonicalOrigin");scopes.add(to,copy);
+        }
+    }
+    void fallbackScope(String value){fallbackScope=value==null?"":value;}
+    boolean compact(){return compact;}
+    void setCompact(boolean value){compact=value;}
     String welcomeMode() { return welcomeMode; }
     boolean reducedMotion() { return reducedMotion; }
-    void setWelcomeMode(String mode) { welcomeMode = Set.of("once", "login", "always").contains(mode) ? mode : "always"; }
+    void setWelcomeMode(String mode) { welcomeMode = Set.of("once", "login", "always").contains(mode) ? mode : "login"; }
     void setReducedMotion(boolean value) { reducedMotion = value; }
     boolean shouldPlay(String scope, boolean shownThisLogin) {
         if (reducedMotion) return false;
         return switch (welcomeMode) {
-            case "once" -> !seenScopes.contains(scope);
+            case "once" -> !seen;
             case "login" -> !shownThisLogin;
             default -> true;
         };
     }
-    void markSeen(String scope) { if (seenScopes.add(scope)) save(); }
+    void markSeen(String scope) { if(this.scope.equals(scope)&&!scope.isEmpty()&&!seen){seen=true;save();} }
 
     void save() {
-        JsonObject data = new JsonObject();
-        data.addProperty("welcomeMode", welcomeMode);
-        data.addProperty("reducedMotion", reducedMotion);
-        JsonArray scopes = new JsonArray();
-        seenScopes.forEach(scopes::add);
-        data.add("seenScopes", scopes);
+        if(scope.isEmpty())return;
+        JsonObject entry=new JsonObject();entry.addProperty("welcomeMode",welcomeMode);entry.addProperty("reducedMotion",reducedMotion);
+        entry.addProperty("seen",seen);entry.addProperty("compact",compact);
+        if(scopes.has(scope)&&scopes.getAsJsonObject(scope).has("canonicalOrigin"))entry.add("canonicalOrigin",scopes.getAsJsonObject(scope).get("canonicalOrigin"));
+        scopes.add(scope,entry);
+        // The next login can honor once/login before asynchronous metadata arrives.
+        // Origin prevents this connection hint from seeding a different canonical archive.
+        if(!fallbackScope.isEmpty()&&!fallbackScope.equals(scope)){JsonObject hint=entry.deepCopy();hint.addProperty("canonicalOrigin",scope);scopes.add(fallbackScope,hint);}
+        JsonObject data = new JsonObject();data.addProperty("version",2);data.add("scopes",scopes);
+        if(legacyDemo!=null)data.add("legacyDemo",legacyDemo);
         Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
         try {
             Files.createDirectories(path.getParent());

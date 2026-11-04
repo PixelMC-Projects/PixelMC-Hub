@@ -13,8 +13,8 @@ authors="zhan_cpu / PixelMC Projects"
 displayTest="IGNORE_ALL_VERSION"
 description='''
 旅人手册：个人主页、称号与签笺的原生玩家面板。
-当前为本地客户端实验版；业务数据为演示，不连接管理后台。
-Native personal player hub. Local client prototype with sample gameplay data.
+可选的玩家客户端／服务端连接；服务端模块提供个人资料、称号与归档签笺。
+Optional native player hub and server bridge for personal statistics, titles and archived fortunes.
 '''
 
 [[dependencies.pixelmc_hub]]
@@ -22,11 +22,11 @@ modId="forge"
 mandatory=true
 versionRange="[47.3.33,)"
 ordering="NONE"
-side="CLIENT"
+side="BOTH"
 
 [[dependencies.pixelmc_hub]]
 modId="minecraft"
 mandatory=true
 versionRange="[1.20.1,1.20.2)"
 ordering="NONE"
-side="CLIENT"
+side="BOTH"

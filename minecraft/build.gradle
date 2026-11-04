@@ -10,7 +10,7 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle'
 
 group = 'com.pixelmc.hub'
-version = '0.1.0-native-prototype'
+version = '0.2.3-dev'
 base { archivesName = 'pixelmc-hub-forge-1.20.1' }
 java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
 
@@ -99,5 +99,68 @@ tasks.register('nativeLifecycleChecks', JavaExec) {
     dependsOn 'renderChecksClasses'
     classpath = sourceSets.renderChecks.runtimeClasspath
     mainClass = 'com.pixelmc.hub.client.render.NativeLifecycleChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.register('playerProtocolChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.network.PlayerProtocolChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('playerPreferenceChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.PreferenceChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('playerDataChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.ui.PlayerDataChecks'
+    if (project.hasProperty('hubSafeResponses')) args project.property('hubSafeResponses').toString()
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativePlayerChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativePlayerChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('acceptanceRefreshChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.AcceptanceRefreshChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('acceptanceCollectionChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.ui.AcceptanceCollectionChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativeAcceptanceChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeAcceptanceChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.register('acceptancePolishChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.ui.AcceptancePolishChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('loginNoticeChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.LoginNoticeChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativePolishChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.ui.NativePolishChecks'
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
 }

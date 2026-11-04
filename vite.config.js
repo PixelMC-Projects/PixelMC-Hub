@@ -10,6 +10,11 @@ const licenseFiles = {
   "React.txt": "node_modules/react/LICENSE",
   "React-DOM.txt": "node_modules/react-dom/LICENSE",
   "Lucide.txt": "node_modules/lucide-react/LICENSE",
+  "Motion.txt": "node_modules/motion/LICENSE.md",
+  "Framer-Motion.txt": "node_modules/framer-motion/LICENSE.md",
+  "Motion-DOM.txt": "node_modules/motion-dom/LICENSE.md",
+  "Motion-Utils.txt": "node_modules/motion-utils/LICENSE.md",
+  "tslib.txt": "node_modules/tslib/LICENSE.txt",
 };
 export default defineConfig({
   plugins: [react(), {

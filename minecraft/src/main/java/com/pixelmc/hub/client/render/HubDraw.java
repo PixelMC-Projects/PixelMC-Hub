@@ -243,6 +243,7 @@ public final class HubDraw implements AutoCloseable {
     public void blurBackdrop(float x,float y,float w,float h,float radius,float blurPx,float alpha) {
         requireGlass(); glass.blur(x,y,w,h,radius,blurPx,alpha);
     }
+    public void blurGameScene(float physicalSigma){requireGlass();glass.sceneBlur(physicalSigma);}
     public void captureGlassBackdrop() { requireGlass(); glass.capture(); }
     public void captureGlassBackdrop(float x,float y,float w,float h) { requireGlass();glass.capture(x,y,w,h); }
     public void useGameBackdrop() { requireGlass(); glass.useGame(); }
@@ -471,6 +472,19 @@ public final class HubDraw implements AutoCloseable {
         canvas().drawTextBlob(tracked(text,size,weight,tracking,serif).blob,x,baseline,fill(color));
     }
 
+    /** Minecraft RichText italic is an oblique glyph; bold uses the actual weighted font. */
+    public void richGlyph(String text,float x,float baseline,float size,int color,boolean bold,boolean italic,boolean underline,boolean strike) {
+        int weight=bold?700:400;float width=textWidth(text,size,weight);
+        canvas().save();
+        try {
+            canvas().translate(x,baseline);if(italic)canvas().skew(-.2f,0);
+            text(text,0,0,size,color,weight);
+        } finally {canvas().restore();}
+        float stroke=Math.max(.8f,size/16);
+        if(underline)line(x,baseline+size*.12f,x+width,baseline+size*.12f,stroke,color);
+        if(strike)line(x,baseline-size*.3f,x+width,baseline-size*.3f,stroke,color);
+    }
+
     public void textGradient(String text,float x,float baseline,float size,int weight,float tracking,float angleDeg,int[] colors,float[] stops,boolean serif) {
         if(text==null||text.isEmpty()||size<=0)return;
         float width=textWidthTracked(text,size,weight,tracking,serif),height=size*1.2f;
@@ -529,9 +543,17 @@ public final class HubDraw implements AutoCloseable {
             asset.equals("textures/ui/fortune-barrel.png") || asset.equals("textures/ui/collection-chest.png") ? SamplingMode.DEFAULT : SMOOTH_SAMPLING,
             fill(0xFFFFFFFF).setAlphaf(Math.min(1, alpha)), false);
     }
+    public void serverIcon(byte[] png,float x,float y,float size) {
+        if(png==null||png.length<24||png.length>65536)return;
+        java.nio.ByteBuffer header=java.nio.ByteBuffer.wrap(png);
+        if(header.getLong()!=0x89504e470d0a1a0aL||header.getInt(16)!=64||header.getInt(20)!=64)return;
+        Image image=images.computeIfAbsent("memory:server-icon",ignored->Image.makeFromEncoded(png));
+        canvas().drawImageRect(image,Rect.makeWH(64,64),Rect.makeXYWH(x,y,size,size),SMOOTH_SAMPLING,fill(0xffffffff),false);
+    }
 
     public void icon(String name, float x, float y, float size, int color) {
         if (size <= 0) return;
+        if(name.equals("personal")||name.endsWith("/personal"))name=name.substring(0,name.length()-8)+"user-round";
         Image image = imageResource("textures/icons/" + name + ".png");
         try (ColorFilter tint = ColorFilter.makeBlend(color, BlendMode.SRC_IN)) {
             canvas().drawImageRect(image, Rect.makeWH(image.getWidth(), image.getHeight()), Rect.makeXYWH(x, y, size, size),

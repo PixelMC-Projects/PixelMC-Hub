@@ -37,6 +37,20 @@
       "source": "https://reactbits.dev/r/TiltedCard-JS-CSS.json",
       "upstreamSha256": "a2e16f0a1ba2fda592eecce15f05870f95b2f75117b1476c4be9fe2cf59a6ae5",
       "adapted": true
+    },
+    {
+      "file": "SwipeToast.jsx",
+      "source": "https://github.com/DavidHDev/react-bits/blob/main/src/content/Micro/SwipeToast/SwipeToast.jsx",
+      "upstreamSha256": "b678cc555f056860cc6ff3e587e7b4c46feefb757920ad95e14aee98d32128f5",
+      "retrieved": "2026-11-04",
+      "adapted": true
+    },
+    {
+      "file": "SwipeToast.css",
+      "source": "https://github.com/DavidHDev/react-bits/blob/main/src/content/Micro/SwipeToast/SwipeToast.css",
+      "upstreamSha256": "4a69286a21c42d95ff6d1e48510bc514894d70abfa26fe47595d9d4ce6d11b81",
+      "retrieved": "2026-11-04",
+      "adapted": true
     }
   ]
 }

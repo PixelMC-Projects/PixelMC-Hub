@@ -76,6 +76,23 @@ final class HubGlass implements AutoCloseable {
         current=new Backdrop(image,originX+l,originY+t);frameBackdrops.add(current);
     }
     void useGame() { current = game; }
+    /** Reuses the existing game snapshot and filter pool. Only 1/16-resolution pixels are filtered. */
+    void sceneBlur(float physicalSigma) {
+        if(game==null||physicalSigma<=0)return;
+        int width=Math.max(1,(game.image.getWidth()+3)/4),height=Math.max(1,(game.image.getHeight()+3)/4);
+        if(game.sceneBlur==null) {
+            Surface filtered=filterTarget(width,height);
+            float sigma=Math.max(.25f,physicalSigma/4);
+            try(ImageFilter blur=ImageFilter.makeBlur(sigma,sigma,FilterTileMode.CLAMP);Paint filter=new Paint().setImageFilter(blur)) {
+                Canvas reduced=filtered.getCanvas();reduced.clear(0);
+                reduced.drawImageRect(game.image,Rect.makeWH(game.image.getWidth(),game.image.getHeight()),Rect.makeWH(width,height),SamplingMode.LINEAR,filter,false);
+                game.sceneBlur=filtered.makeImageSnapshot();
+            }
+        }
+        int save=canvas.save();
+        try {canvas.resetMatrix();canvas.drawImageRect(game.sceneBlur,Rect.makeWH(width,height),Rect.makeWH(game.image.getWidth(),game.image.getHeight()),SamplingMode.LINEAR,paint.reset(),false);}
+        finally {canvas.restoreToCount(save);paint.reset();}
+    }
     private boolean allowCapture(long pixels) {
         if(captures<MAX_CAPTURES&&capturePixels+pixels<=MAX_CAPTURE_PIXELS)return true;
         if(!budgetWarning) {
@@ -269,11 +286,12 @@ final class HubGlass implements AutoCloseable {
         paint.close(); surfaceEffect.close(); iconEffect.close(); decorationEffect.close();
     }
     static final class Backdrop implements AutoCloseable {
+        Image sceneBlur;
         final Image image;
         final float originX, originY;
         final Map<BlurKey, Sample> blurImages = new LinkedHashMap<>();
         Backdrop(Image value, float x, float y) { image = value; originX=x; originY=y; }
-        public void close() { blurImages.values().forEach(value->value.image.close()); blurImages.clear(); image.close(); }
+        public void close() { blurImages.values().forEach(value->value.image.close()); blurImages.clear();if(sceneBlur!=null){sceneBlur.close();sceneBlur=null;} image.close(); }
     }
     private record Sample(Image image,float originX,float originY) {}
     private record BlurKey(float sigma,int left,int top,int right,int bottom) {}
