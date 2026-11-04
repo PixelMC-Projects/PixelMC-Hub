@@ -94,3 +94,10 @@ tasks.register('nativeRendererChecks', JavaExec) {
     mainClass = 'com.pixelmc.hub.client.render.NativeRendererChecks'
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
 }
+
+tasks.register('nativeLifecycleChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeLifecycleChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}

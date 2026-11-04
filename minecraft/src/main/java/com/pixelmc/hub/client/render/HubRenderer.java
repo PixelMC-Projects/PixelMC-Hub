@@ -72,12 +72,19 @@ public final class HubRenderer implements AutoCloseable {
             stage("Hub content scheduled");
         } finally {
             try {
-                if (canvas != null) canvas.restoreToCount(saveCount);
-                if (draw != null) draw.end();
-                if (context != null && surface != null) {
-                    stage("flushing Skija GPU commands");
-                    context.flushAndSubmit(surface);
-                    checkFirstFrameGl("GPU flush");
+                try {
+                    try {
+                        // Nested opacity targets still rely on their parents' current clips/save counts.
+                        if (draw != null) draw.end();
+                    } finally {
+                        if (canvas != null) canvas.restoreToCount(saveCount);
+                    }
+                } finally {
+                    if (context != null && surface != null) {
+                        stage("flushing Skija GPU commands");
+                        context.flushAndSubmit(surface);
+                        checkFirstFrameGl("GPU flush");
+                    }
                 }
             } finally {
                 previous.restore();
@@ -152,11 +159,24 @@ public final class HubRenderer implements AutoCloseable {
         boolean hasContext = glfwGetCurrentContext() == glContext;
         GlState previous = hasContext ? new GlState() : null;
         try {
-            if (!hasContext) context.abandon();
-            if (draw != null) draw.close();
-            releaseTarget();
-            context.close();
+            try {
+                if (hasContext) {
+                    // Minecraft has used GL since our last frame. Invalidate Skia's cached state
+                    // before teardown, and finish queued work before releasing our FBO and surfaces.
+                    // This wait runs only on close, never on the normal frame path.
+                    context.resetGLAll();
+                    context.flushAndSubmit(true);
+                } else context.abandon();
+            } finally {
+                try {
+                    if (draw != null) draw.close();
+                } finally {
+                    try { releaseTarget(); }
+                    finally { context.close(); }
+                }
+            }
         } finally {
+            draw = null; context = null;
             if (previous != null) previous.restore();
         }
     }

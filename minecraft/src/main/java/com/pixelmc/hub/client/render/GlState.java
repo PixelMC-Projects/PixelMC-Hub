@@ -12,7 +12,9 @@ import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL21.*;
 import static org.lwjgl.opengl.GL30.*;
+import static org.lwjgl.opengl.GL32.*;
 import static org.lwjgl.opengl.GL33.*;
+import static org.lwjgl.opengl.GL40.*;
 
 /** Physical GL snapshot; bypasses Minecraft's caches, then restores the values those caches describe. */
 final class GlState {
@@ -25,6 +27,8 @@ final class GlState {
     private final int elementBuffer = glGetInteger(GL_ELEMENT_ARRAY_BUFFER_BINDING);
     private final int packBuffer = glGetInteger(GL_PIXEL_PACK_BUFFER_BINDING);
     private final int unpackBuffer = glGetInteger(GL_PIXEL_UNPACK_BUFFER_BINDING);
+    private final boolean indirectBuffers = GL.getCapabilities().OpenGL40 || GL.getCapabilities().GL_ARB_draw_indirect;
+    private final int indirectBuffer = indirectBuffers ? glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING) : 0;
     private final int activeTexture = glGetInteger(GL_ACTIVE_TEXTURE);
     private final int[] viewport = integers(GL_VIEWPORT, 4);
     private final int[] scissorBox = integers(GL_SCISSOR_BOX, 4);
@@ -51,7 +55,7 @@ final class GlState {
     private final int[] samplers = new int[texture2d.length];
     private final int[] capabilities = {GL_BLEND, GL_DEPTH_TEST, GL_STENCIL_TEST, GL_SCISSOR_TEST, GL_CULL_FACE,
         GL_FRAMEBUFFER_SRGB, GL_MULTISAMPLE, GL_DITHER, GL_POLYGON_OFFSET_FILL, GL_RASTERIZER_DISCARD,
-        GL_SAMPLE_ALPHA_TO_COVERAGE, GL_SAMPLE_COVERAGE};
+        GL_SAMPLE_ALPHA_TO_COVERAGE, GL_SAMPLE_COVERAGE, GL_PROGRAM_POINT_SIZE};
     private final boolean[] enabled = new boolean[capabilities.length];
 
     GlState() {
@@ -82,6 +86,7 @@ final class GlState {
         if (vertexArray != 0 || GL.getCapabilities().GL_ARB_compatibility) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, packBuffer);
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, unpackBuffer);
+        if (indirectBuffers) glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuffer);
         for (int i = 0; i < texture2d.length; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, texture2d[i]);

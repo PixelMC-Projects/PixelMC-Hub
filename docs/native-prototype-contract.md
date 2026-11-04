@@ -10,6 +10,8 @@ Parallel ownership:
 
 Coordinates: fixed logical panel 1260 x 850. Root centers the panel and caps its size using monitor content scale (1 to 1.75), with a maximum occupancy of 90% viewport width and 84% height. Fullscreen does not enlarge the panel to fill the monitor. UI mouse coordinates use the inverse of this same scale. HubDraw uses top-left shapes, text baseline coordinates, ARGB ints, floating point coordinates. Rendering runs on Minecraft render thread, canvas reset/GL state restore owned by renderer. A local menu preview renders vanilla Minecraft panorama; when in a world, glass samples the actual scene already drawn by Minecraft.
 
+Lifecycle: unwind HubDraw's nested opacity targets before restoring the root canvas; restore root/flush/restore Minecraft GL state in independent finally blocks. Preserve program point size and draw-indirect buffer binding alongside framebuffer, vertex, texture, pixel-store, and blend state. At renderer close, invalidate Skia's cached GL state and synchronously submit pending work before releasing owned resources, the borrowed target wrapper and private FBO, and finally the Skia context. The wait is only at teardown, not every frame. Run `nativeLifecycleChecks` for a hidden OpenGL 4.6/4K reopen and exception-recovery check; it does not launch Minecraft or establish game compatibility.
+
 Renderer public API (agent may add methods, notify coordinator before changing signatures):
 ```java
 // com.pixelmc.hub.client.render
