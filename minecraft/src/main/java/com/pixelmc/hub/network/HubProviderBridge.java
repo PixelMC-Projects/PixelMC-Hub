@@ -21,7 +21,7 @@ public final class HubProviderBridge {
             catch (ReflectiveOperationException | LinkageError | RuntimeException unavailable) { state.addProperty("version", 0); state.addProperty("available", false); }
             modules.add(module, state);
         });
-        JsonObject result = new JsonObject(); result.add("modules", modules); return result;
+        JsonObject result = new JsonObject(); result.add("modules", modules); result.addProperty("sessionSync",1); return result;
     }
     private static int version(String name) throws ReflectiveOperationException {
         return ((Number) Class.forName(name).getMethod("protocolVersion").invoke(null)).intValue();
@@ -30,6 +30,11 @@ public final class HubProviderBridge {
         if (!HubProtocol.allowed(module, action)) return CompletableFuture.failedFuture(new IllegalArgumentException("不支持的玩家操作"));
         try { HubProtocol.payload(module, action, payload); }
         catch (RuntimeException error) { return CompletableFuture.failedFuture(error); }
+        if(module.equals("fortunes")&&action.equals("calendarSync")) {
+            JsonObject query=HubProtocol.payload(module,action,payload),plain=new JsonObject();plain.add("month",query.get("month"));
+            JsonObject known=HubCalendarDelta.parseKnown(query.get("month").getAsString(),query.get("known").getAsString());
+            return request(player,module,"calendar",plain.toString()).thenApply(value->HubCalendarDelta.encode(HubProtocol.object(value,HubProtocol.RESPONSE_BYTES),known).toString());
+        }
         try {
             return CompletableFuture.supplyAsync(() -> {
                 try {

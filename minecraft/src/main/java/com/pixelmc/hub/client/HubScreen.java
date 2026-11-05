@@ -173,7 +173,8 @@ public final class HubScreen extends Screen {
     @Override public boolean isPauseScreen() { return false; }
     @Override public void onClose() { ClientBootstrap.persist(view); minecraft.setScreen(previous); }
     @Override public void removed() {
-        ClientHubSession.close();
+        // Connection-owned data stays warm while this screen and its GPU resources close.
+        ClientHubSession.panelClosed();
         ClientBootstrap.persist(view);
         updateCursor("default");
         if (handCursor != 0) { GLFW.glfwDestroyCursor(handCursor); handCursor = 0; }

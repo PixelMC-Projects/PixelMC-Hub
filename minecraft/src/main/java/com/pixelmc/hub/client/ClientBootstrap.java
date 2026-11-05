@@ -33,6 +33,7 @@ public final class ClientBootstrap {
     private static String activeScope="";
     private static String fallbackScope="";
     private static boolean scopeApplied;
+    private static boolean preloadOnNextTick;
     private static final LoginNotice loginNotice=new LoginNotice();
 
     private ClientBootstrap() {}
@@ -54,6 +55,7 @@ public final class ClientBootstrap {
     private static void tick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft minecraft = Minecraft.getInstance();
+        if(preloadOnNextTick&&minecraft.player!=null&&minecraft.getConnection()!=null){preloadOnNextTick=false;prepareLive(minecraft);}
         if(minecraft.player!=null&&minecraft.getConnection()!=null&&loginNotice.claim(minecraft.getConnection().getConnection(),System.nanoTime())) {
             Component key=OPEN.isUnbound()?Component.literal("未绑定"):OPEN.getTranslatedKeyMessage();
             minecraft.player.sendSystemMessage(Component.literal("我们为你准备了一个全新的统一菜单")
@@ -73,13 +75,14 @@ public final class ClientBootstrap {
             open();
         }
         while (OPEN.consumeClick()) if (minecraft.player != null && minecraft.screen == null) open();
-        if(minecraft.screen instanceof HubScreen)ClientHubSession.tick();
+        if(minecraft.player!=null)ClientHubSession.tick();
     }
 
-    private static void login(ClientPlayerNetworkEvent.LoggingIn event) { resetSession();loginNotice.start(event.getConnection(),System.nanoTime()); }
+    private static void login(ClientPlayerNetworkEvent.LoggingIn event) { resetSession();preloadOnNextTick=true;loginNotice.start(event.getConnection(),System.nanoTime()); }
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) { resetSession(); }
     private static void resetSession() {
         loginNotice.cancel();
+        preloadOnNextTick=false;
         shownThisLogin = false;
         ClientHubSession.close();activeScope="";fallbackScope="";scopeApplied=false;
         view = null;
@@ -95,6 +98,7 @@ public final class ClientBootstrap {
 
     public static void open() {
         Minecraft minecraft = Minecraft.getInstance();
+        if(minecraft.player!=null)prepareLive(minecraft);
         HubPreferences prefs = preferences();
         boolean live=minecraft.player!=null;
         if (view == null||!live) view = new HubView();
@@ -109,9 +113,19 @@ public final class ClientBootstrap {
         view.setPlayerName(minecraft.player == null ? minecraft.getUser().getName() : minecraft.player.getGameProfile().getName());
         boolean welcome = (!live||!scope.isEmpty())&&prefs.shouldPlay(scope, shownThisLogin);
         view.open(welcome);
-        if(live)ClientHubSession.open(view);
+        if(live){ClientHubSession.open(view);ClientHubSession.panelOpened();}
         if(live){var server=minecraft.getCurrentServer();view.setConnection(server==null?"本地存档":server.name,server==null?null:server.getIconBytes());}
         minecraft.setScreen(new HubScreen(view, scope, welcome, minecraft.screen));
+    }
+
+    private static void prepareLive(Minecraft minecraft) {
+        if(view==null)view=new HubView();
+        if(fallbackScope.isEmpty())fallbackScope=scope(minecraft);
+        if(activeScope.isEmpty())activeScope=fallbackScope;
+        HubPreferences prefs=preferences();prefs.select(activeScope);prefs.fallbackScope(fallbackScope);
+        view.setSettings(prefs.welcomeMode(),prefs.reducedMotion());view.setCompact(prefs.compact());
+        view.setPlayerName(minecraft.player.getGameProfile().getName());
+        ClientHubSession.open(view);
     }
 
     static void persist(HubView current) {

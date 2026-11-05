@@ -68,6 +68,7 @@ public final class HubView {
         month=YearMonth.from(data.today);selectedDate=data.today;catalogueComplete=false;titleDraft=null;calendarLoading=true;pendingModules.clear();
         for(String module:List.of("manager","titles","fortunes"))moduleStates.put(module,"正在读取玩家资料…");
     }
+    public void clearSession(){live((module,action,payload)->{});reading=null;toast.clear();}
     public void moduleStatus(String module,String status){
         moduleStates.put(module,status);
         if(!status.isEmpty()){
@@ -81,6 +82,7 @@ public final class HubView {
     public void feedbackSuccess(String value){toast.show(value,HubToast.Kind.SUCCESS,System.nanoTime());}
     public String currentMonth(){return month.toString();}
     public boolean needsCalendar(){return page==2;}
+    public boolean hasModuleSnapshot(String module){return hasSnapshot(module);}
     public String dayIdentity(){return (data.fortunesLoaded?data.timezone:data.managerTimezone)+"|"+data.today;}
     public long nextMidnightEpochMillis(){return data.today.plusDays(1).atStartOfDay(data.fortunesLoaded?data.zone():data.profileZone()).toInstant().toEpochMilli();}
     public void advanceDay(long serverMillis){if(!data.fortunesLoaded)data.today=java.time.Instant.ofEpochMilli(serverMillis).atZone(data.profileZone()).toLocalDate();}
@@ -126,6 +128,9 @@ public final class HubView {
         if(module.equals("fortunes")) {
             if(action.equals("calendar")) {
                 data.calendar(result);if(month.toString().equals(HubData.string(result,"month",""))){calendarLoading=false;if(chooseLatestOnCalendar)selectedDate=archive().keySet().stream().filter(date->YearMonth.from(date).equals(month)).max(Comparator.naturalOrder()).orElse(month.atDay(1));chooseLatestOnCalendar=false;}
+                if(reading!=null&&YearMonth.from(reading.date()).toString().equals(HubData.string(result,"month",""))) {
+                    HubData.Entry updated=data.archive.get(reading.date());if(updated==null)dismissOverlay();else reading=updated;
+                }
             } else if(action.equals("read")) {
                 HubData.Entry record=data.record(result.has("record")?result.get("record"):result);if(record!=null)showReading(record);
             } else {
@@ -1050,9 +1055,9 @@ public final class HubView {
     }
     private int welcomeIndex(){return Math.max(0,List.of("once","login","always").indexOf(welcomeMode));}
     private void notify(String value){toast.show(value,HubToast.Kind.INFO,System.nanoTime());}
-    private void navigate(int destination){if(destination==0||destination==1)request("titles","refresh",new JsonObject());if(destination==0)request("fortunes","refresh",new JsonObject());if(destination==2)calendarRequest();page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;if(destination==2)monthAt=pageAt;if(destination==0)tilts.remove("medallion");}
+    private void navigate(int destination){if((destination==0||destination==1)&&!hasSnapshot("titles"))request("titles","snapshot",new JsonObject());if(destination==0&&!hasSnapshot("fortunes"))request("fortunes","snapshot",new JsonObject());if(destination==2)calendarRequest();page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;if(destination==2)monthAt=pageAt;if(destination==0)tilts.remove("medallion");}
     private void openOverlay(String value){restoreFocus=focusId;overlay=value;reading=null;focusId="modal-close";sliderDragging=false;modalAt=System.nanoTime();hits.clear();}
-    private void openReading(HubData.Entry value){if(value==null)return;if(live()){JsonObject p=new JsonObject();p.addProperty("date",value.date().toString());request("fortunes","read",p);return;}showReading(value);}
+    private void openReading(HubData.Entry value){if(value!=null)showReading(value);}
     private void showReading(HubData.Entry value){restoreFocus=focusId;reading=value;overlay=null;focusId="modal-close";modalAt=System.nanoTime();hits.clear();}
     public boolean dismissOverlay() {
         if(overlay==null&&reading==null)return false;

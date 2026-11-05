@@ -14,9 +14,9 @@ public final class HubProtocol {
         "titles", "cn.pixelmc.memorialtitles.api.PlayerHubApi",
         "fortunes", "cn.pixelmc.dailyfortunes.api.PlayerHubApi");
     private static final Map<String, Set<String>> ACTIONS = Map.of(
-        "hub", Set.of("discover"), "manager", Set.of("snapshot"),
+        "hub", Set.of("discover", "subscribe"), "manager", Set.of("snapshot"),
         "titles", Set.of("snapshot", "catalogue", "equip", "visibility", "displayPreferences"),
-        "fortunes", Set.of("snapshot", "calendar", "read", "feature"));
+        "fortunes", Set.of("snapshot", "calendar", "calendarSync", "read", "feature"));
     private HubProtocol() {}
     public static boolean allowed(String module, String action) {
         return ACTIONS.getOrDefault(module, Set.of()).contains(action);
@@ -39,17 +39,22 @@ public final class HubProtocol {
         if(!allowed(module,action))throw new IllegalArgumentException("不支持的玩家操作");
         JsonObject payload=object(json,REQUEST_BYTES);
         Set<String> fields=switch(action){
-            case "snapshot","discover" -> Set.of();
+            case "snapshot","discover","subscribe" -> Set.of();
             case "catalogue" -> Set.of("cursor","limit");
             case "equip" -> Set.of("title","expectedRevision");
             case "visibility" -> Set.of("visible","expectedRevision");
             case "displayPreferences" -> Set.of("head","chat","tab","expectedRevision");
             case "calendar" -> Set.of("month");
+            case "calendarSync" -> Set.of("month","known");
             case "read" -> Set.of("date");
             case "feature" -> Set.of("date","expectedRevision");
             default -> Set.of();
         };
         for(var entry:payload.entrySet())if(!fields.contains(entry.getKey())||!entry.getValue().isJsonPrimitive())throw new IllegalArgumentException("玩家操作包含不支持的字段");
+        if(action.equals("calendarSync")) {
+            if(!payload.keySet().equals(Set.of("month","known")))throw new IllegalArgumentException("签历同步参数不完整");
+            HubCalendarDelta.parseKnown(payload.get("month").getAsString(),payload.get("known").getAsString());
+        }
         return payload;
     }
 }

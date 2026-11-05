@@ -38,7 +38,7 @@ public final class AcceptanceRefreshChecks {
         tick(200);check(sent.size()==before+1&&last().action().equals("snapshot"),"Burst was not one merged refresh");
         JsonObject owned=PlayerDataChecks.titles();JsonArray one=new JsonArray();one.add(owned.getAsJsonArray("titles").get(0));owned.add("titles",one);reply(last(),owned);samePages(view,1);
         tick(120_000);before=sent.size();check(before==3,"Confirmed grant started a timer scan");
-        for(int i=0;i<30;i++)call(view,"navigate",new Class<?>[]{int.class},i%2);tick(200);check(sent.size()==before+1,"Navigation refresh was lost or unbounded");reply(last(),owned);samePages(view,1);
+        for(int i=0;i<30;i++)call(view,"navigate",new Class<?>[]{int.class},i%2);tick(200);check(sent.size()==before,"Cached navigation unexpectedly reloaded titles");samePages(view,1);
         // A read from before a local write cannot overwrite the committed new state.
         tick(1000);session.action("titles","snapshot",new JsonObject());HubNetwork.Request stale=last();
         JsonObject mutation=new JsonObject();mutation.addProperty("visible",false);mutation.addProperty("expectedRevision","t1");session.action("titles","visibility",mutation);tick(600);HubNetwork.Request write=last();check(write.action().equals("visibility"),"Write not dispatched");
@@ -64,6 +64,6 @@ public final class AcceptanceRefreshChecks {
         ClientHubSession.receive(new HubNetwork.Response(discovery.session(),discovery.id(),"hub","discover",false,"请求超时"));before=sent.size();tick(120_000);check(sent.size()==before,"Discovery error started automatic polling");
         call(discovering,"navigate",new Class<?>[]{int.class},1);HubNetwork.Request repeated=last();check(repeated.action().equals("discover")&&repeated.id()!=discovery.id(),"Navigation could not retry failed discovery");
         JsonObject modules=new JsonObject();for(String name:List.of("titles","manager","fortunes")){JsonObject item=new JsonObject();item.addProperty("available",name.equals("titles"));modules.add(name,item);}JsonObject discovered=new JsonObject();discovered.add("modules",modules);reply(repeated,discovered);tick(600);check(last().module().equals("titles")&&last().action().equals("snapshot"),"Rediscovery did not read recovered provider");reply(last(),empty());samePages(discovering,0);ClientHubSession.close();
-        System.out.println("PASS: no idle scanning/retries, explicit readiness retry, coalesced change/navigation refresh, shared home/title data, safe writes/paging, stale replies and closed hooks");
+        System.out.println("PASS: no idle scanning/retries, explicit readiness retry, change-only refresh and cached navigation, shared home/title data, safe writes/paging, stale replies and logout hooks");
     }
 }

@@ -17,7 +17,7 @@ import static org.lwjgl.opengl.GL30.*;
 
 /** Synthetic hidden rendering only. Does not start or control Minecraft. */
 public final class NativePolishChecks {
-    private static final Path OUTPUT=Path.of("../.runtime/native-previews/polish-0.2.4").toAbsolutePath().normalize();
+    private static final Path OUTPUT=Path.of("../.runtime/native-previews/polish-0.2.5").toAbsolutePath().normalize();
     private static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
     private static Object field(HubView view,String name)throws Exception{Field f=HubView.class.getDeclaredField(name);f.setAccessible(true);return f.get(view);}
     private static void page(HubView view,int page)throws Exception{Method m=HubView.class.getDeclaredMethod("navigate",int.class);m.setAccessible(true);m.invoke(view,page);}
