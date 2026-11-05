@@ -47,7 +47,28 @@ public final class NativeRendererChecks {
         glEnable(GL_DEPTH_TEST); glDepthMask(true); glDepthFunc(GL_LEQUAL);
         glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, texture);
         int initialStencil = glGetFramebufferAttachmentParameteri(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+        int depth = glGenRenderbuffers();glBindRenderbuffer(GL_RENDERBUFFER,depth);
+        glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,640,480);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,depth);
+        glClearDepth(.2);glClear(GL_DEPTH_BUFFER_BIT);
         GlState before = new GlState();
+        try (HubGlContext isolated = new HubGlContext(window)) {
+            compare(before, new GlState());
+            isolated.enter();
+            glDepthMask(false);
+            isolated.leave();
+            compare(before, new GlState());
+        }
+        // Test the actual write mask, not just a query: private depthMask(false)
+        // must not suppress the game's subsequent depth clear.
+        glClearDepth(.8);glClear(GL_DEPTH_BUFFER_BIT);
+        try(MemoryStack stack=MemoryStack.stackPush()) {
+            var pixel=stack.mallocFloat(1);glReadPixels(20,20,1,1,GL_DEPTH_COMPONENT,GL_FLOAT,pixel);
+            if(Math.abs(pixel.get(0)-.8f)>.001f)throw new AssertionError("Private context changed game depth writes");
+        }
+        glClearDepth(1);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,0);
+        glDeleteRenderbuffers(depth);glBindRenderbuffer(GL_RENDERBUFFER,0);
+        before = new GlState();
         HubRenderer renderer = new HubRenderer();
         renderer.render(640, 480, 10, 10, 0.5f, d -> {
             d.roundRect(0, 0, 400, 220, 20, 0xCCFFFFFF);

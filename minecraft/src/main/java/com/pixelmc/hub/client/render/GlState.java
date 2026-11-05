@@ -16,7 +16,7 @@ import static org.lwjgl.opengl.GL32.*;
 import static org.lwjgl.opengl.GL33.*;
 import static org.lwjgl.opengl.GL40.*;
 
-/** Physical GL snapshot; bypasses Minecraft's caches, then restores the values those caches describe. */
+/** Legacy physical snapshot used by regression checks; not a complete indexed-state restore. */
 final class GlState {
     final int drawFramebuffer = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
     private final int readFramebuffer = glGetInteger(GL_READ_FRAMEBUFFER_BINDING);
@@ -41,7 +41,9 @@ final class GlState {
     private final double clearDepth = glGetDouble(GL_DEPTH_CLEAR_VALUE);
     private final int clearStencil = glGetInteger(GL_STENCIL_CLEAR_VALUE);
     private final boolean[] colorMask = new boolean[4];
-    private final boolean depthMask = glGetBoolean(GL_DEPTH_WRITEMASK);
+    // Integer query agrees with actual depth writes across context switches on the
+    // tested driver; its GLboolean query can report the last context's write mask.
+    private final boolean depthMask = glGetInteger(GL_DEPTH_WRITEMASK) != 0;
     private final int depthFunc = glGetInteger(GL_DEPTH_FUNC);
     private final int cullFace = glGetInteger(GL_CULL_FACE_MODE), frontFace = glGetInteger(GL_FRONT_FACE);
     private final Stencil frontStencil = new Stencil(false), backStencil = new Stencil(true);

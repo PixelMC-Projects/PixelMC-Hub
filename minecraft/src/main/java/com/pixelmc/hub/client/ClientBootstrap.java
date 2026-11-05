@@ -63,7 +63,9 @@ public final class ClientBootstrap {
                 .append(Component.literal("，按下 ").withStyle(style -> style.withColor(0xb6c4d7)))
                 .append(key.copy().withStyle(style -> style.withColor(0x5dd4ed)))
                 .append(Component.literal(" 体验，").withStyle(style -> style.withColor(0xb6c4d7)))
-                .append(Component.literal("我们将持续丰富这个菜单的体验并探索更多功能。").withStyle(style -> style.withColor(0x80caa2))));
+                .append(Component.literal("我们将持续丰富这个菜单的体验并探索更多功能。").withStyle(style -> style.withColor(0x80caa2)))
+                .append(Component.literal("\n该内容仍处于实验状态,可能存在未经验证的兼容性问题,如出现异常请及时反馈")
+                    .withStyle(net.minecraft.ChatFormatting.RED)));
         }
         if (Boolean.getBoolean("pixelmc.hub.autoOpen") && !automaticPreviewOpened
                 && minecraft.screen instanceof TitleScreen && minecraft.getOverlay() == null) {

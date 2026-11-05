@@ -10,7 +10,7 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle'
 
 group = 'com.pixelmc.hub'
-version = '0.2.3-dev'
+version = '0.2.4-dev'
 base { archivesName = 'pixelmc-hub-forge-1.20.1' }
 java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
 
@@ -162,5 +162,12 @@ tasks.register('nativePolishChecks', JavaExec) {
     dependsOn 'renderChecksClasses'
     classpath = sourceSets.renderChecks.runtimeClasspath
     mainClass = 'com.pixelmc.hub.client.ui.NativePolishChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.register('nativeIsolationChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeIsolationChecks'
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
 }

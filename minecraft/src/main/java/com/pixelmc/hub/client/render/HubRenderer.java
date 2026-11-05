@@ -12,14 +12,15 @@ import static org.lwjgl.glfw.GLFW.glfwGetCurrentContext;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL30.*;
 
-/** One lazy Skija GPU context. Call render/close on Minecraft's render thread. */
+/** Skija renders in a dedicated shared GL context, never in Minecraft's mutable GL state. */
 public final class HubRenderer implements AutoCloseable {
     private static final Logger LOGGER = LogUtils.getLogger();
     private DirectContext context;
+    private HubGlContext isolated;
     private BackendRenderTarget target;
     private Surface surface;
     private HubDraw draw;
-    private int width, height, sourceFramebuffer = -1, sourceColor = -1;
+    private int width, height, sourceFramebuffer = -1, sourceColor = -1, sourceFormat = -1;
     private int aliasFramebuffer, stencilBuffer;
     private long glContext;
     private Thread renderThread;
@@ -40,27 +41,33 @@ public final class HubRenderer implements AutoCloseable {
         if (renderThread != null && (renderThread != Thread.currentThread() || currentContext != glContext))
             throw new IllegalStateException("HubRenderer must stay on its original render thread and GL context");
 
-        stage("capturing Minecraft GL state");
-        GlState previous = new GlState();
-        checkFirstFrameGl("state capture");
+        // Query only. Switching contexts preserves all game state, including indexed
+        // blend/UBO state which a global snapshot/restore would accidentally overwrite.
+        stage("reading Minecraft color attachment");
+        Source source = source(glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING));
         Canvas canvas = null;
         int saveCount = 0;
         try {
+            if (isolated == null) {
+                stage("creating isolated shared OpenGL context");
+                isolated = new HubGlContext(currentContext);
+                renderThread = Thread.currentThread(); glContext = currentContext;
+            }
+            isolated.enter();
             if (context == null) {
                 stage("loading bundled Skija JNI");
                 Library.load(); // Upstream loader extracts the bundled DLL and ICU data, without network access.
                 stage("creating Skija OpenGL context");
                 context = DirectContext.makeGL();
                 checkFirstFrameGl("Skija context creation");
-                renderThread = Thread.currentThread(); glContext = currentContext;
                 stage("creating local font and image resources");
                 draw = new HubDraw();
             }
             context.resetGLAll();
             stage("preparing Minecraft color target");
-            prepareTarget(previous.drawFramebuffer, framebufferWidth, framebufferHeight);
+            prepareTarget(source, framebufferWidth, framebufferHeight);
             checkFirstFrameGl("target preparation");
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, aliasFramebuffer != 0 ? aliasFramebuffer : previous.drawFramebuffer);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, aliasFramebuffer);
             glViewport(0, 0, framebufferWidth, framebufferHeight);
             // The game writes this color attachment between frames. Invalidate Skia's previous snapshot cache.
             surface.notifyContentWillChange(ContentChangeMode.RETAIN);
@@ -92,7 +99,7 @@ public final class HubRenderer implements AutoCloseable {
                     }
                 }
             } finally {
-                previous.restore();
+                if (isolated != null) isolated.leave();
             }
         }
         stage("first native frame complete");
@@ -110,45 +117,65 @@ public final class HubRenderer implements AutoCloseable {
             throw new IllegalStateException("OpenGL error after Hub " + stage + ": 0x" + Integer.toHexString(error));
     }
 
-    private void prepareTarget(int framebuffer, int newWidth, int newHeight) {
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-        int color = framebuffer == 0 ? 0 : glGetFramebufferAttachmentParameteri(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
-        if (surface != null && width == newWidth && height == newHeight && sourceFramebuffer == framebuffer && sourceColor == color) return;
+    private record Source(int framebuffer, int color, int level) {}
+
+    private static Source source(int framebuffer) {
+        // FBO/VAO names are context-local. Query the game attachment before switching;
+        // only its texture name is meaningful in the shared context.
+        if (framebuffer == 0) throw new IllegalStateException("Hub requires Minecraft's texture-backed framebuffer");
+        int type = glGetFramebufferAttachmentParameteri(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+        if (type != GL_TEXTURE) throw new IllegalStateException("Hub expects a texture-backed game color attachment");
+        int color = glGetFramebufferAttachmentParameteri(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+        int level = glGetFramebufferAttachmentParameteri(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL);
+        return new Source(framebuffer, color, level);
+    }
+
+    private void prepareTarget(Source source, int newWidth, int newHeight) {
+        int framebuffer = source.framebuffer(), color = source.color();
+        if (!glIsTexture(color)) throw new IllegalStateException("Game color texture is not shared with the Hub context");
+        int bound = glGetInteger(GL_TEXTURE_BINDING_2D);
+        int format;
+        try {
+            glBindTexture(GL_TEXTURE_2D, color);
+            if (glGetError() != GL_NO_ERROR) throw new IllegalStateException("Unsupported game color texture target");
+            format = glGetTexLevelParameteri(GL_TEXTURE_2D, source.level(), GL_TEXTURE_INTERNAL_FORMAT);
+            if (glGetTexLevelParameteri(GL_TEXTURE_2D, source.level(), GL_TEXTURE_WIDTH) < newWidth
+                    || glGetTexLevelParameteri(GL_TEXTURE_2D, source.level(), GL_TEXTURE_HEIGHT) < newHeight)
+                throw new IllegalStateException("Hub viewport exceeds the actual game color texture");
+        } finally { glBindTexture(GL_TEXTURE_2D, bound); }
+        ColorType type = switch (format) {
+            case GL_RGBA8 -> ColorType.RGBA_8888;
+            case GL_SRGB8_ALPHA8 -> ColorType.SRGBA_8888;
+            case GL_RGBA16F -> ColorType.RGBA_F16;
+            case GL_RGB10_A2 -> ColorType.RGBA_1010102;
+            default -> throw new IllegalStateException("Unsupported game framebuffer format: 0x" + Integer.toHexString(format));
+        };
+        if (surface != null && width == newWidth && height == newHeight && sourceFramebuffer == framebuffer && sourceColor == color && sourceFormat == format) return;
         releaseTarget();
-        width = newWidth; height = newHeight; sourceFramebuffer = framebuffer; sourceColor = color;
-        int targetFramebuffer = framebuffer;
-        // GL_STENCIL_BITS is a removed legacy glGet query in Minecraft's core profile.
-        // Our alias FBO owns an 8-bit stencil; only the default framebuffer needs an attachment query.
-        int stencilBits = framebuffer == 0 ? glGetFramebufferAttachmentParameteri(
-            GL_FRAMEBUFFER, GL_STENCIL, GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE) : 8;
-        if (framebuffer != 0) {
-            int type = glGetFramebufferAttachmentParameteri(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
-            if (type != GL_TEXTURE) throw new IllegalStateException("Hub expects Minecraft's texture-backed main framebuffer");
-            int level = glGetFramebufferAttachmentParameteri(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL);
-            // A separate FBO shares ONLY the game's color texture. The game's depth/stencil attachments stay untouched.
-            aliasFramebuffer = glGenFramebuffers();
-            glBindFramebuffer(GL_FRAMEBUFFER, aliasFramebuffer);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color, level);
-            stencilBuffer = glGenRenderbuffers();
-            glBindRenderbuffer(GL_RENDERBUFFER, stencilBuffer);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, width, height);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, stencilBuffer);
-            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-                throw new IllegalStateException("Cannot create Hub's isolated stencil framebuffer");
-            targetFramebuffer = aliasFramebuffer;
-        }
+        width = newWidth; height = newHeight; sourceFramebuffer = framebuffer; sourceColor = color; sourceFormat = format;
+        // All container objects, state and stencil storage belong exclusively to Hub.
+        aliasFramebuffer = glGenFramebuffers();
+        glBindFramebuffer(GL_FRAMEBUFFER, aliasFramebuffer);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color, source.level());
+        stencilBuffer = glGenRenderbuffers();
+        glBindRenderbuffer(GL_RENDERBUFFER, stencilBuffer);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, stencilBuffer);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            throw new IllegalStateException("Cannot create Hub's isolated stencil framebuffer");
         if (firstFrame) LOGGER.info("PixelMC-Hub native target: sourceFbo={}, aliasFbo={}, colorTexture={}, size={}x{}, stencil={}",
-            framebuffer, aliasFramebuffer, color, width, height, stencilBits);
+            framebuffer, aliasFramebuffer, color, width, height, 8);
         checkFirstFrameGl("framebuffer attachment setup");
-        target = BackendRenderTarget.makeGL(width, height, 0, stencilBits, targetFramebuffer, FramebufferFormat.GR_GL_RGBA8);
+        target = BackendRenderTarget.makeGL(width, height, 0, 8, aliasFramebuffer, format);
         stage("wrapping Skija GPU surface");
-        surface = Surface.wrapBackendRenderTarget(context, target, SurfaceOrigin.BOTTOM_LEFT, ColorType.RGBA_8888, ColorSpace.getSRGB());
+        surface = Surface.wrapBackendRenderTarget(context, target, SurfaceOrigin.BOTTOM_LEFT, type, ColorSpace.getSRGB());
+        if (surface == null) throw new IllegalStateException("Cannot wrap the actual game framebuffer format");
     }
 
     private void releaseTarget() {
         if (surface != null) { surface.close(); surface = null; }
         if (target != null) { target.close(); target = null; }
-        if (glfwGetCurrentContext() == glContext) {
+        if (glfwGetCurrentContext() != 0 && glfwGetCurrentContext() != glContext) {
             if (aliasFramebuffer != 0) glDeleteFramebuffers(aliasFramebuffer);
             if (stencilBuffer != 0) glDeleteRenderbuffers(stencilBuffer);
         }
@@ -160,29 +187,33 @@ public final class HubRenderer implements AutoCloseable {
         if (renderThread != null && Thread.currentThread() != renderThread)
             throw new IllegalStateException("Close HubRenderer on its render thread");
         closed = true;
-        if (context == null) return;
+        if (isolated == null) return;
         boolean hasContext = glfwGetCurrentContext() == glContext;
-        GlState previous = hasContext ? new GlState() : null;
         try {
+            if (!hasContext) throw new IllegalStateException("Close HubRenderer while the original game context is current");
+            isolated.enter();
             try {
-                if (hasContext) {
-                    // Minecraft has used GL since our last frame. Invalidate Skia's cached state
-                    // before teardown, and finish queued work before releasing our FBO and surfaces.
+                if (context != null) {
+                    // Finish the isolated context before releasing its FBO and surfaces.
                     // This wait runs only on close, never on the normal frame path.
                     context.resetGLAll();
                     context.flushAndSubmit(true);
-                } else context.abandon();
+                }
             } finally {
                 try {
                     if (draw != null) draw.close();
                 } finally {
                     try { releaseTarget(); }
-                    finally { context.close(); }
+                    finally { if (context != null) context.close(); }
                 }
             }
         } finally {
             draw = null; context = null;
-            if (previous != null) previous.restore();
+            try { isolated.leave(); }
+            finally {
+                try { isolated.close(); }
+                finally { isolated = null; }
+            }
         }
     }
 }
