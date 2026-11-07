@@ -1,0 +1,284 @@
+{
+  "demonstratorOnly": true,
+  "source": "src/changelog/model.js seed, caller-only projection",
+  "snapshot": {
+    "settings": {
+      "updatesEnabled": true,
+      "likesEnabled": true,
+      "commentsEnabled": true,
+      "commentLimit": 500,
+      "commentCooldown": 10
+    },
+    "packs": [
+      {
+        "id": "vanilla-food",
+        "name": "香草纪元 · 食旅纪行",
+        "current": true,
+        "visible": true,
+        "shortName": "香草纪元",
+        "version": "2.7.1"
+      }
+    ],
+    "packsTotal": 1,
+    "selectedPackId": "vanilla-food",
+    "list": {
+      "rows": [
+        {
+          "id": "handbook",
+          "packId": "vanilla-food",
+          "title": "旅人手册，与你见面",
+          "version": "2.7.2",
+          "category": "功能更新",
+          "status": "published",
+          "pinned": true,
+          "publishedAt": 1793851200000,
+          "updatedAt": 1793851200000,
+          "summary": "个人统计、称号与签笺，现在收进同一本手册。",
+          "packName": "香草纪元",
+          "packVersion": "2.7.1",
+          "updateVersion": "1.0",
+          "liked": true,
+          "likesCount": 3,
+          "commentsCount": 1,
+          "createdAt": null
+        },
+        {
+          "id": "fortunes",
+          "packId": "vanilla-food",
+          "title": "签笺收藏，翻阅更顺手",
+          "version": "2.7.1",
+          "category": "体验优化",
+          "status": "published",
+          "pinned": false,
+          "publishedAt": 1793701800000,
+          "updatedAt": 1793701800000,
+          "summary": "保留已读月份，切换展示时不再让日历闪一下。",
+          "packName": "香草纪元",
+          "packVersion": "2.7.1",
+          "updateVersion": "0.9",
+          "liked": false,
+          "likesCount": 2,
+          "commentsCount": 0,
+          "createdAt": null
+        },
+        {
+          "id": "titles",
+          "packId": "vanilla-food",
+          "title": "给称号一个新的展示方式",
+          "version": "2.7.0",
+          "category": "功能更新",
+          "status": "published",
+          "pinned": false,
+          "publishedAt": 1793361600000,
+          "updatedAt": 1793361600000,
+          "summary": "新的主题颜色、收藏徽章与佩戴预览。",
+          "packName": "香草纪元",
+          "packVersion": "2.7.1",
+          "updateVersion": "0.8",
+          "liked": false,
+          "likesCount": 2,
+          "commentsCount": 0,
+          "createdAt": null
+        },
+        {
+          "id": "fixes",
+          "packId": "vanilla-food",
+          "title": "一些小问题，慢慢变好",
+          "version": "2.6.9",
+          "category": "问题修复",
+          "status": "published",
+          "pinned": false,
+          "publishedAt": 1793088900000,
+          "updatedAt": 1793088900000,
+          "summary": "修正交互边界，补齐细节反馈。",
+          "packName": "香草纪元",
+          "packVersion": "2.7.0",
+          "updateVersion": "0.2",
+          "liked": false,
+          "likesCount": 1,
+          "commentsCount": 0,
+          "createdAt": null
+        },
+        {
+          "id": "arrival",
+          "packId": "vanilla-food",
+          "title": "食旅纪行，新的旅程开始了",
+          "version": "2.6.0",
+          "category": "整合包更新",
+          "status": "published",
+          "pinned": false,
+          "publishedAt": 1792209600000,
+          "updatedAt": 1792209600000,
+          "summary": "带上行囊，在新的世界里相见。",
+          "packName": "香草纪元",
+          "packVersion": "2.7.0",
+          "updateVersion": "0.1",
+          "liked": false,
+          "likesCount": 1,
+          "commentsCount": 0,
+          "createdAt": null
+        }
+      ],
+      "total": 5,
+      "page": 0,
+      "size": 12
+    }
+  },
+  "entries": {
+    "handbook": {
+      "entry": {
+        "id": "handbook",
+        "packId": "vanilla-food",
+        "title": "旅人手册，与你见面",
+        "version": "2.7.2",
+        "category": "功能更新",
+        "status": "published",
+        "pinned": true,
+        "publishedAt": 1793851200000,
+        "updatedAt": 1793851200000,
+        "summary": "个人统计、称号与签笺，现在收进同一本手册。",
+        "body": "欢迎打开旅人手册。从今天起，旅途中的收藏与近况，有了一个随时可以翻看的地方。\n\n## 一个按键，打开你的空间\n按下 **H**，即可查看当前整合包的游玩统计、管理称号，或翻阅已经收藏的签笺。若你修改过按键，请使用自己绑定的菜单键。\n\n## 把收藏带在身边\n- **我的称号**：查看获得方式，预览并更换佩戴。\n- **我的签笺**：按月份回看收藏，挑一张展示在手册里。\n- **更新日志**：在这里了解最近的调整，也可以给我们留下建议。\n\n## 关于你的反馈\n觉得这次更新不错，可以点个赞。遇到问题或有新的想法，请在下方留言；留言和管理员回复只对你们双方可见。",
+        "packName": "香草纪元",
+        "packVersion": "2.7.1",
+        "updateVersion": "1.0",
+        "liked": true,
+        "likesCount": 3,
+        "commentsCount": 1,
+        "createdAt": null
+      },
+      "comments": {
+        "rows": [
+          {
+            "id": "c1",
+            "entryId": "handbook",
+            "playerId": "7f1a0000-0000-4000-8000-000000000001",
+            "text": "终于可以在一个地方看称号和签笺了！希望以后也能看到活动纪念。",
+            "createdAt": 1793852160000,
+            "replies": [
+              {
+                "id": "r1",
+                "text": "收到，活动纪念的建议记下了。谢谢你来体验！",
+                "createdAt": 1793853300000
+              }
+            ]
+          }
+        ],
+        "total": 1,
+        "page": 0,
+        "size": 12
+      }
+    },
+    "fortunes": {
+      "entry": {
+        "id": "fortunes",
+        "packId": "vanilla-food",
+        "title": "签笺收藏，翻阅更顺手",
+        "version": "2.7.1",
+        "category": "体验优化",
+        "status": "published",
+        "pinned": false,
+        "publishedAt": 1793701800000,
+        "updatedAt": 1793701800000,
+        "summary": "保留已读月份，切换展示时不再让日历闪一下。",
+        "body": "这次整理了签笺页面的交互，让收藏更方便翻阅。\n\n## 翻阅体验\n- 切换展示签笺时，保留当前月份的内容。\n- 最近抽签记录显示完整时间。\n- 月份切换加入柔和的过渡动画。\n\n## 收藏与展示\n签笺要先收进藏签匣，才会出现在收藏中。你仍然可以独立选择手册里展示的那一张。",
+        "packName": "香草纪元",
+        "packVersion": "2.7.1",
+        "updateVersion": "0.9",
+        "liked": false,
+        "likesCount": 2,
+        "commentsCount": 0,
+        "createdAt": null
+      },
+      "comments": {
+        "rows": [],
+        "total": 0,
+        "page": 0,
+        "size": 12
+      }
+    },
+    "titles": {
+      "entry": {
+        "id": "titles",
+        "packId": "vanilla-food",
+        "title": "给称号一个新的展示方式",
+        "version": "2.7.0",
+        "category": "功能更新",
+        "status": "published",
+        "pinned": false,
+        "publishedAt": 1793361600000,
+        "updatedAt": 1793361600000,
+        "summary": "新的主题颜色、收藏徽章与佩戴预览。",
+        "body": "每一枚称号，都记录着一段不同的经历。\n\n## 这次新增\n- 称号卡片拥有独立的主题颜色和徽章。\n- 收藏页面可查看获得时间与获得方式。\n- 佩戴预览显示皮肤的帽子层。\n\n**隐藏展示不会摘下称号**，你可以按自己的喜好选择是否公开。",
+        "packName": "香草纪元",
+        "packVersion": "2.7.1",
+        "updateVersion": "0.8",
+        "liked": false,
+        "likesCount": 2,
+        "commentsCount": 0,
+        "createdAt": null
+      },
+      "comments": {
+        "rows": [],
+        "total": 0,
+        "page": 0,
+        "size": 12
+      }
+    },
+    "fixes": {
+      "entry": {
+        "id": "fixes",
+        "packId": "vanilla-food",
+        "title": "一些小问题，慢慢变好",
+        "version": "2.6.9",
+        "category": "问题修复",
+        "status": "published",
+        "pinned": false,
+        "publishedAt": 1793088900000,
+        "updatedAt": 1793088900000,
+        "summary": "修正交互边界，补齐细节反馈。",
+        "body": "## 已调整\n- 修正藏签匣交互时的展示选择。\n- 调整方块碰撞范围，使它更接近实际外形。\n- 完善操作完成后的提示。\n\n如仍遇到异常，请描述发生场景并留言。",
+        "packName": "香草纪元",
+        "packVersion": "2.7.0",
+        "updateVersion": "0.2",
+        "liked": false,
+        "likesCount": 1,
+        "commentsCount": 0,
+        "createdAt": null
+      },
+      "comments": {
+        "rows": [],
+        "total": 0,
+        "page": 0,
+        "size": 12
+      }
+    },
+    "arrival": {
+      "entry": {
+        "id": "arrival",
+        "packId": "vanilla-food",
+        "title": "食旅纪行，新的旅程开始了",
+        "version": "2.6.0",
+        "category": "整合包更新",
+        "status": "published",
+        "pinned": false,
+        "publishedAt": 1792209600000,
+        "updatedAt": 1792209600000,
+        "summary": "带上行囊，在新的世界里相见。",
+        "body": "新整合包的第一份更新记录。\n\n## 旅途从这里开始\n新的探索、食物和建造内容已经准备就绪。感谢每一位一起参与测试和反馈的玩家。\n\n你可以通过这份记录回顾当前整合包的变化。",
+        "packName": "香草纪元",
+        "packVersion": "2.7.0",
+        "updateVersion": "0.1",
+        "liked": false,
+        "likesCount": 1,
+        "commentsCount": 0,
+        "createdAt": null
+      },
+      "comments": {
+        "rows": [],
+        "total": 0,
+        "page": 0,
+        "size": 12
+      }
+    }
+  }
+}

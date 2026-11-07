@@ -1,0 +1,215 @@
+/* Web finishing layer. Geometry, typography and page composition stay in the theme. */
+
+/* Native superellipses ease the transition from a straight edge into a corner.
+   Existing radii provide the fallback. The exponent gives a restrained
+   continuous-corner approximation using the browser's own border geometry. */
+@supports (corner-shape: superellipse(1.35)) {
+  .app-shell,
+  .identity-card,
+  .identity-glass,
+  .card,
+  .modal,
+  .title-tile,
+  .title-tile .tilted-card__face,
+  .player-medallion .tilted-card__face,
+  .lb-podium-glass,
+  .updates-reader-frame,
+  .lb-ranking-frame,
+  .lb-self-position,
+  .lb-state {
+    corner-shape: superellipse(1.35);
+  }
+
+  :is(.identity-glass, .lb-podium-glass) > :is(
+    .glass-surface__content,
+    .glass-surface__frame,
+    .glass-surface__sheen,
+    .glass-surface__rim
+  ),
+  :is(.title-tile, .player-medallion) .tilted-card__face > :is(
+    .tilted-card__rim,
+    .tilted-card__edge
+  ),
+  .title-detail > .equip-controls {
+    corner-shape: inherit;
+  }
+
+  .app-shell > .welcome-splash {
+    corner-shape: inherit;
+  }
+
+  /* The shell supplies the outside contour for both rectangular panes.
+     A second rim on the sidebar creates an inset, independently clipped edge. */
+  .sidebar-material.glass-surface {
+    border-width: 0 1px 0 0;
+  }
+
+  .sidebar-material > .glass-surface__rim {
+    display: none;
+  }
+
+  .sidebar-material::after {
+    inset: 0;
+    border: 0;
+    border-radius: inherit;
+    corner-shape: inherit;
+  }
+
+  .updates-reader-frame,
+  .lb-ranking-frame {
+    /* The existing overflow clips to the native corner. A round inset clip
+       would otherwise cut it back into a circular arc. Keep paint isolation. */
+    clip-path: none;
+    isolation: isolate;
+  }
+}
+
+/* A bright upper edge and a faint lower edge give the glass a softer thickness. */
+.app-shell {
+  border-color: #fffffff0 #ffffffb8 #c9d2e58c #ffffffe0;
+  box-shadow:
+    0 30px 80px -32px #43588252,
+    0 6px 18px -8px #53658e1c;
+}
+
+.card {
+  border-color: #ffffff #ffffffe0 #dce3f294;
+  box-shadow:
+    0 8px 24px -10px #53608324,
+    0 1px 3px #53608306,
+    inset 0 1px 0 #ffffff;
+}
+
+.identity-card {
+  box-shadow: 0 10px 28px -10px #817bb733;
+}
+
+.identity-card .identity-glass {
+  border-color: #ffffff #ffffffdb #d5d9ef9c;
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 #ffffff57;
+}
+
+.sidebar-material.glass-surface {
+  box-shadow:
+    inset -1px 0 3px #abb9e12b,
+    4px 0 16px #65719e08;
+}
+
+.modal {
+  border-color: #ffffff #ffffffe6 #d9deedb3;
+  box-shadow:
+    0 28px 76px -18px #35416c40,
+    0 5px 16px -8px #53658e24,
+    inset 0 1px 0 #ffffff;
+}
+
+.updates-reader-frame,
+.lb-ranking-frame {
+  border-color: #ffffff #ffffffd9 #e0e5f0b3;
+  box-shadow:
+    0 7px 22px -12px #65729b1f,
+    inset 0 1px 0 #ffffff;
+}
+
+/* Data uses aligned numerals without changing its type scale or spacing. */
+.date-label,
+.tile-date,
+.acquired-date,
+.day-number,
+.profile-modal dd,
+.collection-totals strong,
+.updates-item-top time,
+.updates-thread-meta time {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.btn > svg,
+.icon-btn > svg,
+.text-button > svg,
+.lb-tabs button > svg,
+.updates-like > svg {
+  display: block;
+}
+
+/* Keep feedback local to controls and keep the existing motion durations. */
+.btn,
+.icon-btn,
+.text-button,
+.segmented button,
+.lb-tabs button,
+.lb-self-position button {
+  transition-timing-function: cubic-bezier(0.22, 0.68, 0, 1);
+}
+
+.btn.subtle {
+  box-shadow: 0 2px 7px #6c658812, inset 0 1px 0 #ffffff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn.subtle:hover:not(:disabled) {
+    box-shadow: 0 4px 12px -3px #6c658824, inset 0 1px 0 #ffffff;
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    box-shadow: inset 0 1px 0 #ffffff70, 0 5px 13px -3px #7558d149;
+  }
+
+  .today-card .btn.primary:hover:not(:disabled) {
+    background: linear-gradient(140deg, #c29b65, #ab8347);
+    box-shadow: inset 0 1px 0 #ffffff70, 0 5px 13px -3px #9c7e4440;
+  }
+}
+
+.btn.primary:not(:disabled):active,
+.btn.subtle:not(:disabled):active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px #38446c18, 0 1px 3px #53658e0c;
+}
+
+.icon-btn:not(:disabled):active,
+.segmented button:not(:disabled):active,
+.lb-tabs button:not(:disabled):active,
+.lb-self-position button:not(:disabled):active {
+  box-shadow: inset 0 1px 3px #636d901c;
+}
+
+/* One clear keyboard outline, including textarea controls and custom tab stops. */
+.preview-stage :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid #765bd4;
+  outline-offset: 3px;
+}
+
+.preview-stage .hub-navigation .glass-icon:focus-visible {
+  outline-offset: 8px;
+}
+
+.preview-stage :is(.updates-animated-list, .lb-animated-list) [role="listbox"]:focus-visible {
+  outline-offset: -3px;
+}
+
+.preview-stage :is(.updates-animated-list, .lb-animated-list):has(> .animated-list__viewport:focus-visible) {
+  outline: none;
+}
+
+.preview-stage :is(.search, .updates-search, .updates-compose):has(:focus-visible) {
+  outline: 2px solid #765bd4;
+  outline-offset: 3px;
+}
+
+.preview-stage :is(.search, .updates-search, .updates-compose) :is(input, textarea):focus-visible {
+  outline: none;
+}
+
+html[data-motion="reduced"] .btn.primary:not(:disabled):is(:hover, :active),
+html[data-motion="reduced"] .btn.subtle:not(:disabled):is(:hover, :active) {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.primary:not(:disabled):is(:hover, :active),
+  .btn.subtle:not(:disabled):is(:hover, :active) {
+    transform: none;
+  }
+}

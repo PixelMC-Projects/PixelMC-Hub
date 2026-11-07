@@ -1,0 +1,48 @@
+/* Profile patterns share palette-aware artwork with the pack memories. */
+.profile-backdrop {
+  --memory-art-deep: color-mix(in srgb, var(--profile-color, #c8d6ec) 52%, #425b7b);
+  --memory-art-light: color-mix(in srgb, var(--profile-color-soft, #e7edf5) 80%, #ffffff);
+  --memory-art-mid: color-mix(in srgb, var(--profile-color, #c8d6ec) 60%, var(--memory-art-deep));
+  --memory-art-highlight: #fff7e8;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  opacity: .8;
+  mask-image: linear-gradient(90deg, transparent 12%, #000 61%);
+}
+.profile-backdrop > .profile-pattern-illustration,
+.profile-backdrop .memory-cover-illustration {
+  position: absolute;
+  right: 48px;
+  top: 0;
+  height: 100%;
+  width: auto;
+  aspect-ratio: 2 / 1;
+}
+.profile-backdrop .memory-cover-art { mask-image: none; }
+.profile-backdrop .memory-cover-art::before { display: none; }
+.profile-backdrop .memory-cover-illustration { mask-image: linear-gradient(90deg, transparent, #000 24%); }
+.profile-backdrop--compact { opacity: 1; mask-image: none; }
+.profile-backdrop--compact > .profile-pattern-illustration,
+.profile-backdrop--compact .memory-cover-illustration { right: 0; width: 100%; height: 100%; }
+.profile-card[data-profile-pattern] .profile-cover::before,
+.profile-card[data-profile-pattern] .profile-cover::after { display: none; }
+.profile-card .profile-cover-copy, .profile-card .profile-head-stage { position: relative; z-index: 1; }
+.profile-card .profile-patterns { min-width: 0; margin: 14px 0 0; padding: 3px; border: 0; }
+.profile-patterns legend { margin-bottom: 9px; color: var(--community-muted); font-size: 11px; }
+.profile-pattern-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.profile-pattern-choice { position: relative; cursor: pointer; min-width: 0; }
+.profile-pattern-choice input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.profile-pattern-preview { display: block; position: relative; height: 49px; overflow: hidden; border: 1px solid var(--community-line); border-radius: 9px; background: linear-gradient(115deg, var(--profile-color-soft), var(--profile-color)); }
+.profile-pattern-choice input:checked + .profile-pattern-preview { border-color: var(--community-accent); box-shadow: 0 0 0 1px var(--community-accent); }
+.profile-pattern-choice input:focus-visible + .profile-pattern-preview { outline: 2px solid var(--community-accent); outline-offset: 3px; }
+.profile-pattern-label { display: block; margin-top: 5px; color: var(--community-muted); font-size: 10px; text-align: center; white-space: nowrap; }
+.profile-pattern-choice input:checked ~ .profile-pattern-label { color: var(--community-text); }
+[data-theme="dark"] .profile-backdrop { --memory-art-deep: color-mix(in srgb, var(--profile-color, #39445f) 35%, #b4c8e1); --memory-art-highlight: #d8e2dc; --memory-art-light: color-mix(in srgb, var(--profile-color-soft, #30384f) 70%, #8eabc0); }
+@media (max-width: 760px) {
+  .profile-pattern-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .profile-backdrop > .profile-pattern-illustration, .profile-backdrop .memory-cover-illustration { right: 15px; }
+  .profile-backdrop--compact > .profile-pattern-illustration, .profile-backdrop--compact .memory-cover-illustration { right: 0; }
+}

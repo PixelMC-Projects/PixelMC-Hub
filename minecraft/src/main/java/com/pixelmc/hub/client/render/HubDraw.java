@@ -55,6 +55,19 @@ public final class HubDraw implements AutoCloseable {
     private final Map<LayerKey,Surface> layerPool=new LinkedHashMap<>(12,.75f,true);
     private long layerPixels;
     private int rootWidth,rootHeight;
+    private java.util.List<String> warmAssets;
+    private boolean dark, literalColors, supersampling;
+    private final HubCorners corners=new HubCorners();
+    private final Map<String,Surface> headLayers=new LinkedHashMap<>(8,.75f,true);
+    public void setDark(boolean value){dark=value;}
+    public boolean dark(){return dark;}
+    /** Explicit CSS palettes and provider glyphs may opt out of the legacy light-token aliases. */
+    public boolean literalColors(boolean value){boolean previous=literalColors;literalColors=value;return previous;}
+    private int foreground(int color){return dark&&!literalColors?HubTheme.foreground(color):color;}
+    private int surfaceColor(int color){return dark&&!literalColors?HubTheme.surface(color):color;}
+    private int borderColor(int color){return dark&&!literalColors?HubTheme.border(color):color;}
+    private int[] surfaceColors(int[] colors){return dark&&!literalColors?HubTheme.gradient(colors):colors;}
+
 
     HubDraw() {
         regular = typeface("fonts/Hub-Regular.ttf", FontStyle.NORMAL);
@@ -124,6 +137,7 @@ public final class HubDraw implements AutoCloseable {
         canvas=null; targetSurface=null;
     }
 
+    public boolean isClosed(){return closed;}
     public Canvas canvas() {
         if (canvas == null) throw new IllegalStateException("HubDraw can only draw inside HubRenderer.render");
         return canvas;
@@ -132,24 +146,29 @@ public final class HubDraw implements AutoCloseable {
     private Paint fill(int color) { return paint.reset().setAntiAlias(true).setColor(color); }
 
     public void rect(float x, float y, float w, float h, int color) {
+        color=surfaceColor(color);
         if (w > 0 && h > 0) canvas().drawRect(Rect.makeXYWH(x, y, w, h), fill(color));
     }
 
     public void roundRect(float x, float y, float w, float h, float radius, int color) {
-        if (w > 0 && h > 0) canvas().drawRRect(RRect.makeXYWH(x, y, w, h, radius), fill(color));
+        color=surfaceColor(color);
+        if (w > 0 && h > 0) corners.draw(canvas(),x,y,w,h,radius,fill(color));
     }
 
     public void strokeRoundRect(float x, float y, float w, float h, float radius, float stroke, int color) {
+        color=borderColor(color);
         if (w > 0 && h > 0 && stroke > 0)
-            canvas().drawRRect(RRect.makeXYWH(x, y, w, h, radius), fill(color).setMode(PaintMode.STROKE).setStrokeWidth(stroke));
+            corners.draw(canvas(),x,y,w,h,radius,fill(color).setMode(PaintMode.STROKE).setStrokeWidth(stroke));
     }
 
     /** CSS border-radius:50% uses independent horizontal/vertical radii, not a capsule. */
     public void oval(float x, float y, float w, float h, int color) {
+        color=surfaceColor(color);
         if (w > 0 && h > 0) canvas().drawOval(Rect.makeXYWH(x,y,w,h),fill(color));
     }
 
     public void strokeOval(float x, float y, float w, float h, float stroke, int color) {
+        color=borderColor(color);
         if (w > 0 && h > 0 && stroke > 0)
             canvas().drawOval(Rect.makeXYWH(x,y,w,h),fill(color).setMode(PaintMode.STROKE).setStrokeWidth(stroke));
     }
@@ -178,44 +197,51 @@ public final class HubDraw implements AutoCloseable {
 
     public void gradientRoundRect(float x, float y, float w, float h, float radius, int topLeft, int bottomRight) {
         if (w <= 0 || h <= 0) return;
-        try (Shader shader = Shader.makeLinearGradient(x, y, x + w, y + h, new int[]{topLeft, bottomRight})) {
-            canvas().drawRRect(RRect.makeXYWH(x, y, w, h, radius), fill(0xFFFFFFFF).setShader(shader));
+        if(dark&&!literalColors&&(topLeft&0xffffff)==0xffffff&&(bottomRight&0xffffff)!=0xffffff) {
+            linearGradientRoundRect(x,y,w,h,radius,140,HubTheme.calendarGradient(bottomRight),new float[]{.08f,.4f,.69f,1});
+            return;
+        }
+        try (Shader shader = Shader.makeLinearGradient(x, y, x + w, y + h, surfaceColors(new int[]{topLeft, bottomRight}))) {
+            corners.draw(canvas(),x,y,w,h,radius,fill(0xFFFFFFFF).setShader(shader));
             paint.setShader(null);
         }
     }
 
     public void linearGradientRoundRect(float x,float y,float w,float h,float radius,float angleDeg,int[] colors,float[] stops) {
+        colors=surfaceColors(colors);
         double radians=Math.toRadians(angleDeg);
         float dx=(float)Math.sin(radians),dy=-(float)Math.cos(radians);
         float extent=(Math.abs(w*dx)+Math.abs(h*dy))*.5f,cx=x+w*.5f,cy=y+h*.5f;
         try(Shader shader=Shader.makeLinearGradient(cx-dx*extent,cy-dy*extent,cx+dx*extent,cy+dy*extent,colors,stops)) {
-            canvas().drawRRect(RRect.makeXYWH(x,y,w,h,radius),fill(0xFFFFFFFF).setShader(shader)); paint.setShader(null);
+            corners.draw(canvas(),x,y,w,h,radius,fill(0xFFFFFFFF).setShader(shader)); paint.setShader(null);
         }
     }
 
     public void radialGradientRoundRect(float x,float y,float w,float h,float radius,float cx,float cy,float rx,float ry,int[] colors,float[] stops) {
+        colors=surfaceColors(colors);
         if(rx<=0||ry<=0)return;
         Matrix33 local=Matrix33.makeTranslate(cx,cy).makeConcat(Matrix33.makeScale(rx,ry));
         try(Shader shader=Shader.makeRadialGradient(0,0,1,colors,stops,GradientStyle.DEFAULT.withLocalMatrix(local))) {
-            canvas().drawRRect(RRect.makeXYWH(x,y,w,h,radius),fill(0xFFFFFFFF).setShader(shader)); paint.setShader(null);
+            corners.draw(canvas(),x,y,w,h,radius,fill(0xFFFFFFFF).setShader(shader)); paint.setShader(null);
         }
     }
 
     public void boxShadow(float x,float y,float w,float h,float radius,float offsetX,float offsetY,float blur,float spread,int color) {
         if(w+spread*2<=0||h+spread*2<=0)return;
+        int saved=canvas().save();corners.clip(canvas(),x,y,w,h,radius,ClipMode.DIFFERENCE);
         try(ImageFilter shadow=ImageFilter.makeDropShadowOnly(offsetX,offsetY,Math.max(0,blur)*.5f,Math.max(0,blur)*.5f,color)) {
-            canvas().drawRRect(RRect.makeXYWH(x-spread,y-spread,w+spread*2,h+spread*2,Math.max(0,radius+spread)),
-                fill(0xFFFFFFFF).setImageFilter(shadow)); paint.setImageFilter(null);
-        }
+            corners.draw(canvas(),x-spread,y-spread,w+spread*2,h+spread*2,Math.max(0,radius+spread),
+                fill(0xFFFFFFFF).setImageFilter(shadow),radius>=16);paint.setImageFilter(null);
+        } finally {canvas().restoreToCount(saved);}
     }
 
     public void insetBoxShadow(float x,float y,float w,float h,float radius,float offsetX,float offsetY,float blur,float spread,int color) {
-        int count=canvas().save();canvas.clipRRect(RRect.makeXYWH(x,y,w,h,radius),true);
+        int count=canvas().save();corners.clip(canvas(),x,y,w,h,radius);
         float pad=Math.max(16,blur*3+Math.abs(offsetX)+Math.abs(offsetY)+Math.abs(spread));
         try(PathBuilder builder=new PathBuilder(PathFillMode.EVEN_ODD);
             MaskFilter filter=blur>0?MaskFilter.makeBlur(FilterBlurMode.NORMAL,blur*.5f):null) {
             builder.addRect(Rect.makeXYWH(x-pad,y-pad,w+pad*2,h+pad*2));
-            builder.addRRect(RRect.makeXYWH(x+spread+offsetX,y+spread+offsetY,Math.max(0,w-spread*2),Math.max(0,h-spread*2),Math.max(0,radius-spread)));
+            corners.append(builder,x+spread+offsetX,y+spread+offsetY,Math.max(0,w-spread*2),Math.max(0,h-spread*2),Math.max(0,radius-spread),radius>=16);
             try(Path path=builder.build()) {canvas.drawPath(path,fill(color).setMaskFilter(filter));paint.reset();}
         } finally {canvas.restoreToCount(count);}
     }
@@ -227,18 +253,47 @@ public final class HubDraw implements AutoCloseable {
         float[] opacities={.34f,.331f,.285f,.202f,.108f,.035f,.003f,0};
         int[] colors=new int[opacities.length];for(int i=0;i<colors.length;i++)colors[i]=Math.round(opacities[i]*amount*255)<<24|0xFFFFFF;
         try(Shader shader=Shader.makeRadialGradient(cx,cy,Math.max(1,reach),colors,new float[]{0,.09f,.18f,.27f,.36f,.45f,.54f,.6f})) {
-            canvas().drawRRect(RRect.makeXYWH(x,y,w,h,radius),fill(0xFFFFFFFF).setShader(shader).setBlendMode(BlendMode.SCREEN)); paint.reset();
+            corners.draw(canvas(),x,y,w,h,radius,fill(0xFFFFFFFF).setShader(shader).setBlendMode(BlendMode.SCREEN));paint.reset();
         }
         float[] edgeAlpha={.85f,.71f,.43f,.16f,.02f,0};
         int[] edgeColors=new int[edgeAlpha.length];for(int i=0;i<edgeColors.length;i++)edgeColors[i]=Math.round(edgeAlpha[i]*amount*255)<<24|0xFFFFFF;
         try(Shader edge=Shader.makeRadialGradient(cx,cy,Math.max(1,Math.max(farX,farY)),edgeColors,new float[]{0,.18f,.36f,.54f,.72f,.85f})) {
-            canvas().drawRRect(RRect.makeXYWH(x+.5f,y+.5f,w-1,h-1,Math.max(0,radius-.5f)),
-                fill(0xFFFFFFFF).setShader(edge).setMode(PaintMode.STROKE).setStrokeWidth(1));paint.reset();
+            corners.draw(canvas(),x+.5f,y+.5f,w-1,h-1,Math.max(0,radius-.5f),
+                fill(0xFFFFFFFF).setShader(edge).setMode(PaintMode.STROKE).setStrokeWidth(1),radius>=16);paint.reset();
         }
     }
 
     public void glassSurface(float x,float y,float w,float h,float radius,GlassStyle style) {
-        requireGlass(); glass.surface(x,y,w,h,radius,style);
+        requireGlass();
+        GlassStyle themed=style.decorations()?style:style.withTint(surfaceColor(style.tint()),style.backgroundOpacity());
+        glass.backdrop(x,y,w,h,radius,themed,dark,true);
+        glassDecorations(x,y,w,h,radius,style);
+    }
+
+    /** CSS backdrop-filter before an element's own, overriding background layers. */
+    public void glassBackdrop(float x,float y,float w,float h,float radius,GlassStyle style) {
+        requireGlass();glass.backdrop(x,y,w,h,radius,style,dark,false);
+    }
+
+    /** CSS sheen and rim above the element background, sharing its continuous contour. */
+    public void glassDecorations(float x,float y,float w,float h,float radius,GlassStyle style) {
+        requireGlass();
+        if(!dark){if(style.decorations())glass.decorations(x,y,w,h,radius,style.alpha(),!style.refraction());return;}
+        if(style.decorations()) {
+            save();clipRoundRect(x,y,w,h,radius);
+            linearGradientRoundRect(x,y,w,h,radius,135,new int[]{0x0ed2e5ff,0x00d2e5ff,0x00d6d0ff,0x05d6d0ff},new float[]{0,.42f,.64f,1});
+            if(style.tint()!=0x00ffffff) {
+                float dx=.5f,dy=.8660254f,extent=(Math.abs(w*dx)+Math.abs(h*dy))*.5f,cx=x+w*.5f,cy=y+h*.5f;
+                try(Shader rim=Shader.makeLinearGradient(cx-dx*extent,cy-dy*extent,cx+dx*extent,cy+dy*extent,
+                        new int[]{0x29dce8ff,0x05cddfff,0x03ced5ff,0x14dacfff},new float[]{0,.45f,.6f,1})) {
+                    // CSS content-box mask leaves a three-pixel inner rim, never a full fill.
+                    corners.draw(canvas(),x,y,w,h,radius,fill(0xffffffff).setShader(rim).setMode(PaintMode.STROKE).setStrokeWidth(6));paint.reset();
+                }
+                insetBoxShadow(x,y,w,h,radius,0,1,2,0,0x0ddceaff);
+                insetBoxShadow(x,y,w,h,radius,0,-1,3,0,0x1a111a33);
+            }
+            restore();
+        }
     }
     public void blurBackdrop(float x,float y,float w,float h,float radius,float blurPx,float alpha) {
         requireGlass(); glass.blur(x,y,w,h,radius,blurPx,alpha);
@@ -329,11 +384,24 @@ public final class HubDraw implements AutoCloseable {
         }
     }
 
+    /** CSS brightness on an isolated painted tile; alpha and the scene underneath stay intact. */
+    public void saveBrightnessLayer(float x,float y,float w,float h,float brightness){
+        try(ColorFilter color=ColorFilter.makeMatrix(new ColorMatrix(brightness,0,0,0,0,0,brightness,0,0,0,0,0,brightness,0,0,0,0,0,1,0));Paint layer=new Paint().setColorFilter(color)){
+            canvas().saveLayer(Rect.makeXYWH(x,y,w,h),layer);
+        }
+    }
+    /** Four-point filled star, with the source ClickSpark quadratic pinch. */
+    public void sparkStar(float x,float y,float radius,float rotation,int color){
+        if(radius<=0)return;StringBuilder svg=new StringBuilder("M").append(x+(float)Math.cos(rotation)*radius).append(',').append(y+(float)Math.sin(rotation)*radius);
+        for(int i=1;i<=4;i++){double a=rotation+i*Math.PI/2,mid=a-Math.PI/4;svg.append(" Q").append(x+(float)Math.cos(mid)*radius*.16f).append(',').append(y+(float)Math.sin(mid)*radius*.16f).append(' ').append(x+(float)Math.cos(a)*radius).append(',').append(y+(float)Math.sin(a)*radius);}svg.append(" Z");
+        try(Path path=Path.makeFromSVGString(svg.toString())){canvas().drawPath(path,fill(color));}
+    }
     public void circle(float cx, float cy, float radius, int color) {
         if (radius > 0) canvas().drawCircle(cx, cy, radius, fill(color));
     }
 
     public void line(float x1, float y1, float x2, float y2, float stroke, int color) {
+        color=dark&&!literalColors?HubTheme.line(color):color;
         if (stroke > 0) canvas().drawLine(x1, y1, x2, y2, fill(color).setStrokeWidth(stroke).setStrokeCap(PaintStrokeCap.ROUND));
     }
 
@@ -388,6 +456,7 @@ public final class HubDraw implements AutoCloseable {
     }
 
     public void text(String text,float x,float baseline,float size,int color,int weight) {
+        color=foreground(color);
         if (text == null || text.isEmpty() || size <= 0) return;
         for (FontRunText run : sansRuns(text, weight)) {
             TextLine line = textLineWeight(run.text, size, weight, false, run.cjk);
@@ -449,6 +518,7 @@ public final class HubDraw implements AutoCloseable {
         textSerif(text,x,baseline,size,color,bold?700:400);
     }
     public void textSerif(String text,float x,float baseline,float size,int color,int weight) {
+        color=foreground(color);
         if (text == null || text.isEmpty() || size <= 0) return;
         canvas().drawTextLine(textLineWeight(text, size, weight, true,false), x, baseline, fill(color));
     }
@@ -468,24 +538,47 @@ public final class HubDraw implements AutoCloseable {
     }
 
     public void textTracked(String text,float x,float baseline,float size,int color,int weight,float tracking,boolean serif) {
+        color=foreground(color);
         if(text==null||text.isEmpty()||size<=0)return;
         canvas().drawTextBlob(tracked(text,size,weight,tracking,serif).blob,x,baseline,fill(color));
     }
 
     /** Minecraft RichText italic is an oblique glyph; bold uses the actual weighted font. */
     public void richGlyph(String text,float x,float baseline,float size,int color,boolean bold,boolean italic,boolean underline,boolean strike) {
+        richGlyph(text,x,baseline,size,color,bold,italic,underline,strike,0);
+    }
+
+    /** Optional thin glyph contour keeps literal pale provider text readable on light artwork. */
+    public void richGlyph(String text,float x,float baseline,float size,int color,boolean bold,boolean italic,boolean underline,boolean strike,int outlineColor) {
+        boolean previousLiteral=literalColors;literalColors=true;
         int weight=bold?700:400;float width=textWidth(text,size,weight);
-        canvas().save();
         try {
-            canvas().translate(x,baseline);if(italic)canvas().skew(-.2f,0);
-            text(text,0,0,size,color,weight);
-        } finally {canvas().restore();}
-        float stroke=Math.max(.8f,size/16);
-        if(underline)line(x,baseline+size*.12f,x+width,baseline+size*.12f,stroke,color);
-        if(strike)line(x,baseline-size*.3f,x+width,baseline-size*.3f,stroke,color);
+            canvas().save();
+            try {
+                canvas().translate(x,baseline);if(italic)canvas().skew(-.2f,0);
+                if(outlineColor!=0) {
+                    float cursor=0;
+                    for(FontRunText run:sansRuns(text,weight)) {
+                        TextLine line=textLineWeight(run.text,size,weight,false,run.cjk);
+                        canvas().drawTextLine(line,cursor,0,fill(outlineColor).setMode(PaintMode.STROKE)
+                            .setStrokeWidth(1.3f).setStrokeJoin(PaintStrokeJoin.ROUND));
+                        cursor+=line.getWidth();
+                    }
+                }
+                text(text,0,0,size,color,weight);
+            } finally {canvas().restore();}
+            float stroke=Math.max(.8f,size/16);
+            if(outlineColor!=0) {
+                if(underline)line(x,baseline+size*.12f,x+width,baseline+size*.12f,stroke+1.3f,outlineColor);
+                if(strike)line(x,baseline-size*.3f,x+width,baseline-size*.3f,stroke+1.3f,outlineColor);
+            }
+            if(underline)line(x,baseline+size*.12f,x+width,baseline+size*.12f,stroke,color);
+            if(strike)line(x,baseline-size*.3f,x+width,baseline-size*.3f,stroke,color);
+        } finally {literalColors=previousLiteral;}
     }
 
     public void textGradient(String text,float x,float baseline,float size,int weight,float tracking,float angleDeg,int[] colors,float[] stops,boolean serif) {
+        colors=dark&&!literalColors?HubTheme.gradient(colors):colors;
         if(text==null||text.isEmpty()||size<=0)return;
         float width=textWidthTracked(text,size,weight,tracking,serif),height=size*1.2f;
         double angle=Math.toRadians(angleDeg);float dx=(float)Math.sin(angle),dy=-(float)Math.cos(angle);
@@ -521,6 +614,32 @@ public final class HubDraw implements AutoCloseable {
         }
     }
 
+    private java.util.List<String> warmAssets(){
+        if(warmAssets!=null)return warmAssets;java.util.LinkedHashSet<String> names=new java.util.LinkedHashSet<>();
+        for(String manifest:new String[]{"ASSET-MAPPING.json","UPDATES-ASSET-MAPPING.json"}){
+            try(InputStream input=HubDraw.class.getResourceAsStream(ROOT+manifest)){
+                if(input==null)continue;
+                var object=com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(input,java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                for(String group:new String[]{"artwork","icons"})if(object.has(group))for(var item:object.getAsJsonArray(group)){String target=item.getAsJsonObject().get("target").getAsString();if(target.startsWith("textures/")&&target.endsWith(".png"))names.add(target);}
+            }catch(IOException error){throw new IllegalStateException("Cannot read bundled public asset list",error);}
+        }
+        warmAssets=java.util.List.copyOf(names);return warmAssets;
+    }
+    public int warmAssetCount(){return warmAssets().size();}
+    int warmAssetBatch(int start,int maximum){int end=Math.min(warmAssets().size(),start+maximum);for(int i=start;i<end;i++)image(warmAssets().get(i),8+(i-start)%6*29,10+(i-start)/6*29,24,24,1);return end;}
+    /** Drop per-panel private strings, server icons, immutable frame copies and large temporary surfaces. */
+    public void releasePanelResources(){
+        if(canvas!=null||!alphaLayers.isEmpty())throw new IllegalStateException("Cannot suspend during a Hub frame");
+        lines.values().forEach(TextLine::close);lines.clear();
+        trackedLines.values().forEach(value->value.blob.close());trackedLines.clear();
+        sansRuns.clear();primaryGlyphs.clear();
+        var runtime=images.entrySet().iterator();while(runtime.hasNext()){var item=runtime.next();if(item.getKey().startsWith("memory:")){item.getValue().close();runtime.remove();}}
+        layerPool.values().forEach(Surface::close);layerPool.clear();layerPixels=0;
+        headLayers.values().forEach(Surface::close);headLayers.clear();
+        if(glass!=null)glass.releaseFrameResources();
+        rootWidth=rootHeight=0;
+    }
+
     /** Cached classpath image, borrowed by the caller: do not close it. */
     public Image imageResource(String asset) {
         if (closed) throw new IllegalStateException("HubDraw was closed");
@@ -552,6 +671,7 @@ public final class HubDraw implements AutoCloseable {
     }
 
     public void icon(String name, float x, float y, float size, int color) {
+        color=foreground(color);
         if (size <= 0) return;
         if(name.equals("personal")||name.endsWith("/personal"))name=name.substring(0,name.length()-8)+"user-round";
         Image image = imageResource("textures/icons/" + name + ".png");
@@ -564,6 +684,51 @@ public final class HubDraw implements AutoCloseable {
         }
     }
 
+    /** Device-pixel supersampling keeps geometric edges smooth at every GUI/DPI scale. */
+    public boolean supersample(float x,float y,float width,float height,int factor,Runnable content) {
+        if(supersampling||targetSurface==null||width<=0||height<=0||factor<2||factor>3)return false;
+        Matrix33 transform=canvas.getLocalToDeviceAsMatrix33();
+        float[] matrix=transform.getMat();
+        float minX=Float.POSITIVE_INFINITY,minY=minX,maxX=Float.NEGATIVE_INFINITY,maxY=maxX;
+        for(float px:new float[]{x,x+width})for(float py:new float[]{y,y+height}) {
+            float z=matrix[6]*px+matrix[7]*py+matrix[8];
+            if(!Float.isFinite(z)||z<=.0001f)return false;
+            float deviceX=(matrix[0]*px+matrix[1]*py+matrix[2])/z;
+            float deviceY=(matrix[3]*px+matrix[4]*py+matrix[5])/z;
+            minX=Math.min(minX,deviceX);maxX=Math.max(maxX,deviceX);
+            minY=Math.min(minY,deviceY);maxY=Math.max(maxY,deviceY);
+        }
+        int left=Math.max(0,(int)Math.floor(minX)),top=Math.max(0,(int)Math.floor(minY));
+        int deviceWidth=Math.min(targetSurface.getWidth(),(int)Math.ceil(maxX))-left;
+        int deviceHeight=Math.min(targetSurface.getHeight(),(int)Math.ceil(maxY))-top;
+        if(deviceWidth<=0||deviceHeight<=0)return false;
+        int pixelsWide=deviceWidth*factor,pixelsHigh=deviceHeight*factor;
+        if(pixelsWide>1536||pixelsHigh>1536)return false;
+        int pooledWidth=(pixelsWide+15)/16*16,pooledHeight=(pixelsHigh+15)/16*16;
+        String key=pooledWidth+"x"+pooledHeight;
+        Surface layer=headLayers.get(key);
+        if(layer==null) {
+            try{layer=targetSurface.makeSurface(pooledWidth,pooledHeight);}catch(RuntimeException unavailable){return false;}
+            if(layer==null)return false;
+            headLayers.put(key,layer);
+            while(headLayers.size()>8){var iterator=headLayers.entrySet().iterator();var old=iterator.next();iterator.remove();old.getValue().close();}
+        }
+        Canvas parent=canvas;Surface parentSurface=targetSurface;int parentBase=baseSaveCount;
+        Canvas child=layer.getCanvas();child.restoreToCount(1);child.resetMatrix();child.clear(0);
+        child.scale(factor,factor);child.translate(-left,-top);child.concat(transform);
+        supersampling=true;canvas=child;targetSurface=layer;baseSaveCount=child.getSaveCount();
+        try{content.run();}
+        finally{canvas=parent;targetSurface=parentSurface;baseSaveCount=parentBase;supersampling=false;}
+        try(Image snapshot=layer.makeImageSnapshot()) {
+            int saved=parent.save();
+            try {
+                parent.resetMatrix();
+                parent.drawImageRect(snapshot,Rect.makeWH(pixelsWide,pixelsHigh),Rect.makeXYWH(left,top,deviceWidth,deviceHeight),SMOOTH_SAMPLING,fill(0xffffffff),false);
+            } finally {parent.restoreToCount(saved);}
+        }
+        return true;
+    }
+
     public void save() { canvas().save(); }
     public void restore() {
         if (canvas().getSaveCount() <= baseSaveCount) {
@@ -574,12 +739,13 @@ public final class HubDraw implements AutoCloseable {
     }
     public void translate(float x, float y) { canvas().translate(x, y); }
     public void clipRoundRect(float x, float y, float w, float h, float radius) {
-        canvas().clipRRect(RRect.makeXYWH(x, y, Math.max(0, w), Math.max(0, h), radius), true);
+        corners.clip(canvas(),x,y,Math.max(0,w),Math.max(0,h),radius);
     }
 
     @Override public void close() {
         if (closed) return;
         closed = true;
+        corners.close();headLayers.values().forEach(Surface::close);headLayers.clear();
         canvas = null;
         lines.values().forEach(TextLine::close);
         fonts.values().forEach(Font::close);

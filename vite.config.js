@@ -26,5 +26,5 @@ export default defineConfig({
       }
     },
   }],
-  server: { host: "127.0.0.1", port: 4176, strictPort: true },
+  server: { host: "127.0.0.1", port: 4176, strictPort: true, proxy: { "/manager": { target: "http://127.0.0.1:4178", ws: true } } },
 });

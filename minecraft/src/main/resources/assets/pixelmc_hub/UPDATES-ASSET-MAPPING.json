@@ -1,0 +1,139 @@
+{
+  "generatedFrom": "Approved src/changelog React Lucide components, category stroke1.15/default1.65",
+  "icons": [
+    {
+      "exportName": "LockKeyhole",
+      "target": "textures/icons/lock-keyhole.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "4ad29919a2dc613a9edc79ecc7cc03698d7b0d678fe15e5f649b51085104c361"
+    },
+    {
+      "exportName": "Newspaper",
+      "target": "textures/icons/newspaper.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "ded06eabfc5ab0721ca2f8ee394941ef3f144dc9fd406489030ad5beed54a397"
+    },
+    {
+      "exportName": "FileText",
+      "target": "textures/icons/file-text.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "1b9b2a3d1afeab0637eebdece43625cef29a0f121f1edc4e0d8419ae9a400a15"
+    },
+    {
+      "exportName": "ChevronDown",
+      "target": "textures/icons/chevron-down.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "f2c14cca176a1fb088f5a586bfad15a5c121d0b58653ec3c3de06a41d4f41442"
+    },
+    {
+      "exportName": "Heart",
+      "target": "textures/icons/heart.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "6489a36a543244db37ba01c7e975aedfbde8af99d661d43bb28f99bdbfbc55bc"
+    },
+    {
+      "exportName": "MessageCircle",
+      "target": "textures/icons/message-circle.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "1cecea94441a6067fcca79b764e2a791c03085f03dbab8209884e705f07c6a50"
+    },
+    {
+      "exportName": "Send",
+      "target": "textures/icons/send.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "b50543636a435f38bcbff6705108f1ac0b2784996fcdb673de541a3ff9c96a4b"
+    },
+    {
+      "exportName": "Trash2",
+      "target": "textures/icons/trash-2.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "e5cd2fd07a02c58f1649f6a1b28a5e5529592daead66d88989c20d5c9b97bcf2"
+    },
+    {
+      "exportName": "Pin",
+      "target": "textures/icons/pin.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "496dd55819bb2f590b1abbd6c3bb8d7a6778c6e60d4aa687e40103baaa60c0f6"
+    },
+    {
+      "exportName": "WandSparkles",
+      "target": "textures/icons/wand-sparkles.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "5cf853765f26695259ef4b4042b4dc292fa74528c1c6b4ebd4e24c0e38df68f5"
+    },
+    {
+      "exportName": "Wrench",
+      "target": "textures/icons/wrench.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "ddd3668bd6d82e41cf808de4799d09a82a210881e47f516d154b77e8541fef79"
+    },
+    {
+      "exportName": "PackageOpen",
+      "target": "textures/icons/package-open.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "eb178cd45d091a5b3e9094aa3f3e04065800bd822af9de7c7c49cfd689f8b8fc"
+    },
+    {
+      "exportName": "Megaphone",
+      "target": "textures/icons/megaphone.png",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "d4f06ad44a3357f03f2f3c01e7ac5cfddcc2305baa2f930859e2b2b1b84a7486"
+    },
+    {
+      "exportName": "Heart",
+      "target": "textures/icons/heart-filled.png",
+      "fill": "white",
+      "strokeWidth": 1.65,
+      "license": "ISC",
+      "sha256": "727c677568f049961f9381c912a1d597f3355e7e3054d6e2167beb8b1c26bed3"
+    },
+    {
+      "exportName": "Sparkles",
+      "target": "textures/icons/stroke-1.15/sparkles.png",
+      "strokeWidth": 1.15,
+      "license": "ISC",
+      "sha256": "df871549a718bb4818a5c7eb615047416666110796722d8b7cd9f7efc1fa228d"
+    },
+    {
+      "exportName": "WandSparkles",
+      "target": "textures/icons/stroke-1.15/wand-sparkles.png",
+      "strokeWidth": 1.15,
+      "license": "ISC",
+      "sha256": "da7f55a45aab64b2a684c05c8850993463026e89b522f6300004099f8f2171b4"
+    },
+    {
+      "exportName": "Wrench",
+      "target": "textures/icons/stroke-1.15/wrench.png",
+      "strokeWidth": 1.15,
+      "license": "ISC",
+      "sha256": "d4780ae408299130b6ccebf0c7f394a4029f32420ccfa661d8eb932e29dee80a"
+    },
+    {
+      "exportName": "PackageOpen",
+      "target": "textures/icons/stroke-1.15/package-open.png",
+      "strokeWidth": 1.15,
+      "license": "ISC",
+      "sha256": "a1cd7b4b8f4871b56e085ab79c4068d0db7bd666504c2b0f56d10bdcaa4dda50"
+    },
+    {
+      "exportName": "Megaphone",
+      "target": "textures/icons/stroke-1.15/megaphone.png",
+      "strokeWidth": 1.15,
+      "license": "ISC",
+      "sha256": "9bdd8e0f308dc194373c148914082f344d484d2e7b9cfc95382b2c0bd9f10d0a"
+    }
+  ]
+}

@@ -22,7 +22,7 @@ final class HubPreferences {
     private String fallbackScope="";
     private boolean seen,compact;
     private String welcomeMode = "login";
-    private boolean reducedMotion;
+    private boolean reducedMotion,systemReducedMotion,dark;
 
     HubPreferences(Path path) {
         this.path = path;
@@ -39,11 +39,12 @@ final class HubPreferences {
     }
 
     void select(String value) {
-        scope=value==null?"":value;fallbackScope="";welcomeMode="login";reducedMotion=false;seen=false;compact=false;
+        scope=value==null?"":value;fallbackScope="";welcomeMode="login";reducedMotion=false;dark=false;seen=false;compact=false;
         if(scopes.has(scope)) {
             JsonObject entry=scopes.getAsJsonObject(scope);
             if(entry.has("welcomeMode"))setWelcomeMode(entry.get("welcomeMode").getAsString());
             reducedMotion=entry.has("reducedMotion")&&entry.get("reducedMotion").getAsBoolean();
+            dark=entry.has("theme")&&entry.get("theme").isJsonPrimitive()&&"dark".equals(entry.get("theme").getAsString());
             seen=entry.has("seen")&&entry.get("seen").getAsBoolean();compact=entry.has("compact")&&entry.get("compact").getAsBoolean();
         }
     }
@@ -62,14 +63,17 @@ final class HubPreferences {
         }
     }
     void fallbackScope(String value){fallbackScope=value==null?"":value;}
+    boolean dark(){return dark;}
+    void setDark(boolean value){dark=value;}
     boolean compact(){return compact;}
     void setCompact(boolean value){compact=value;}
     String welcomeMode() { return welcomeMode; }
     boolean reducedMotion() { return reducedMotion; }
     void setWelcomeMode(String mode) { welcomeMode = Set.of("once", "login", "always").contains(mode) ? mode : "login"; }
     void setReducedMotion(boolean value) { reducedMotion = value; }
+    void setSystemReducedMotion(boolean value) { systemReducedMotion = value; }
     boolean shouldPlay(String scope, boolean shownThisLogin) {
-        if (reducedMotion) return false;
+        if (reducedMotion||systemReducedMotion) return false;
         return switch (welcomeMode) {
             case "once" -> !seen;
             case "login" -> !shownThisLogin;
@@ -81,7 +85,7 @@ final class HubPreferences {
     void save() {
         if(scope.isEmpty())return;
         JsonObject entry=new JsonObject();entry.addProperty("welcomeMode",welcomeMode);entry.addProperty("reducedMotion",reducedMotion);
-        entry.addProperty("seen",seen);entry.addProperty("compact",compact);
+        entry.addProperty("seen",seen);entry.addProperty("compact",compact);entry.addProperty("theme",dark?"dark":"light");
         if(scopes.has(scope)&&scopes.getAsJsonObject(scope).has("canonicalOrigin"))entry.add("canonicalOrigin",scopes.getAsJsonObject(scope).get("canonicalOrigin"));
         scopes.add(scope,entry);
         // The next login can honor once/login before asynchronous metadata arrives.

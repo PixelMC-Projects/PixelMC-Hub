@@ -1,14 +1,27 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import GlassIcons from "./vendor/react-bits/GlassIcons.jsx";
 import GlassSurface from "./vendor/react-bits/GlassSurface.jsx";
 import TiltedCard from "./vendor/react-bits/TiltedCard.jsx";
 import SwipeToast from "./vendor/react-bits/SwipeToast.jsx";
+import ChangelogPage from "./changelog/ChangelogPage.jsx";
+import LeaderboardPage from "./leaderboards/LeaderboardPage.jsx";
+import PlayerProfileCard from "./community/PlayerProfileCard.jsx";
+import JourneyMemories from "./community/JourneyMemories.jsx";
+import {
+  SELF_PROFILE, getPublicProfile, readCommunityProfile, readSelfFortuneState,
+  saveSelfFortuneSelection, persistHubPreviewState, subscribeCommunity,
+} from "./community/demo.js";
+import { useLeaderboardPreview } from "./leaderboards/store.js";
+import { useChangelog } from "./changelog/store.js";
 import PlayerHead from "./PlayerHead.jsx";
 import WelcomeSplash from "./WelcomeSplash.jsx";
 import WelcomeFrequency, { shouldShowWelcome, welcomeModes } from "./WelcomeFrequency.jsx";
 import { titleIcons } from "./title-icons.js";
 import {
   Home,
+  Newspaper,
+  Trophy,
   Tag,
   BookOpen,
   Settings,
@@ -72,12 +85,15 @@ function initial() {
     displayDate: todayKey,
     reducedMotion: false,
     welcomeMode: "login",
+    theme: "light",
     hasSeenWelcome: false,
   };
   try {
     const saved = { ...defaults, ...JSON.parse(localStorage.getItem(storageKey) || "{}") };
     if (!welcomeModes.some((mode) => mode.id === saved.welcomeMode)) saved.welcomeMode = defaults.welcomeMode;
     saved.hasSeenWelcome = saved.hasSeenWelcome === true;
+    saved.theme = saved.theme === "dark" ? "dark" : "light";
+    Object.assign(saved, readSelfFortuneState());
     return saved;
   } catch {
     return defaults;
@@ -140,16 +156,28 @@ function Pill({ children, color = "green" }) {
   );
 }
 
-function Modal({ title, subtitle, onClose, children, wide = false }) {
+function Modal({ title, subtitle, onClose, children, wide = false, className = "", animated = false, reducedMotion = false }) {
+  const Backdrop = animated ? motion.div : "div";
+  const Surface = animated ? motion.section : "section";
+  const backdropMotion = animated ? {
+    initial: {opacity: 0}, animate: {opacity: 1}, exit: {opacity: 0},
+    transition: {duration: reducedMotion ? 0 : .18},
+  } : {};
+  const surfaceMotion = animated ? {
+    initial: {opacity: 0, y: reducedMotion ? 0 : 10, scale: reducedMotion ? 1 : .985},
+    animate: {opacity: 1, y: 0, scale: 1},
+    exit: {opacity: 0, y: reducedMotion ? 0 : 7, scale: reducedMotion ? 1 : .985},
+    transition: {duration: reducedMotion ? 0 : .2, ease: [.22, 1, .36, 1]},
+  } : {};
   const ref = useRef();
   useEffect(() => {
     const prev = document.activeElement;
     const root = ref.current;
     const focusable = () => [
       ...root.querySelectorAll(
-        'button:not(:disabled),input,select,[tabindex="0"]',
+        'button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]',
       ),
-    ];
+    ].filter(element => !element.closest('[inert]') && element.getClientRects().length > 0);
     focusable()[0]?.focus({ preventScroll: true });
     const onKey = (e) => {
       if (e.key === "Escape") {
@@ -176,15 +204,15 @@ function Modal({ title, subtitle, onClose, children, wide = false }) {
     };
   }, []);
   return (
-    <div
-      className="modal-backdrop"
+    <Backdrop {...backdropMotion}
+      className={`modal-backdrop ${animated ? "modal-motion" : ""}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <section
+      <Surface {...surfaceMotion}
         ref={ref}
-        className={`modal ${wide ? "wide" : ""}`}
+        className={`modal ${wide ? "wide" : ""} ${className}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -199,8 +227,8 @@ function Modal({ title, subtitle, onClose, children, wide = false }) {
           </IconButton>
         </header>
         {children}
-      </section>
-    </div>
+      </Surface>
+    </Backdrop>
   );
 }
 function FortuneReading({ fortune, onClose, displayDate, onDisplay }) {
@@ -268,8 +296,12 @@ function FortuneReading({ fortune, onClose, displayDate, onDisplay }) {
 }
 
 export default function App() {
-  const [page, setPage] = useState("home");
-  useEffect(() => { location.hash = "/home"; }, []);
+  const requestedPreview = new URLSearchParams(location.search).get("page");
+  const previewPage = requestedPreview === "rankings" ? "leaderboards" : ["home", "titles", "fortunes", "updates", "leaderboards", "memories"].includes(requestedPreview) ? requestedPreview : "home";
+  const [page, setPage] = useState(previewPage);
+  const updatePrototype = useChangelog();
+  const [leaderboardPreview, setLeaderboardPreview, simulateLeaderboardUpdate] = useLeaderboardPreview();
+  useEffect(() => { location.hash = "/" + previewPage; }, []);
   const [state, setState] = useState(initial);
   const [systemReduced, setSystemReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   useEffect(() => {
@@ -280,12 +312,38 @@ export default function App() {
   }, []);
   const reduceMotion = state.reducedMotion || systemReduced;
   const [modal, setModal] = useState(null);
+  const [publicProfile, setPublicProfile] = useState(null);
+  const [memoryPlayer, setMemoryPlayer] = useState(SELF_PROFILE);
+  const [memoryArchive, setMemoryArchive] = useState(null);
+  const memoryReturnPage = useRef("home");
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = state.theme;
+  }, [state.theme]);
+  useEffect(() => subscribeCommunity(() => {
+    try {
+      const selected = readSelfFortuneState();
+      setState(current => current.displayDate === selected.displayDate && current.fortuneState === selected.fortuneState
+        ? current : { ...current, ...selected });
+      setPublicProfile(current => current ? { ...readCommunityProfile(current.playerId), title: current.title } : null);
+      setMemoryPlayer(current => readCommunityProfile(current.playerId));
+    } catch (error) {
+      setToast({ text: error.message || "资料更新读取失败，请重新打开。", tone: "error", key: Date.now() });
+    }
+  }), []);
+  const leaderboardPreviewTimer = useRef(null);
+  useEffect(() => () => clearTimeout(leaderboardPreviewTimer.current), []);
+  const playLeaderboardUpdate = () => {
+    clearTimeout(leaderboardPreviewTimer.current);
+    setModal(null); setPage('leaderboards');
+    // Let the preview dialog close before issuing this single synthetic event.
+    leaderboardPreviewTimer.current = setTimeout(simulateLeaderboardUpdate, 500);
+  };
   const [reading, setReading] = useState(null);
   const [toast, setToast] = useState(null);
   const [closed, setClosed] = useState(false);
   // One page load represents one login in this browser-only prototype.
   const seenThisLogin = useRef(false);
-  const [opening, setOpening] = useState(() => shouldShowWelcome(state.welcomeMode, {
+  const [opening, setOpening] = useState(() => previewPage === "home" && shouldShowWelcome(state.welcomeMode, {
     reducedMotion: reduceMotion, seenThisLogin: false, seenBefore: state.hasSeenWelcome,
   }));
   useEffect(() => {
@@ -299,8 +357,24 @@ export default function App() {
     const timer = setTimeout(() => setOpening(false), 3060);
     return () => clearTimeout(timer);
   }, [closed, reduceMotion, opening]);
-  const notify = (text) => setToast({ text, key: Date.now() });
-  const update = (patch) => setState((s) => ({ ...s, ...patch }));
+  const notify = (text, tone = "success") => setToast({ text, tone, key: Date.now() });
+  const update = async (patch) => {
+    try {
+      if (Object.hasOwn(patch, "fortuneState")) {
+        await persistHubPreviewState({ ...state, ...patch }, { writeFortuneState: true });
+      }
+      if (Object.hasOwn(patch, "displayDate")) {
+        const selected = await saveSelfFortuneSelection(patch.displayDate);
+        setState(current => ({ ...current, ...patch, ...selected }));
+      } else {
+        setState(current => ({ ...current, ...patch }));
+      }
+      return true;
+    } catch (error) {
+      notify(error.message || "保存未完成，请重试。", "error");
+      return false;
+    }
+  };
   const equipped = titles.find((t) => t.id === state.equipped);
   const todayFortune = {
     ...fortuneById(1),
@@ -319,6 +393,31 @@ export default function App() {
     location.hash = "/" + p;
     setClosed(false);
   };
+  const openPublicProfile = (row = SELF_PROFILE) => {
+    const base = row.memoryIds ? row : getPublicProfile(row);
+    let profile;
+    try { profile = readCommunityProfile(base.playerId); }
+    catch (error) { notify(error.message || "资料读取失败，请重试。", "error"); return; }
+    setModal(null);
+    setPublicProfile(profile.isSelf ? {
+      ...profile,
+      title: state.visible ? equipped : null,
+      featuredFortune: archivedFortunes[state.displayDate] ?? null,
+    } : profile);
+  };
+  const saveProfileFortune = (date) => {
+    if (!publicProfile?.isSelf || (date !== null && !archivedFortunes[date])) return;
+    setState(current => ({ ...current, displayDate: date }));
+    setPublicProfile(current => current?.isSelf ? {
+      ...current, featuredFortune: archivedFortunes[date] ?? null,
+    } : current);
+  };
+  const openMemories = (profile = SELF_PROFILE, archiveId = null) => {
+    if (page !== "memories") memoryReturnPage.current = page;
+    setPublicProfile(null); setModal(null);
+    setMemoryPlayer(profile); setMemoryArchive(archiveId);
+    navigate("memories");
+  };
   const openHandbook = () => {
     setPage("home");
     location.hash = "/home";
@@ -328,7 +427,7 @@ export default function App() {
     setClosed(false);
   };
   useEffect(() => {
-    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { /* Keep in-memory preferences when storage is unavailable. */ }
+    persistHubPreviewState(state).catch(error => notify(error.message || "界面设置保存未完成。", "error"));
     document.documentElement.dataset.motion = reduceMotion
       ? "reduced"
       : "full";
@@ -336,7 +435,7 @@ export default function App() {
   useEffect(() => {
     const f = () =>
       setPage(
-        ["titles", "fortunes"].includes(location.hash.slice(2))
+        ["titles", "fortunes", "updates", "leaderboards", "memories"].includes(location.hash.slice(2))
           ? location.hash.slice(2)
           : "home",
       );
@@ -345,7 +444,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     const f = (e) => {
-      if (e.key === "Escape" && !e.repeat && !modal && !reading) {
+      if (e.key === "Escape" && !e.repeat && !modal && !reading && !publicProfile) {
         e.preventDefault();
         if (closed) openHandbook();
         else setClosed(true);
@@ -353,7 +452,7 @@ export default function App() {
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
-  }, [modal, reading, closed, reduceMotion, state.welcomeMode, state.hasSeenWelcome]);
+  }, [modal, reading, publicProfile, closed, reduceMotion, state.welcomeMode, state.hasSeenWelcome]);
   function equip(title) {
     update({ equipped: title.id });
     notify(`已佩戴「${title.name}」`);
@@ -372,7 +471,7 @@ export default function App() {
         <span>PLAYER EXPERIENCE</span>
       </div>
       {!closed ? (
-        <div className={`app-shell welcome-shell ${opening ? "is-opening" : ""}`}>
+        <div className={`app-shell welcome-shell has-leaderboards-nav ${opening ? "is-opening" : ""}`}>
           {opening && <WelcomeSplash />}
           <aside className="sidebar" inert={opening}>
             <GlassSurface width="100%" height="100%" borderRadius={0}
@@ -398,9 +497,11 @@ export default function App() {
                   { id: "home", label: "个人主页", icon: <Home />, color: "blue" },
                   { id: "titles", label: "我的称号", icon: <Tag />, color: "purple" },
                   { id: "fortunes", label: "我的签笺", icon: <BookOpen />, color: "orange" },
-                ].map(item => ({ ...item, onClick: () => navigate(item.id), current: page === item.id,
-                  className: page === item.id ? "is-current" : "" }))}
-                size={46} gap={28} columns={1} labels="always" theme="light"
+                  ...(updatePrototype.settings.updatesEnabled ? [{ id: "updates", label: "更新日志", icon: <Newspaper />, color: "green" }] : []),
+                  { id: "leaderboards", label: "玩家排行", icon: <Trophy />, color: "pink" },
+                ].map(item => ({ ...item, onClick: () => navigate(item.id), current: page === item.id || (page === "memories" && item.id === "home"),
+                  className: page === item.id || (page === "memories" && item.id === "home") ? "is-current" : "" }))}
+                size={46} gap={28} columns={1} labels="always" theme={state.theme}
                 plate="tilt" tilt={-16} roundness={0.65} shine={0.9} frost={0.1}
                 tint="#ffffff" tintOpacity={0.16}
                 hover={reduceMotion ? "none" : "lift"} parallax={reduceMotion ? 0 : 0.65}
@@ -438,6 +539,9 @@ export default function App() {
                       home: "个人主页",
                       titles: "我的称号",
                       fortunes: "我的签笺",
+                      updates: "更新日志",
+                      leaderboards: "玩家排行",
+                      memories: "旅程档案",
                     }[page]
                   }
                 </strong>
@@ -492,10 +596,13 @@ export default function App() {
                       </div>
                       <button
                         className="btn subtle profile-btn"
-                        onClick={() => setModal("profile")}
+                        onClick={() => openPublicProfile(SELF_PROFILE)}
                       >
-                        个人资料
+                        公开资料
                         <ArrowUpRight size={15} />
+                      </button>
+                      <button className="btn subtle profile-btn memories-btn" onClick={() => openMemories()}>
+                        旅程档案<Bookmark size={14} />
                       </button>
                       <div className="identity-decoration">
                         <span className="medallion-ring" />
@@ -730,6 +837,8 @@ export default function App() {
                   reduceMotion={reduceMotion}
                 />
               )}
+              {page === "updates" && <ChangelogPage notify={notify} reduceMotion={reduceMotion} />}
+              {page === "leaderboards" && <LeaderboardPage notify={notify} reduceMotion={reduceMotion} onOpenProfile={openPublicProfile} />}
               {page === "fortunes" && (
                 <FortunesPage
                   archive={archivedFortunes}
@@ -739,11 +848,11 @@ export default function App() {
                   notify={notify}
                 />
               )}
+              {page === "memories" && <JourneyMemories player={memoryPlayer} initialArchiveId={memoryArchive}
+                onBack={() => navigate(memoryReturnPage.current)} onOpenProfile={openPublicProfile} reduceMotion={reduceMotion} notify={notify} />}
             </main>
           </div>
-          {toast && <SwipeToast key={toast.key} title={toast.text} icon={<Check size={18} />}
-            className="hub-swipe-toast" background="#ffffff" color="#505875" closeButton
-            reducedMotion={reduceMotion} onClose={() => setToast(current => current?.key === toast.key ? null : current)} />}
+
         </div>
       ) : (
         <div className="closed-state">
@@ -761,11 +870,16 @@ export default function App() {
           </span>
         </div>
       )}
+      {!closed && toast && <SwipeToast key={toast.key} title={toast.text}
+        icon={toast.tone === "error" ? <Info size={18} /> : <Check size={18} />}
+        className={`hub-swipe-toast ${toast.tone === "error" ? "is-error" : ""}`}
+        background="#ffffff" color="#505875" closeButton
+        reducedMotion={reduceMotion} onClose={() => setToast(current => current?.key === toast.key ? null : current)} />}
       <div className="preview-footer">
         <span>
           <kbd>Esc</kbd> {closed ? "打开手册" : "收起面板"}
         </span>
-        <span>本地交互预览 · 演示数据</span>
+        <span>本地交互预览 · 演示数据 <a className="updates-manager-link" href="/manager/" target="_blank" rel="noreferrer">打开 Manager 管理端 ↗</a></span>
         <button onClick={() => setModal("preview")}>
           <SlidersHorizontal size={13} />
           预览选项
@@ -776,12 +890,24 @@ export default function App() {
           fortune={reading}
           onClose={() => setReading(null)}
           displayDate={state.displayDate}
-          onDisplay={(date) => {
-            update({ displayDate: date });
-            notify("已更新手册展示的签笺");
+          onDisplay={async (date) => {
+            if (await update({ displayDate: date })) notify("已更新手册展示的签笺");
           }}
         />
       )}
+      <AnimatePresence>
+      {publicProfile && (
+        <Modal key={publicProfile.playerId} title="玩家资料" className="public-profile-modal" animated reducedMotion={reduceMotion} onClose={() => setPublicProfile(null)}>
+          <div className="public-profile-scroll">
+            <PlayerProfileCard player={publicProfile} onOpenMemories={openMemories} reduceMotion={reduceMotion} notify={notify}
+              fortuneOptions={publicProfile.isSelf ? Object.values(archivedFortunes).sort((a, b) => b.date.localeCompare(a.date)) : []}
+              onSave={profile => setPublicProfile(current => current?.playerId === profile.playerId ? { ...current, ...profile } : current)}
+              onSaveFortune={saveProfileFortune} />
+            {publicProfile.isSelf && <div className="public-profile-account"><button className="text-button" onClick={() => {setPublicProfile(null);setModal("profile");}}>账户信息<ChevronRight size={13} /></button></div>}
+          </div>
+        </Modal>
+      )}
+      </AnimatePresence>
       {modal === "profile" && (
         <Modal
           title="个人资料"
@@ -853,11 +979,12 @@ export default function App() {
             <div className="setting-row">
               <div>
                 <strong>界面主题</strong>
-                <p>Liquid Glass · 浅色</p>
+                <p>{state.theme === "dark" ? "深灰蓝紫玻璃" : "浅色液态玻璃"}</p>
               </div>
-              <span className="theme-swatch">
-                <Check size={14} />
-              </span>
+              <div className="theme-choices" role="group" aria-label="界面主题">
+                <button aria-pressed={state.theme === "light"} onClick={() => update({theme:"light"})}><Sun size={15} />浅色</button>
+                <button aria-pressed={state.theme === "dark"} onClick={() => update({theme:"dark"})}><Moon size={15} />深色</button>
+              </div>
             </div>
             <div className="settings-note">
               <Info size={15} />
@@ -887,19 +1014,32 @@ export default function App() {
                 </option>
               ))}
             </select>
+            <div className="lb-preview-field">
+              <label htmlFor="leaderboard-preview-state">排行榜展示状态</label>
+              <select id="leaderboard-preview-state" value={leaderboardPreview} onChange={(event) => setLeaderboardPreview(event.target.value)}>
+                <option value="ready">演示排行</option>
+                <option value="loading">读取中</option>
+                <option value="unavailable">暂时不可用</option>
+                <option value="unsupported">未安装对应模块</option>
+                <option value="empty">空榜</option>
+                <option value="unranked">自己未入榜</option>
+              </select>
+              <p>切换后进入玩家排行查看；仅影响本地预览。</p>
+              <div className="lb-preview-actions"><button className="btn subtle" onClick={playLeaderboardUpdate}>播放排行变动</button><button className="btn subtle" onClick={() => setLeaderboardPreview('ready')}>还原排行</button></div>
+            </div>
             <p className="preview-note">
               称号佩戴、显示设置和手册签笺展示都是本地模拟。抽签、解签、存签仍保留游戏内物品与方块交互。
             </p>
             <button
               className="btn subtle"
-              onClick={() => {
-                update({
+              onClick={async () => {
+                const restored = await update({
                   equipped: "dew",
                   visible: true,
                   fortuneState: "archived",
                   displayDate: todayKey,
                 });
-                notify("已还原演示状态");
+                if (restored) notify("已还原演示状态");
               }}
             >
               <RotateCcw size={15} />
@@ -1402,10 +1542,9 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
         <button
           className="btn subtle"
           disabled={!selectedFortune || state.displayDate === selected}
-          onClick={() => {
+          onClick={async () => {
             if (selectedFortune) {
-              update({ displayDate: selected });
-              notify("已更新手册展示的签笺");
+              if (await update({ displayDate: selected })) notify("已更新手册展示的签笺");
             } else notify("请先选择一张已收藏的签笺");
           }}
         >

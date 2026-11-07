@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" viewBox="0 0 480 240" focusable="false">
+    <ellipse cx="329" cy="215" rx="133" ry="15" fill="@DEEP@" opacity=".12" />
+    <path d="M156 208C215 160 259 174 303 190C359 162 405 174 469 205" fill="@MID@" opacity=".35" />
+    <g stroke="@DEEP@" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M262 205L325 118L396 205Z" fill="@LIGHT@" />
+      <path d="M325 118L338 204H396Z" fill="@MID@" />
+      <path d="M287 204L315 158L325 204" fill="@HIGHLIGHT@" />
+      <path d="M325 118L371 181M252 210H406M316 120L328 106M322 121L340 108" fill="none" />
+      <path d="M187 97C174 98 167 92 169 82C170 73 178 68 190 70C196 49 224 46 237 61C252 57 266 65 266 78C282 78 284 96 269 99Z" fill="@HIGHLIGHT@" />
+      <path d="M208 79V82M234 79V82M218 85Q222 90 227 85" fill="none" />
+      <path d="M407 178V213M410 134L391 166H427ZM407 159L384 192H436Z" fill="@MID@" />
+      <path d="M225 177V206M227 147L211 177H243Z" fill="@LIGHT@" />
+      <path d="M307 54L310 62L318 65L310 68L307 76L304 68L296 65L304 62Z" fill="@HIGHLIGHT@" />
+      <circle cx="389" cy="70" r="21" fill="@HIGHLIGHT@" />
+      <path d="M389 37V30M421 70H428M367 47L362 42M411 48L417 42" fill="none" />
+    </g>
+    <g fill="@DEEP@" opacity=".5"><circle cx="292" cy="93" r="2" /><circle cx="449" cy="126" r="2" /><circle cx="175" cy="153" r="2.5" /></g>
+  </svg>

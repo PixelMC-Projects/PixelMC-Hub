@@ -12,7 +12,7 @@ Copyright © 2026 zhan_cpu / PixelMC Projects. 本项目自有应用代码使用
 - React：MIT license。Vite：MIT license。依赖版权声明保留于各依赖的许可证文件。
 - Swipe Toast 网页动效依赖 Motion / Framer Motion / motion-dom / motion-utils（MIT，Copyright Motion B.V.）及 tslib（0BSD，Copyright Microsoft）；分发副本在构建产物 `licenses/` 中。
 - 字体调用系统 Segoe UI、Microsoft YaHei UI 与可用宋体，不随项目分发字体文件。
-- `src/vendor/react-bits/` 的 GlassIcons、GlassSurface、TiltedCard：Copyright © 2026 David Haz；使用该目录 `LICENSE.md` 中的 **MIT + Commons Clause License Condition v1.0**，不是标准 MIT 或 Apache 授权。来源：https://github.com/DavidHDev/react-bits 。官方注册表来源与获取时的文件哈希见 `SOURCES.json`。2026/11/03 修改 GlassIcons 和 TiltedCard，加入应用的减少动态效果选项、当前页面和选中状态的可访问性属性；其他文件未修改。组件只作为本玩家应用的一部分使用，不作为组件包独立再分发。
+- `src/vendor/react-bits/` 的 GlassIcons、GlassSurface、TiltedCard、AnimatedList、ClickSpark：Copyright © 2026 David Haz；使用该目录 `LICENSE.md` 中的 **MIT + Commons Clause License Condition v1.0**，不是标准 MIT 或 Apache 授权。来源：https://github.com/DavidHDev/react-bits 。官方注册表来源与获取时的文件哈希见 `SOURCES.json`。2026/11/03 修改 GlassIcons 和 TiltedCard，加入应用的减少动态效果选项、当前页面和选中状态的可访问性属性；2026/11/05 AnimatedList 适配应用现有图标、受控选中状态与读屏标签，ClickSpark 保留上游实现。组件只作为本玩家应用的一部分使用，不作为组件包独立再分发。
 
 DailyFortunes 素材及签文的 AGPL-3.0-only 全文见 `licenses/AGPL-3.0-assets.txt`；来源为 https://github.com/PixelMC-Projects/DailyFortunes 。默认头像来源为 https://github.com/PixelMC-Projects/MemorialTitles 。本项目保存这些素材的原始形式，未把它们改标为 Apache。
 

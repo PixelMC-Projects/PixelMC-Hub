@@ -20,10 +20,39 @@ import java.util.List;
  * All methods must run on Minecraft's render thread. The runtime skin is memory-only.
  */
 public final class HubHead {
-    private static final float PITCH = (float) Math.toRadians(-12);
     private static final float HAT_SCALE = 9f / 8f;
     private static final String FALLBACK = "textures/ui/avatar.png";
     private static Image skin;
+    private record PeerSkin(Image image,long bytes) {}
+    private static final java.util.LinkedHashMap<String,PeerSkin> players=new java.util.LinkedHashMap<>(16,.75f,true);
+    private static long playerBytes;
+    public static void setPlayerSkinRgba(String player,int width,int height,byte[] rgba) {
+        if(!java.util.UUID.fromString(player).toString().equals(player))throw new IllegalArgumentException("Invalid skin owner");
+        long bytes=(long)width*height*4;
+        if(width<64 || width>1024 || width%64!=0 || (height!=width && height*2!=width) || rgba==null || bytes!=rgba.length)
+            throw new IllegalArgumentException("Unsupported peer skin size");
+        Image image=Image.makeRaster(new io.github.humbleui.skija.ImageInfo(width,height,
+                io.github.humbleui.skija.ColorType.RGBA_8888,io.github.humbleui.skija.ColorAlphaType.UNPREMUL,
+                io.github.humbleui.skija.ColorSpace.getSRGB()),rgba,width*4L);
+        if(image==null)throw new IllegalStateException("Cannot create player skin");
+        PeerSkin prior=players.remove(player);
+        if(prior!=null){playerBytes-=prior.bytes;prior.image.close();}
+        while(!players.isEmpty() && (players.size()>=64 || playerBytes+bytes>16*1024*1024)) {
+            PeerSkin removed=players.remove(players.keySet().iterator().next());playerBytes-=removed.bytes;removed.image.close();
+        }
+        players.put(player,new PeerSkin(image,bytes));playerBytes+=bytes;
+    }
+    public static boolean hasPlayerSkin(String player) { return players.containsKey(player); }
+    private static Image playerSkin(String player,boolean self) {
+        if(self)return skin;
+        PeerSkin cached=players.get(player);return cached==null?null:cached.image;
+    }
+    public static void drawPlayer(HubDraw draw,String player,boolean self,float x,float y,float size,float yaw,float pitch) {
+        drawTexture(draw,playerSkin(player,self),x,y,size,yaw,0,pitch);
+    }
+    public static void drawPlayer2D(HubDraw draw,String player,boolean self,float x,float y,float size) {
+        drawFlat(draw,playerSkin(player,self),x,y,size);
+    }
 
     // Each face lists the UV top-left, 3D top-left, right and down unit vectors.
     // This is the same CSS face transform order as the reference's six spans.
@@ -60,11 +89,20 @@ public final class HubHead {
         }
     }
 
+    /** RGBA bytes from an existing Minecraft texture; no PNG compression/decompression round trip. */
+    public static void setSkinRgba(int width,int height,byte[] rgba){
+        if(width<64||width>4096||width%64!=0||height>4096||(height!=width&&height*2!=width)||rgba==null||(long)rgba.length!=(long)width*height*4)throw new IllegalArgumentException("Invalid skin RGBA dimensions");
+        Image candidate=Image.makeRaster(new io.github.humbleui.skija.ImageInfo(width,height,io.github.humbleui.skija.ColorType.RGBA_8888,io.github.humbleui.skija.ColorAlphaType.UNPREMUL,io.github.humbleui.skija.ColorSpace.getSRGB()),rgba,width*4L);
+        if(candidate==null)throw new IllegalStateException("Cannot create session skin image");
+        Image previous=skin;skin=candidate;if(previous!=null)previous.close();
+    }
     /** Release cached skin when the player/session changes or the renderer closes. */
     public static void clearSkin() {
+        for(PeerSkin cached:players.values())cached.image.close();
+        players.clear();playerBytes=0;
         if (skin != null) {
-            skin.close();
-            skin = null;
+            Image previous=skin;skin=null;
+            previous.close();
         }
     }
 
@@ -74,24 +112,56 @@ public final class HubHead {
 
     /** Local roll is applied before yaw and pitch, exactly like CSS rotateX rotateY rotateZ. */
     public static void draw(HubDraw draw, float x, float y, float size, float yawDegrees, float rollDegrees) {
-        if (!(size > 0) || !Float.isFinite(size) || !Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(yawDegrees) || !Float.isFinite(rollDegrees)) return;
+        drawTexture(draw,skin,x,y,size,yawDegrees,rollDegrees,-12);
+    }
+    private static void drawTexture(HubDraw draw,Image texture,float x,float y,float size,float yawDegrees,float rollDegrees,float pitchDegrees) {
+        if (!(size > 0) || !Float.isFinite(size) || !Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(yawDegrees) || !Float.isFinite(rollDegrees) || !Float.isFinite(pitchDegrees)) return;
         float yaw = (float) Math.toRadians(yawDegrees % 360);
         float roll = (float) Math.toRadians(rollDegrees % 360);
-        Image texture = skin;
-        drawLayer(draw, texture, x, y, size, yaw, roll, false);
-        // Do not merge the hat into the skin: transparent texels expose the real base cube.
-        if (texture != null) drawLayer(draw, texture, x, y, size, yaw, roll, true);
+        float pitch=(float)Math.toRadians(pitchDegrees);
+        // Supersample the assembled cube, so shared edges remain opaque. Per-face AA leaks
+        // the background through the seams; nearest texture sampling is retained below.
+        float half = size * (texture == null ? 1 : HAT_SCALE) / 2;
+        Point axisX = project(1, 0, 0, yaw, roll, pitch);
+        Point axisY = project(0, 1, 0, yaw, roll, pitch);
+        Point axisZ = project(0, 0, 1, yaw, roll, pitch);
+        float extentX = half * (Math.abs(axisX.x) + Math.abs(axisY.x) + Math.abs(axisZ.x)) + 2;
+        float extentY = half * (Math.abs(axisX.y) + Math.abs(axisY.y) + Math.abs(axisZ.y)) + 2;
+        if (draw.supersample(x + size / 2 - extentX, y + size / 2 - extentY, extentX * 2, extentY * 2, 2,
+                () -> drawCubes(draw, texture, x, y, size, yaw, roll, pitch))) return;
+        drawCubes(draw, texture, x, y, size, yaw, roll, pitch);
     }
 
-    private static void drawLayer(HubDraw draw, Image texture, float x, float y, float size, float yaw, float roll, boolean hat) {
+    private static void drawCubes(HubDraw draw, Image texture, float x, float y, float size, float yaw, float roll, float pitch) {
+        drawLayer(draw, texture, x, y, size, yaw, roll, pitch, false);
+        // Do not merge the hat into the skin: transparent texels expose the real base cube.
+        if (texture != null) drawLayer(draw, texture, x, y, size, yaw, roll, pitch, true);
+    }
+
+    /** Minecraft's original flat face plus alpha hat. Only the current player's in-memory skin is used. */
+    public static void draw2D(HubDraw draw,float x,float y,float size) {
+        drawFlat(draw,skin,x,y,size);
+    }
+    private static void drawFlat(HubDraw draw,Image source,float x,float y,float size) {
+        if(!(size>0))return;
+        try(Paint paint=new Paint().setAntiAlias(false)) {
+            if(source==null){Image fallback=draw.imageResource(FALLBACK);draw.canvas().drawImageRect(fallback,Rect.makeWH(fallback.getWidth(),fallback.getHeight()),Rect.makeXYWH(x,y,size,size),SamplingMode.DEFAULT,paint,true);return;}
+            float scale=source.getWidth()/64f;
+            Rect dst=Rect.makeXYWH(x,y,size,size);
+            draw.canvas().drawImageRect(source,Rect.makeXYWH(8*scale,8*scale,8*scale,8*scale),dst,SamplingMode.DEFAULT,paint,true);
+            draw.canvas().drawImageRect(source,Rect.makeXYWH(40*scale,8*scale,8*scale,8*scale),dst,SamplingMode.DEFAULT,paint,true);
+        }
+    }
+
+    private static void drawLayer(HubDraw draw, Image texture, float x, float y, float size, float yaw, float roll, float pitch, boolean hat) {
         float layerSize = size * (hat ? HAT_SCALE : 1);
         float half = layerSize / 2;
         float centerX = x + size / 2, centerY = y + size / 2;
         List<ProjectedFace> visible = new ArrayList<>(3);
         for (Face face : FACES) {
-            Point origin = project(face.x * half, face.y * half, face.z * half, yaw, roll);
-            Point right = project(face.rx * layerSize, face.ry * layerSize, face.rz * layerSize, yaw, roll);
-            Point down = project(face.dx * layerSize, face.dy * layerSize, face.dz * layerSize, yaw, roll);
+            Point origin = project(face.x * half, face.y * half, face.z * half, yaw, roll, pitch);
+            Point right = project(face.rx * layerSize, face.ry * layerSize, face.rz * layerSize, yaw, roll, pitch);
+            Point down = project(face.dx * layerSize, face.dy * layerSize, face.dz * layerSize, yaw, roll, pitch);
             float determinant = right.x * down.y - right.y * down.x;
             if (determinant <= 0.0001f) continue; // CSS backface-visibility:hidden.
             visible.add(new ProjectedFace(face, origin, right, down, origin.z + (right.z + down.z) / 2));
@@ -136,9 +206,9 @@ public final class HubHead {
             0,0,0,1,0));
     }
 
-    private static Point project(float x, float y, float z, float yaw, float roll) {
+    private static Point project(float x, float y, float z, float yaw, float roll, float pitch) {
         float cy = (float) Math.cos(yaw), sy = (float) Math.sin(yaw);
-        float cp = (float) Math.cos(PITCH), sp = (float) Math.sin(PITCH);
+        float cp = (float) Math.cos(pitch), sp = (float) Math.sin(pitch);
         float cr = (float) Math.cos(roll), sr = (float) Math.sin(roll);
         float rolledX = cr * x - sr * y, rolledY = sr * x + cr * y;
         float rotatedX = cy * rolledX + sy * z;

@@ -12,9 +12,9 @@ logoFile="assets/pixelmc_hub/textures/ui/server-logo.png"
 authors="zhan_cpu / PixelMC Projects"
 displayTest="IGNORE_ALL_VERSION"
 description='''
-旅人手册：个人主页、称号与签笺的原生玩家面板。
-可选的玩家客户端／服务端连接；服务端模块提供个人资料、称号与归档签笺。
-Optional native player hub and server bridge for personal statistics, titles and archived fortunes.
+旅人手册：个人主页、公开名片、旅程纪念、称号、签笺、更新日志与排行榜的原生玩家面板。
+可选的玩家客户端／服务端连接；服务端模块提供个人资料、称号、归档签笺、更新日志与公开排行。
+Optional native player hub and server bridge for personal statistics, public profiles, journey memories, titles, archived fortunes, update notes and public leaderboards.
 '''
 
 [[dependencies.pixelmc_hub]]

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 480 240" preserveAspectRatio="none">      <defs>
+        <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="1">
+          <stop stop-color="@LIGHT@" /><stop offset=".52" stop-color="@MID@" /><stop offset="1" stop-color="@DEEP@" />
+        </linearGradient>
+        <linearGradient id="shade" x1="0" y1="0" x2=".7" y2="1">
+          <stop stop-color="@MID@" /><stop offset="1" stop-color="@DEEP@" />
+        </linearGradient>
+        <radialGradient id="sun" cx=".5" cy=".5" r=".5">
+          <stop stop-color="@HIGHLIGHT@" stop-opacity=".85" /><stop offset="1" stop-color="@HIGHLIGHT@" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="nebula" cx=".5" cy=".5" r=".5">
+          <stop stop-color="@MID@" stop-opacity=".8" /><stop offset=".6" stop-color="@DEEP@" stop-opacity=".35" /><stop offset="1" stop-color="@DEEP@" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="planet" cx=".3" cy=".26" r=".8">
+          <stop stop-color="@HIGHLIGHT@" /><stop offset=".46" stop-color="@MID@" /><stop offset="1" stop-color="@DEEP@" />
+        </radialGradient>
+      </defs><g>
+      <ellipse cx="307" cy="120" rx="180" ry="98" transform="rotate(-18 307 120)" fill="url(#nebula)" opacity=".85" />
+      <ellipse cx="372" cy="73" rx="105" ry="64" transform="rotate(-24 372 73)" fill="url(#sun)" opacity=".52" />
+      <path d="M144 210C198 165 223 95 314 58C368 36 409 42 473 18C423 59 378 78 330 93C257 116 228 178 144 210Z" fill="url(#ribbon)" opacity=".22" />
+      <ellipse cx="326" cy="127" rx="146" ry="66" transform="rotate(-22 326 127)" fill="none" stroke="@DEEP@" stroke-width="1.1" opacity=".35" />
+      <ellipse cx="326" cy="127" rx="117" ry="51" transform="rotate(-22 326 127)" fill="none" stroke="@HIGHLIGHT@" stroke-width=".8" opacity=".48" />
+      <circle cx="337" cy="109" r="44" fill="url(#planet)" />
+      <path d="M304 89C320 80 348 84 371 98M298 111C321 101 352 108 378 122M307 133C327 125 350 135 365 141" fill="none" stroke="@LIGHT@" stroke-width="3" opacity=".18" />
+      <path d="M270 143C283 165 350 150 392 118C412 103 419 90 408 85" fill="none" stroke="@HIGHLIGHT@" stroke-width="2.8" stroke-linecap="round" opacity=".72" />
+      <circle cx="221" cy="171" r="13" fill="url(#planet)" opacity=".85" />
+      <circle cx="428" cy="89" r="5" fill="@HIGHLIGHT@" opacity=".9" />
+      <path d="M163 65L204 44L248 71M384 195L423 174L449 194" fill="none" stroke="@DEEP@" stroke-width=".8" opacity=".35" />
+      <g fill="@HIGHLIGHT@">
+        <circle cx="163" cy="65" r="2.2" /><circle cx="204" cy="44" r="2.8" /><circle cx="248" cy="71" r="2" />
+        <circle cx="390" cy="38" r="2.4" /><circle cx="456" cy="57" r="1.5" /><circle cx="278" cy="29" r="1.7" />
+        <circle cx="175" cy="129" r="1.4" /><circle cx="261" cy="205" r="2" /><circle cx="307" cy="188" r="1.5" />
+        <circle cx="384" cy="195" r="2" /><circle cx="423" cy="174" r="2.5" /><circle cx="449" cy="194" r="1.7" />
+        <circle cx="458" cy="129" r="1.8" /><circle cx="339" cy="221" r="1.2" /><circle cx="198" cy="215" r="1.5" />
+      </g>
+      <path d="M263 109L266 117L274 120L266 123L263 131L260 123L252 120L260 117ZM408 29L410 35L416 37L410 39L408 45L406 39L400 37L406 35Z" fill="@HIGHLIGHT@" opacity=".92" />
+    </g></svg>

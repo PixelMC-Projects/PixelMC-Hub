@@ -1132,6 +1132,24 @@
       "color": "white RGBA, transparent background",
       "license": "ISC",
       "sha256": "f1d491c7e1213730d4817aa126da356181787b5cc30c226fc8f6183178211da6"
+    },
+    {
+      "exportName": "Plus",
+      "target": "textures/icons/plus.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "cd227eb527a0dab4299db97cdfd17e72361c17e87f35f5112826a146d92f0b93"
     }
   ],
   "data": [

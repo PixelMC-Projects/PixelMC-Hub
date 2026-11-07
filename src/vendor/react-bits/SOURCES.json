@@ -51,6 +51,28 @@
       "upstreamSha256": "4a69286a21c42d95ff6d1e48510bc514894d70abfa26fe47595d9d4ce6d11b81",
       "retrieved": "2026-11-04",
       "adapted": true
+    },
+    {
+      "file": "AnimatedList.jsx",
+      "source": "https://github.com/DavidHDev/react-bits/blob/main/src/content/Components/AnimatedList/AnimatedList.jsx",
+      "upstreamGitBlobSha": "ff4bea4c3c4bc44ac1f9f42906fbd501103e4ee5",
+      "retrieved": "2026-11-05",
+      "adapted": true,
+      "notes": "Replace demo glyph dependency with existing Lucide; controlled selection and accessibility label."
+    },
+    {
+      "file": "AnimatedList.css",
+      "source": "https://github.com/DavidHDev/react-bits/blob/main/src/content/Components/AnimatedList/AnimatedList.css",
+      "upstreamGitBlobSha": "51da8e8a8bb10bc0a0e70b21f28aed9a264bfe6a",
+      "retrieved": "2026-11-05",
+      "adapted": false
+    },
+    {
+      "file": "ClickSpark.jsx",
+      "source": "https://github.com/DavidHDev/react-bits/blob/main/src/content/Animations/ClickSpark/ClickSpark.jsx",
+      "upstreamGitBlobSha": "63759ea3d3617aef8a255d2f6d004c5a5c32c027",
+      "retrieved": "2026-11-05",
+      "adapted": false
     }
   ]
 }

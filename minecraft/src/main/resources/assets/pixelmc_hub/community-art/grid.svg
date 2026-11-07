@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 480 240" preserveAspectRatio="none">      <defs>
+        <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="1">
+          <stop stop-color="@LIGHT@" /><stop offset=".52" stop-color="@MID@" /><stop offset="1" stop-color="@DEEP@" />
+        </linearGradient>
+        <linearGradient id="shade" x1="0" y1="0" x2=".7" y2="1">
+          <stop stop-color="@MID@" /><stop offset="1" stop-color="@DEEP@" />
+        </linearGradient>
+        <radialGradient id="sun" cx=".5" cy=".5" r=".5">
+          <stop stop-color="@HIGHLIGHT@" stop-opacity=".85" /><stop offset="1" stop-color="@HIGHLIGHT@" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="nebula" cx=".5" cy=".5" r=".5">
+          <stop stop-color="@MID@" stop-opacity=".8" /><stop offset=".6" stop-color="@DEEP@" stop-opacity=".35" /><stop offset="1" stop-color="@DEEP@" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="planet" cx=".3" cy=".26" r=".8">
+          <stop stop-color="@HIGHLIGHT@" /><stop offset=".46" stop-color="@MID@" /><stop offset="1" stop-color="@DEEP@" />
+        </radialGradient>
+      </defs><g stroke-linejoin="round">
+      <ellipse cx="321" cy="207" rx="170" ry="27" fill="url(#sun)" opacity=".7" />
+      <path d="M130 204L302 113L486 205L314 289Z" fill="@MID@" opacity=".14" />
+      <path d="M148 204L311 121M200 230L364 147M254 258L419 175M175 181L342 268M229 152L396 239M283 124L451 210" fill="none" stroke="@DEEP@" stroke-width=".8" opacity=".14" />
+      <g opacity=".76">
+        <path d="M355 121L403 94L451 121L403 149Z" fill="@LIGHT@" />
+        <path d="M355 121L403 149V212L355 185Z" fill="@MID@" />
+        <path d="M403 149L451 121V185L403 212Z" fill="@DEEP@" opacity=".8" />
+        <path d="M371 142L387 151V167L371 158ZM371 166L387 175V190L371 181Z" fill="@HIGHLIGHT@" opacity=".52" />
+      </g>
+      <path d="M262 86L324 51L387 86L324 122Z" fill="@LIGHT@" />
+      <path d="M262 86L324 122V223L262 188Z" fill="url(#ribbon)" />
+      <path d="M324 122L387 86V188L324 223Z" fill="url(#shade)" />
+      <path d="M262 86L324 122L387 86M324 122V223" fill="none" stroke="@HIGHLIGHT@" stroke-width="1.2" opacity=".62" />
+      <path d="M280 112L305 126V144L280 130ZM280 145L305 159V177L280 163ZM280 178L305 192V209L280 195Z" fill="@HIGHLIGHT@" opacity=".48" />
+      <path d="M343 126L368 112V130L343 144ZM343 159L368 145V163L343 177Z" fill="@LIGHT@" opacity=".25" />
+      <path d="M174 151L224 123L275 151L224 180Z" fill="@LIGHT@" />
+      <path d="M174 151L224 180V226L174 197Z" fill="@MID@" />
+      <path d="M224 180L275 151V197L224 226Z" fill="@DEEP@" opacity=".82" />
+      <path d="M183 156L224 180L265 156" fill="none" stroke="@HIGHLIGHT@" stroke-width="1.2" opacity=".7" />
+      <path d="M196 174L210 182V199L196 191Z" fill="@HIGHLIGHT@" opacity=".65" />
+      <path d="M177 66L197 55L217 66L197 78Z" fill="@LIGHT@" />
+      <path d="M177 66L197 78V101L177 89Z" fill="@MID@" />
+      <path d="M197 78L217 66V89L197 101Z" fill="@DEEP@" opacity=".7" />
+      <path d="M198 101V120H154V158M388 87H426V61M324 51V30H290" fill="none" stroke="@DEEP@" stroke-width="1.2" opacity=".38" />
+      <g fill="@HIGHLIGHT@" stroke="@DEEP@" stroke-width="1" opacity=".8"><circle cx="154" cy="158" r="3" /><circle cx="426" cy="61" r="3" /><circle cx="290" cy="30" r="3" /></g>
+    </g></svg>

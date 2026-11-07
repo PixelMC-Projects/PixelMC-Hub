@@ -9,7 +9,6 @@ package com.pixelmc.hub.client.render;
 
 import io.github.humbleui.skija.*;
 import io.github.humbleui.types.Rect;
-import io.github.humbleui.types.RRect;
 import io.github.humbleui.types.IRect;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,12 +17,12 @@ import java.util.Map;
 
 /** GPU-only backdrop sampling. Every child shader samples an immutable snapshot, never its draw attachment. */
 final class HubGlass implements AutoCloseable {
+    private final HubCorners corners=new HubCorners();
     private static final int MAX_CAPTURES = 32;
     private static final long MAX_CAPTURE_PIXELS=16_000_000;
     private final Paint paint = new Paint();
     private final RuntimeEffect surfaceEffect = RuntimeEffect.makeForShader(SURFACE_SHADER);
     private final RuntimeEffect iconEffect = RuntimeEffect.makeForShader(ICON_SHADER);
-    private final RuntimeEffect decorationEffect = RuntimeEffect.makeForShader(DECORATION_SHADER);
     private final Map<MapKey, Image> maps = new LinkedHashMap<>(8, .75f, true);
     private long mapPixels;
     private final List<Backdrop> frameBackdrops = new ArrayList<>();
@@ -111,6 +110,11 @@ final class HubGlass implements AutoCloseable {
     }
 
     void surface(float x, float y, float w, float h, float radius, GlassStyle style) {
+        backdrop(x,y,w,h,radius,style,false,true);
+        if(style.decorations())decorations(x,y,w,h,radius,style.alpha(),!style.refraction());
+    }
+
+    void backdrop(float x, float y, float w, float h, float radius, GlassStyle style,boolean dark,boolean fallbackBackground) {
         if (w <= 0 || h <= 0 || style.alpha() <= 0) return;
         boolean refractive = style.refraction();
         float sigma = refractive ? 0 : style.backdropBlur();
@@ -134,13 +138,15 @@ final class HubGlass implements AutoCloseable {
             builder.setUniform("scales", style.distortionScale() + style.redOffset(), style.distortionScale() + style.greenOffset(), style.distortionScale() + style.blueOffset());
             builder.setUniform("refractive", refractive ? 1 : 0);
             builder.setUniform("tone", saturation, brightness);
-            float frost = refractive || !style.decorations() ? style.backgroundOpacity() : .12f + style.backgroundOpacity() * .5f;
+            float frost=0;
+            if(fallbackBackground)frost=refractive||!style.decorations()?style.backgroundOpacity():
+                dark?.04f+style.backgroundOpacity()*.3f:.12f+style.backgroundOpacity()*.5f;
             int tint = style.tint();
             builder.setUniform("tint", ((tint >> 16) & 255)/255f, ((tint >> 8) & 255)/255f, (tint & 255)/255f,
                 frost * ((tint >>> 24) / 255f));
             builder.setUniform("opacity", Math.min(1, style.alpha()));
             int count = canvas.save();
-            canvas.clipRRect(RRect.makeXYWH(x, y, w, h, radius), true);
+            corners.clip(canvas,x,y,w,h,radius);
             try (Shader shader = builder.makeShader();
                  ImageFilter blur = refractive && style.displace() > 0 ? ImageFilter.makeBlur(style.displace(), style.displace(), FilterTileMode.CLAMP) : null) {
                 paint.reset().setAntiAlias(true).setShader(shader).setImageFilter(blur);
@@ -148,7 +154,6 @@ final class HubGlass implements AutoCloseable {
                 paint.reset();
             } finally { canvas.restoreToCount(count); }
         }
-        if (style.decorations()) decorations(x, y, w, h, radius, style.alpha(), !refractive);
     }
 
     void blur(float x, float y, float w, float h, float radius, float sigma, float alpha) {
@@ -213,17 +218,16 @@ final class HubGlass implements AutoCloseable {
         try (Surface target = surface.makeSurface(width, height); Paint p = new Paint().setAntiAlias(true)) {
             Canvas c = target.getCanvas(); c.clear(0xFF000000);
             c.scale(width / w, height / h);
-            RRect bounds = RRect.makeXYWH(0, 0, w, h, radius);
             try (Shader red = Shader.makeLinearGradient(w, 0, 0, 0, new int[]{0x00FF0000, 0xFFFF0000});
                  Shader blue = Shader.makeLinearGradient(0, 0, 0, h, new int[]{0x000000FF, 0xFF0000FF});
                  ImageFilter blur = ImageFilter.makeBlur(Math.max(0, style.blur()), Math.max(0, style.blur()), FilterTileMode.DECAL)) {
-                c.drawRRect(bounds, p.setShader(red));
-                c.drawRRect(bounds, p.setShader(blue).setBlendMode(BlendMode.DIFFERENCE));
+                corners.draw(c,0,0,w,h,radius,p.setShader(red));
+                corners.draw(c,0,0,w,h,radius,p.setShader(blue).setBlendMode(BlendMode.DIFFERENCE));
                 int level = Math.round(Math.max(0, Math.min(100, style.brightness())) * 2.55f);
                 int color = Math.round(Math.max(0, Math.min(1, style.opacity())) * 255) << 24 | level << 16 | level << 8 | level;
                 float edge = Math.min(w, h) * style.borderWidth() * .5f;
-                c.drawRRect(RRect.makeXYWH(edge, edge, Math.max(0, w - edge * 2), Math.max(0, h - edge * 2), radius),
-                    p.reset().setAntiAlias(true).setColor(color).setImageFilter(blur));
+                corners.draw(c,edge,edge,Math.max(0,w-edge*2),Math.max(0,h-edge*2),radius,
+                    p.reset().setAntiAlias(true).setColor(color).setImageFilter(blur),radius>=16);
             }
             Image result = target.makeImageSnapshot(); maps.put(key, result); mapPixels += (long)width * height;
             while ((maps.size() > 12 || mapPixels > 8_000_000) && maps.size() > 1) {
@@ -234,15 +238,21 @@ final class HubGlass implements AutoCloseable {
         }
     }
 
-    private void decorations(float x, float y, float w, float h, float radius, float alpha, boolean frosted) {
-        try (RuntimeEffectBuilder builder = new RuntimeEffectBuilder(decorationEffect)) {
-            builder.setUniform("rect", x, y, w, h).setUniform("radius", radius).setUniform("opacity", alpha)
-                .setUniform("frosted", frosted ? 1 : 0);
-            try (Shader shader = builder.makeShader()) {
-                canvas.drawRRect(RRect.makeXYWH(x, y, w, h, radius), paint.reset().setAntiAlias(true).setShader(shader));
-                paint.reset();
+    void decorations(float x, float y, float w, float h, float radius, float alpha, boolean frosted) {
+        if(!frosted||w<=0||h<=0||alpha<=0)return;
+        float cx=x+w*.5f,cy=y+h*.5f;
+        float extent=(w+h)*.3535534f;
+        int saved=canvas.save();corners.clip(canvas,x,y,w,h,radius);
+        try(Shader sheen=Shader.makeLinearGradient(cx-extent*.7071068f,cy-extent*.7071068f,cx+extent*.7071068f,cy+extent*.7071068f,
+                new int[]{0x6bffffff,0x00ffffff,0x00ffffff,0x2effffff},new float[]{0,.42f,.64f,1})) {
+            corners.draw(canvas,x,y,w,h,radius,paint.reset().setAntiAlias(true).setColor(0xffffffff).setAlphaf(alpha).setShader(sheen));
+            float rimExtent=w*.25f+h*.4330127f;
+            try(Shader rim=Shader.makeLinearGradient(cx-rimExtent*.5f,cy-rimExtent*.8660254f,cx+rimExtent*.5f,cy+rimExtent*.8660254f,
+                    new int[]{0xb3ffffff,0x1affffff,0x14ffffff,0x6bffffff},new float[]{0,.45f,.6f,1})) {
+                corners.draw(canvas,x,y,w,h,radius,paint.reset().setAntiAlias(true).setColor(0xffffffff).setAlphaf(alpha)
+                    .setShader(rim).setMode(PaintMode.STROKE).setStrokeWidth(6));
             }
-        }
+        } finally {paint.reset();canvas.restoreToCount(saved);}
     }
 
     void icon(float x, float y, float size, int top, int bottom, IconPose pose, float alpha) {
@@ -280,10 +290,15 @@ final class HubGlass implements AutoCloseable {
         return Math.max(.01f, (float)Math.sqrt(dx*dy));
     }
     private static float channel(int color, int shift) { return ((color >> shift) & 255) / 255f; }
+    void releaseFrameResources(){
+        end();filterPool.values().forEach(Surface::close);filterPool.clear();filterPixels=0;
+        maps.values().forEach(Image::close);maps.clear();mapPixels=0;frameWidth=frameHeight=0;
+    }
     @Override public void close() {
+        corners.close();
         end(); maps.values().forEach(Image::close); maps.clear();
         filterPool.values().forEach(Surface::close);filterPool.clear();filterPixels=0;
-        paint.close(); surfaceEffect.close(); iconEffect.close(); decorationEffect.close();
+        paint.close(); surfaceEffect.close(); iconEffect.close();
     }
     static final class Backdrop implements AutoCloseable {
         Image sceneBlur;
@@ -324,27 +339,6 @@ final class HubGlass implements AutoCloseable {
             float outAlpha=float(c.a)+(1-float(c.a))*tint.a;
             float3 premul=rgb*float(c.a)*(1-tint.a)+tint.rgb*tint.a;
             return half4(premul,outAlpha)*half(opacity);
-        }
-        """;
-
-    private static final String DECORATION_SHADER = """
-        uniform float4 rect;
-        uniform float radius;
-        uniform float opacity;
-        uniform int frosted;
-        float sdf(float2 p,float2 halfSize,float r) {
-            float2 q=abs(p)-(halfSize-r); return length(max(q,0))+min(max(q.x,q.y),0)-r;
-        }
-        half4 main(float2 p) {
-            float2 v=p-rect.xy;
-            float inside=max(0.,-sdf(v-rect.zw*.5,rect.zw*.5,radius));
-            float t=clamp((v.x+v.y)/(rect.z+rect.w),0,1);
-            float sheen=frosted!=0 ? (t<.42 ? mix(.42,0.,t/.42) : t>.64 ? mix(0.,.18,(t-.64)/.36) : 0.) : 0.;
-            float tr=clamp((dot(v-rect.zw*.5,float2(.5,.8660254)))/dot(rect.zw,float2(.5,.8660254))+.5,0,1);
-            float rim=frosted!=0 && inside<3 ? (tr<.45 ? mix(.7,.1,tr/.45) : tr<.6 ? mix(.1,.08,(tr-.45)/.15) : mix(.08,.42,(tr-.6)/.4)) : 0.;
-            // Container box-shadow is intentionally supplied by the UI's higher-specificity CSS port.
-            float white=(1-(1-sheen)*(1-rim))*opacity;
-            return half4(float4(white));
         }
         """;
 

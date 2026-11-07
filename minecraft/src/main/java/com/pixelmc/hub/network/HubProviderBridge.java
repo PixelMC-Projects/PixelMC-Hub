@@ -17,11 +17,19 @@ public final class HubProviderBridge {
         JsonObject modules = new JsonObject();
         HubProtocol.PROVIDERS.forEach((module, name) -> {
             JsonObject state = new JsonObject();
-            try { int version=version(name);state.addProperty("version", version); state.addProperty("available", version == 1); }
+            try {
+                int version=version(name);state.addProperty("version", version);state.addProperty("available", version==1);
+                if(version==1 && module.equals("rankings")) {
+                    JsonObject descriptor=HubProtocol.object((String)Class.forName(name).getMethod("descriptor").invoke(null),4096);
+                    if(!descriptor.get("providerId").getAsString().equals("pixelmcmanager") || descriptor.get("providerVersion").getAsInt()!=1)
+                        throw new IllegalArgumentException("Unknown leaderboard owner");
+                    state.add("descriptor",descriptor);
+                }
+            }
             catch (ReflectiveOperationException | LinkageError | RuntimeException unavailable) { state.addProperty("version", 0); state.addProperty("available", false); }
             modules.add(module, state);
         });
-        JsonObject result = new JsonObject(); result.add("modules", modules); result.addProperty("sessionSync",1); return result;
+        JsonObject result = new JsonObject(); result.add("modules", modules); result.addProperty("sessionSync",1);result.addProperty("updatesCache",1); return result;
     }
     private static int version(String name) throws ReflectiveOperationException {
         return ((Number) Class.forName(name).getMethod("protocolVersion").invoke(null)).intValue();
@@ -30,6 +38,10 @@ public final class HubProviderBridge {
         if (!HubProtocol.allowed(module, action)) return CompletableFuture.failedFuture(new IllegalArgumentException("不支持的玩家操作"));
         try { HubProtocol.payload(module, action, payload); }
         catch (RuntimeException error) { return CompletableFuture.failedFuture(error); }
+        if(HubProtocol.updatesSync(module,action)){
+            JsonObject query=HubProtocol.payload(module,action,payload);var known=HubUpdatesDelta.parseKnown(query.remove("known").getAsString());
+            return request(player,module,HubProtocol.updatesPlain(action),query.toString()).thenApplyAsync(value->HubUpdatesDelta.encode(HubProtocol.object(value,HubProtocol.maximumResponse(module)),known).toString(),WORKERS);
+        }
         if(module.equals("fortunes")&&action.equals("calendarSync")) {
             JsonObject query=HubProtocol.payload(module,action,payload),plain=new JsonObject();plain.add("month",query.get("month"));
             JsonObject known=HubCalendarDelta.parseKnown(query.get("month").getAsString(),query.get("known").getAsString());
@@ -44,7 +56,7 @@ public final class HubProviderBridge {
                     Method method = Class.forName(name).getMethod("request", UUID.class, String.class, String.class);
                     Object result = method.invoke(null, player, action, payload);
                     if (!(result instanceof CompletableFuture<?> future)) throw new IllegalStateException("模块响应格式不正确");
-                    return future.thenApply(value -> HubProtocol.object((String) value, HubProtocol.RESPONSE_BYTES).toString());
+                    return future.thenApply(value -> HubProtocol.object((String) value, HubProtocol.maximumResponse(module)).toString());
                 } catch (ClassNotFoundException absent) { throw new CompletionException(new IllegalStateException("服务器未安装此模块")); }
                 catch (InvocationTargetException error) { throw new CompletionException(error.getCause()); }
                 catch (ReflectiveOperationException error) { throw new CompletionException(new IllegalStateException("模块协议不兼容")); }

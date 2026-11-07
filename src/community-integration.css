@@ -1,0 +1,43 @@
+/* Entry controls for the local profile, memories and theme prototype. */
+.identity-main .memories-btn { left: 135px; }
+.theme-choices { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surfaceSubtle); border: 1px solid var(--border); }
+.theme-choices button { display: flex; gap: 6px; align-items: center; padding: 8px 10px; border-radius: 8px; font-size: 11px; color: var(--secondary); }
+.theme-choices button[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: 0 2px 7px #303b6412; }
+.lb-profile-link, .lb-profile-name { color: inherit; font: inherit; border: 0; padding: 0; background: none; text-align: left; cursor: pointer; min-width: 0; }
+.lb-profile-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-profile-name:hover { text-decoration: underline; text-decoration-color: #b3a5d0; text-underline-offset: 3px; }
+.lb-self-position .lb-profile-link { background: none; border: 0; padding: 0; gap: 9px; white-space: normal; }
+.lb-self-position .lb-profile-link:hover { background: none; }
+.public-profile-account { display: flex; justify-content: flex-end; padding: 0 26px 16px; }
+.public-profile-account button { display: flex; align-items: center; gap: 4px; color: var(--secondary); font-size: 10px; }
+
+.modal-backdrop.modal-motion, .modal-motion > .modal { animation: none; }
+
+/* Keep the close control visible while the profile is being edited. */
+.modal.public-profile-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: min(780px, calc(100dvh - 60px));
+  overflow: hidden;
+}
+.public-profile-modal > .modal-head { flex: 0 0 auto; }
+.public-profile-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+.public-profile-scroll::-webkit-scrollbar { width: 3px; }
+.public-profile-scroll::-webkit-scrollbar-track { background: transparent; }
+.public-profile-scroll::-webkit-scrollbar-thumb { background: #9290ad45; border-radius: 9px; }
+.public-profile-scroll::-webkit-scrollbar-thumb:hover { background: #9290ad80; }
+[data-theme="dark"] .public-profile-scroll::-webkit-scrollbar-thumb { background: #aaa6d34d; }
+@supports not selector(::-webkit-scrollbar) {
+  .public-profile-scroll { scrollbar-width: thin; scrollbar-color: #9290ad45 transparent; }
+}
+
+/* One notification surface remains visible above both pages and profile dialogs. */
+.preview-stage > .hub-swipe-toast[data-inline='false'] { position: fixed; right: 24px; bottom: 24px; }
+.preview-stage > .hub-swipe-toast.is-error .swipe-toast__icon { color: #b36778; }
+html[data-theme="dark"] .preview-stage > .hub-swipe-toast.is-error .swipe-toast__icon { color: #e7a3b2; }

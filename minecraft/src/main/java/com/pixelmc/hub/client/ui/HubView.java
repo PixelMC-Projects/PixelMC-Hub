@@ -30,7 +30,7 @@ public final class HubView {
     private final List<Hit> nextHits=new ArrayList<>();
     private final Map<String,HubMotion.Transition> transitions=new HashMap<>();
     private final Map<String,HubMotion.Tilt> tilts=new HashMap<>();
-    private final HubMotion.Navigation[] navigation={new HubMotion.Navigation(),new HubMotion.Navigation(),new HubMotion.Navigation()};
+    private final HubMotion.Navigation[] navigation={new HubMotion.Navigation(),new HubMotion.Navigation(),new HubMotion.Navigation(),new HubMotion.Navigation(),new HubMotion.Navigation()};
     private final Deque<Matrix33> matrixStack=new ArrayDeque<>();
     private final Deque<Float> alphaStack=new ArrayDeque<>();
     private Matrix33 logical=Matrix33.IDENTITY;
@@ -40,6 +40,9 @@ public final class HubView {
     private long now=System.nanoTime(),openedAt=now,pageAt=now,monthAt=now,lastFrame=now,modalAt,navAt=now;
     private int page,filter,sort,fortuneState=3,searchCaret;
     private String playerName="zhan_cpu",equipped="dew",selectedTitle="dew",query="",welcomeMode="login";
+    private boolean dark,communityLoaded;
+    private Runnable afterProfileClose;
+    private boolean localReducedMotion,systemReducedMotion;
     private boolean visible=true,reducedMotion,closeRequest,playWelcome,compact,history,sliderDragging,searchSelectAll;
     private float titleScroll,historyScroll;
     private YearMonth month=YearMonth.from(data.today);
@@ -55,6 +58,73 @@ public final class HubView {
     private float viewportX,viewportY,viewportW=1260,viewportH=850;
     @FunctionalInterface public interface PlayerAction {void request(String module,String action,JsonObject payload);}
     private PlayerAction actions;
+    private final HubUpdatesView updates=new HubUpdatesView(new HubUpdatesView.Host(){
+        public void hit(String id,String label,float x,float y,float w,float h,Runnable action){HubView.this.hit(id,label,x,y,w,h,action);}
+        public void request(String action,JsonObject payload){HubView.this.request("updates",action,payload);}
+        public void feedback(String text){HubView.this.feedback(text);}
+        public void focus(String id){focusId=id;}
+    });
+    private final HubLeaderboardsView rankings=new HubLeaderboardsView(new HubLeaderboardsView.Host() {
+        public void hit(String id,String label,float x,float y,float w,float h,Runnable action){HubView.this.hit(id,label,x,y,w,h,action);}
+        public void request(String action,JsonObject payload){HubView.this.request("rankings",action,payload);}
+        public void focus(String id){focusId=id;}
+        public void feedback(String message){HubView.this.feedback(message);}
+        public void openProfile(String playerId){HubView.this.openPublicProfile(playerId);}
+    });
+    private final HubProfileView profiles=new HubProfileView(new HubProfileView.Host() {
+        public void hit(String id,String label,float x,float y,float w,float h,Runnable action){HubView.this.hit(id,label,x,y,w,h,action);}
+        public void request(String action,JsonObject payload){HubView.this.request("community",action,payload);}
+        public void feedback(String message,boolean error){if(error)feedbackError(message);else feedbackSuccess(message);}
+        public void focus(String id){focusId=id;}
+        public void openMemories(String playerId,String archiveId){
+            afterProfileClose=()->HubView.this.openMemories(playerId,archiveId);profiles.requestClose();
+        }
+        public void closeProfile(){
+            focusId=restoreFocus;restoreFocus=null;hits.clear();
+            Runnable next=afterProfileClose;afterProfileClose=null;if(next!=null)next.run();
+        }
+        public void openAccount(){afterProfileClose=()->openOverlay("profile");profiles.requestClose();}
+    });
+    private final HubMemoriesView memories=new HubMemoriesView(new HubMemoriesView.Host() {
+        public void hit(String id,String label,float x,float y,float w,float h,Runnable action){HubView.this.hit(id,label,x,y,w,h,action);}
+        public void request(String action,JsonObject payload){HubView.this.request("community",action,payload);}
+        public void feedback(String message){HubView.this.feedback(message);}
+        public void focus(String id){focusId=id;}
+        public void back(){navigate(0);}
+        public void openProfile(String playerId){openPublicProfile(playerId);}
+    });
+    public boolean dark(){return dark;}
+    public void setDark(boolean value){dark=value;}
+    public void refreshCommunity(){
+        profiles.resetPendingReads();memories.resetPendingReads();
+        if(profiles.isOpen()&&!profiles.isClosing())profiles.refresh();
+        if(page==5)memories.refresh();
+    }
+    public void communityFailure(String action,String message,JsonObject query){
+        profiles.failure(action,message,query);memories.failure(action,message,query);
+        if(action.equals("snapshot"))moduleStates.put("community",message);
+    }
+    private String selfPlayerId(){return data.playerUuid;}
+    private void openPublicProfile(String playerId){
+        if(playerId==null||playerId.isBlank()){feedbackError(live()?"玩家身份仍在读取，请稍后重试。":"公开资料需要连接服务器。");return;}
+        restoreFocus=focusId;focusId="profile-close";overlay=null;reading=null;afterProfileClose=null;
+        profiles.open(playerId,playerId.equals(selfPlayerId()));hits.clear();
+    }
+    private void openMemories(String playerId,String archiveId){
+        if(playerId==null||playerId.isBlank()){feedbackError(live()?"玩家身份仍在读取，请稍后重试。":"旅程档案需要连接服务器。");return;}
+        updates.deactivate();rankings.deactivate();page=5;pageAt=System.nanoTime();focusId=null;
+        memories.open(playerId,playerId.equals(selfPlayerId())?playerName:"玩家",playerId.equals(selfPlayerId()),archiveId);hits.clear();
+    }
+    public void releaseCommunityResources(){profiles.close();memories.closeResources();afterProfileClose=null;}
+    private long rankingsPreviewAt;
+    public int rankingVisibleMask(){return page==4?rankings.visibleMask():0;}
+    public JsonObject rankingRefreshQuery(){return rankings.refreshQuery();}
+    public Map<String,String> rankingPlayerNames(){
+        Map<String,String> players=new HashMap<>();
+        if(live()&&page==4)players.putAll(rankings.playerNames());
+        if(live()&&profiles.isOpen()&&!profiles.playerId().isBlank())players.put(profiles.playerId(),profiles.playerName());
+        return players;
+    }
     private final Map<String,String> moduleStates=new HashMap<>();
     private final java.util.Set<String> pendingModules=new java.util.HashSet<>();
     private boolean catalogueComplete=true;
@@ -64,20 +134,23 @@ public final class HubView {
     private byte[] serverIcon;
     public void setConnection(String name,byte[] icon){connectionName=name==null||name.isBlank()?"当前存档":name;serverIcon=icon==null?null:icon.clone();}
     public void live(PlayerAction actions) {
-        this.actions=actions;data.clearLive();equipped=null;selectedTitle="";displayDate=null;fortuneState=0;
+        this.actions=actions;updates.live();rankings.live();profiles.clear();memories.live();communityLoaded=false;afterProfileClose=null;rankingsPreviewAt=0;data.clearLive();equipped=null;selectedTitle="";displayDate=null;fortuneState=0;
         month=YearMonth.from(data.today);selectedDate=data.today;catalogueComplete=false;titleDraft=null;calendarLoading=true;pendingModules.clear();
-        for(String module:List.of("manager","titles","fortunes"))moduleStates.put(module,"正在读取玩家资料…");
+        for(String module:List.of("manager","titles","fortunes","updates","rankings","community"))moduleStates.put(module,"正在读取玩家资料…");
     }
     public void clearSession(){live((module,action,payload)->{});reading=null;toast.clear();}
     public void moduleStatus(String module,String status){
-        moduleStates.put(module,status);
+        moduleStates.put(module,status);if(module.equals("updates"))updates.status(status);if(module.equals("rankings")&&!status.isEmpty())rankings.status(status);
         if(!status.isEmpty()){
             if(module.equals("titles"))titleDraft=null;
             if(hasSnapshot(module))feedbackError(status);
         }
     }
-    public void pending(String module,boolean pending){if(pending)pendingModules.add(module);else pendingModules.remove(module);}
+    public void pending(String module,boolean pending){if(module.equals("updates"))updates.pending(pending);if(pending)pendingModules.add(module);else pendingModules.remove(module);}
     public void feedback(String value){notify(value);}
+    public void acceptCachedUpdate(String id,JsonObject read){updates.acceptCachedUpdate(id,read);}
+    public void purgeCachedUpdates(java.util.Set<String> visibleIds,java.util.Set<String> visiblePackIds){updates.purgeCachedUpdates(visibleIds,visiblePackIds);}
+    public void updatesFailure(String action,JsonObject payload,String message){updates.failure(action,payload,message);if(updates.loaded()&&!updates.enabled()&&page==3){page=0;pageAt=System.nanoTime();focusId=null;}}
     public void feedbackError(String value){toast.show(value,HubToast.Kind.ERROR,System.nanoTime());}
     public void feedbackSuccess(String value){toast.show(value,HubToast.Kind.SUCCESS,System.nanoTime());}
     public String currentMonth(){return month.toString();}
@@ -92,7 +165,7 @@ public final class HubView {
     public void catalogueInvalidated(){titleDraft=null;}
     public boolean isCatalogueComplete(){return catalogueComplete;}
     private boolean live(){return actions!=null;}
-    private boolean hasSnapshot(String module){return switch(module){case "manager"->data.managerLoaded;case "titles"->data.titlesLoaded;case "fortunes"->data.fortunesLoaded;default->false;};}
+    private boolean hasSnapshot(String module){return switch(module){case "manager"->data.managerLoaded;case "titles"->data.titlesLoaded;case "fortunes"->data.fortunesLoaded;case "updates"->updates.loaded();case "rankings"->rankings.loaded();case "community"->communityLoaded;default->false;};}
     private boolean ready(String module){return !live()||hasSnapshot(module)||moduleStates.getOrDefault(module,"").isEmpty();}
     private boolean privacyKnown(){return !live()||catalogueComplete&&(equipped==null||equipped.isEmpty()||data.title(equipped)!=null);}
     private boolean canChangeVisibility(){return !live()||privacyKnown()&&ready("titles")&&equipped!=null&&!equipped.isEmpty()&&!pendingModules.contains("titles");}
@@ -106,11 +179,24 @@ public final class HubView {
     private String timestamp(long at,String pattern){return at<=0?"暂无记录":java.time.Instant.ofEpochMilli(at).atZone(data.profileZone()).format(DateTimeFormatter.ofPattern(pattern));}
     private String titleDate(HubData.Title title){return live()?timestamp(title.acquiredAt(),"yyyy/MM/dd"):title.date();}
     private long journeyDays(){return data.firstJoinedAt<=0?0:Math.max(1,java.time.temporal.ChronoUnit.DAYS.between(java.time.Instant.ofEpochMilli(data.firstJoinedAt).atZone(data.profileZone()).toLocalDate(),data.today)+1);}
-    private void request(String module,String action,JsonObject payload){if(actions!=null)actions.request(module,action,payload);}
+    private void request(String module,String action,JsonObject payload){
+        if(actions!=null)actions.request(module,action,payload);
+        else if(module.equals("community"))communityFailure(action,"当前预览未连接服务器。",payload);
+    }
     private JsonObject mutation(String module){JsonObject p=new JsonObject();p.addProperty("expectedRevision",data.revisions.getOrDefault(module,""));return p;}
     private void calendarRequest(){if(live()&&ready("fortunes")){calendarLoading=true;JsonObject p=new JsonObject();p.addProperty("month",month.toString());request("fortunes","calendar",p);}}
     private boolean calendarInitialLoading(){return live()&&calendarLoading&&!data.calendarMonths.contains(month);}
     public void acceptLive(String module,String action,JsonObject result) {
+        if(module.equals("community")) {
+            if(action.equals("snapshot")){communityLoaded=true;return;}
+            profiles.accept(action,result);
+            memories.accept(action,result,HubData.object(result,"_hubRequest"));return;
+        }
+        if(module.equals("rankings")) {
+            JsonObject body=result.deepCopy();JsonObject query=body.has("_hubRequest")?body.remove("_hubRequest").getAsJsonObject():new JsonObject();
+            rankings.accept(action,body,query);return;
+        }
+        if(module.equals("updates")){updates.accept(action,result);if(updates.loaded()&&!updates.enabled()&&page==3){page=0;pageAt=System.nanoTime();focusId=null;}return;}
         if(module.equals("manager")){data.manager(result);setPlayerName(HubData.string(HubData.object(result,"player"),"name",playerName));}
         if(module.equals("titles")) {
             if(!action.equals("catalogue"))titleDraft=result.deepCopy();
@@ -149,7 +235,7 @@ public final class HubView {
             float[] p=HubDraw.inversePoint(transform,px,py);return p[0]>=x&&p[1]>=y&&p[0]<x+w&&p[1]<y+h;
         }
     }
-    public HubView() {}
+    public HubView() {updates.demo();rankings.demo();}
     public void setPlayerName(String name) { if(name!=null&&!name.isBlank()) playerName=name; }
     public void setViewportBounds(float x,float y,float w,float h){if(w>0&&h>0){viewportX=x;viewportY=y;viewportW=w;viewportH=h;}}
     public void setSettings(String mode,boolean reduced) {
@@ -158,11 +244,13 @@ public final class HubView {
     }
     public String welcomeMode() { return welcomeMode; }
     public boolean reducedMotion() { return reducedMotion; }
+    public boolean localReducedMotion() { return localReducedMotion; }
+    public void setSystemReducedMotion(boolean value) { systemReducedMotion=value;updateReducedMotion(); }
     public boolean consumeCloseRequest() { boolean value=closeRequest;closeRequest=false;return value; }
     public boolean isWelcomePlaying() { return playWelcome&&!reducedMotion&&System.nanoTime()-openedAt<3_060_000_000L; }
     public void open(boolean welcome) {
         toast.clear();
-        page=0;overlay=null;reading=null;focusId=null;closeRequest=false;
+        page=0;updates.deactivate();rankings.deactivate();memories.deactivate();profiles.clear();afterProfileClose=null;overlay=null;reading=null;focusId=null;closeRequest=false;
         openedAt=System.nanoTime();navAt=openedAt;lastFrame=openedAt;playWelcome=welcome&&!reducedMotion;
         pageAt=openedAt+(playWelcome?3_060_000_000L:0);hits.clear();
         transitions.clear();tilts.clear();pressedId=null;
@@ -170,28 +258,31 @@ public final class HubView {
     }
 
     public void render(HubDraw draw,float mouseX,float mouseY,long nowNanos) {
-        d=draw;mx=mouseX;my=mouseY;now=nowNanos;dt=clamp((now-lastFrame)/1_000_000_000f,0,.05f);lastFrame=now;
+        d=draw;d.setDark(dark);mx=mouseX;my=mouseY;now=nowNanos;dt=clamp((now-lastFrame)/1_000_000_000f,0,.05f);lastFrame=now;
         opacity=1;offsetY=0;interactiveAlpha=1;logical=Matrix33.IDENTITY;matrixStack.clear();alphaStack.clear();nextHits.clear();
         float shell=reducedMotion?1:HubMotion.bezier(progress(now-openedAt,360_000_000L),.2f,.8f,.2f,1);
         beginAlpha(shell);push(HubDraw.cssPerspective(630,425,800,0,0,0,.992f+.008f*shell,0,12*(1-shell)));
-        d.boxShadow(0,0,1260,850,28,0,28,80,-28,0x60435882);
-        d.boxShadow(0,0,1260,850,28,0,5,16,0,0x1253658e);
+        d.boxShadow(0,0,1260,850,28,0,30,80,-32,dark?0xa1050b26:0x52435882);
+        d.boxShadow(0,0,1260,850,28,0,6,18,-8,dark?0x66081127:0x1c53658e);
         d.save();d.clipRoundRect(0,0,1260,850,28);
         d.blurBackdrop(0,0,1260,850,28,24,1);
-        d.roundRect(0,0,1260,850,28,0x99f4f6ff);
-        d.insetBoxShadow(0,0,1260,850,28,0,1,0,0,0xffffffff);
-        d.linearGradientRoundRect(208,0,1052,850,0,135,new int[]{0xadffffff,0x9cf5f6ff},new float[]{0,1});
+        d.roundRect(0,0,1260,850,28,dark?0x9e253149:0x99f4f6ff);
+        d.insetBoxShadow(0,0,1260,850,28,0,1,0,0,dark?0x16dbe6ff:0xffffffff);
+        d.linearGradientRoundRect(208,0,1052,850,0,135,dark?new int[]{0xe0202a40,0xdb262b43}:new int[]{0xadffffff,0x9cf5f6ff},new float[]{0,1});
         d.captureGlassBackdrop(0,0,208,850);
         sidebar();topbar();
         boolean welcomeActive=playWelcome&&!reducedMotion&&now-openedAt<3_060_000_000L;
         if(!welcomeActive) {
-            if(page==0)home();else if(page==1)titles();else fortunes();
+            if(page==0)home();else if(page==1)titles();else if(page==2)fortunes();else if(page==3)updates();else if(page==4)leaderboards();else memories();
         }
         if(welcomeActive) { nextHits.clear();welcome(); }
         d.restore();
-        d.strokeRoundRect(.5f,.5f,1259,849,28,1,0xe6ffffff);
+        d.strokeRoundRect(.5f,.5f,1259,849,28,1,dark?0x38c4d7ff:0xe6ffffff);
         pop();endAlpha();
-        if(!welcomeActive&&(overlay!=null||reading!=null))modal();
+        if(!welcomeActive&&profiles.isOpen()){
+            nextHits.clear();profiles.draw(d,viewportX,viewportY,viewportW,viewportH,mx,my,now,reducedMotion,dark,focusId,pressedId);
+        }
+        if(!welcomeActive&&!profiles.isOpen()&&(overlay!=null||reading!=null))modal();
         toast.render(d,mx,my,now,reducedMotion,viewportX,viewportY,viewportW,viewportH);
         hits.clear();hits.addAll(nextHits);
         d=null;
@@ -199,27 +290,27 @@ public final class HubView {
 
     private void sidebar() {
         d.glassSurface(0,0,208,850,0,GlassStyle.SIDEBAR);
-        d.linearGradientRoundRect(0,0,208,850,0,145,new int[]{0x40ffffff,0x28e6edff,0x35e9e3ff},new float[]{0,.52f,1});
-        d.linearGradientRoundRect(0,0,208,850,0,145,new int[]{0x3df8fcff,0x2beaf1ff,0x38eee9ff},new float[]{0,.5f,1});
-        d.linearGradientRoundRect(5,5,203,840,0,118,new int[]{0x24ffffff,0x00ffffff,0x00ffffff,0x14bcc0e3},new float[]{0,.32f,.72f,1});
-        d.insetBoxShadow(0,0,208,850,0,2,1,3,0,0xffffffff);
-        d.insetBoxShadow(0,0,208,850,0,-3,0,7,0,0x42abb9e1);
-        d.boxShadow(0,0,208,850,0,6,0,20,0,0x0c65719e);
-        d.rect(5,5,1,840,0x88ffffff);d.rect(207,0,1,850,0x88b3bfdf);
+        d.linearGradientRoundRect(0,0,208,850,0,145,dark?new int[]{0x572b3c52,0x3d273248,0x463a3057}:new int[]{0x40ffffff,0x28e6edff,0x35e9e3ff},new float[]{0,.52f,1});
+        d.linearGradientRoundRect(0,0,208,850,0,145,dark?new int[]{0x2e354a61,0x20263e5b,0x2943345c}:new int[]{0x3df8fcff,0x2beaf1ff,0x38eee9ff},new float[]{0,.5f,1});
+        d.linearGradientRoundRect(0,0,208,850,0,118,dark?new int[]{0x08c7deff,0x00ffffff,0x00ffffff,0x08aba3e3}:new int[]{0x24ffffff,0x00ffffff,0x00ffffff,0x14bcc0e3},new float[]{0,.32f,.72f,1});
+        d.insetBoxShadow(0,0,208,850,0,-1,0,3,0,dark?0x129eaee5:0x2babb9e1);
+        d.boxShadow(0,0,208,850,0,4,0,16,0,dark?0x1a0d1732:0x0865719e);
+        d.rect(207,0,1,850,dark?0x26a5b7e0:0x88b3bfdf);
         if(live()&&serverIcon!=null)d.serverIcon(serverIcon,22,27,44);else image("server-logo",22,27,44,44,1);
         tracked("旅人手册",77,46,18,1.2f,INK,650,false);text("PixelMC-Hub",77,65,10,0xff687491,false);
         hit("brand","旅人手册首页",18,20,174,61,()->navigate(0));
         text("我的空间",25,118,11,0xff677591,false);
-        String[] labels={"个人主页","我的称号","我的签笺"};
-        String[] icons={"home","tag","book-open"};
-        int[] colors={0xff1949e6,0xff6f34d5,0xfff8651b};
-        int[] bright={0xff569dfb,0xffbf72f3,0xffffb83d};
-        for(int i=0;i<3;i++) {
-            float y=145+i*74;final int destination=i;
-            boolean hover=inside(21,y-8,172,64),current=page==i;
+        String[] labels={"个人主页","我的称号","我的签笺","更新日志","玩家排行"};
+        String[] icons={"home","tag","book-open","newspaper","trophy"};
+        int[] colors={0xff1949e6,0xff6f34d5,0xfff8651b,0xff109e73,0xffdf29a0};
+        int[] bright={0xff569dfb,0xffbf72f3,0xffffb83d,0xff3cd77f,0xffff78c8};
+        int[] destinations=updates.loaded()&&!updates.enabled()?new int[]{0,1,2,4}:new int[]{0,1,2,3,4};
+        for(int slot=0;slot<destinations.length;slot++) {
+            int i=destinations[slot];float y=145+slot*74;final int destination=i;
+            boolean hover=inside(21,y-8,172,64),current=page==i||page==5&&i==0;
             float h=transition("nav-bg-"+i,hover?1:0,200);
             if(current)glass(20,y-8,173,64,18,0xb8ffffff,0x57ffffff);
-            else if(h>0)d.roundRect(20,y-8,173,64,18,withAlpha(0x65ffffff,h));
+            else if(h>0)d.roundRect(20,y-8,173,64,18,withAlpha(dark?0x0cacbfff:0x65ffffff,h));
             float[] mouse=HubDraw.inversePoint(logical,mx,my);
             float nx=clamp((mouse[0]-58)/23,-1,1),ny=clamp((mouse[1]-y-23)/23,-1,1);
             HubMotion.Navigation state=navigation[i];
@@ -242,7 +333,7 @@ public final class HubView {
         hit("settings","界面设置",20,791,172,40,()->openOverlay("settings"));
     }
     private void topbar() {
-        d.rect(208,0,1052,54,0x36ffffff);d.line(208,54,1260,54,1,0xb8ffffff);
+        d.rect(208,0,1052,54,dark?0x47263149:0x36ffffff);d.line(208,54,1260,54,1,dark?0x11b6c9f0:0xb8ffffff);
         text("我的空间",236,33,12,0xff8a94aa,false);icon("chevron-right",301,22,13,0xffa1aac0);
         text(pageName(),326,33,12,0xff63718c,false);
         d.circle(1095,28,2.5f,0xff529c8c);text(live()?"玩家手册":"本地原型",1105,32,11,0xff64748b,false);
@@ -252,30 +343,51 @@ public final class HubView {
     private void heading(String title,String subtitle,String module,int count) {
         group(0,340);
         tracked(title,LEFT,108,25,1,INK,720,false);
-        if(count>=0){String number=Integer.toString(count);float x=LEFT+trackedWidth(title,25,1,720,false)+12,w=d.textWidth(number,13,500)+18;d.roundRect(x,84,w,28,10,0xffe9e1ff);d.strokeRoundRect(x,84,w,28,10,1,0xffffffff);d.text(number,x+9,103,13,0xff7361c3,500);}
+        if(count>=0){String number=Integer.toString(count);float x=LEFT+trackedWidth(title,25,1,720,false)+12,w=d.textWidth(number,13,500)+18;d.roundRect(x,84,w,28,10,dark?0x299678d7:0xffe9e1ff);d.strokeRoundRect(x,84,w,28,10,1,dark?0x2bc9b3f6:0xffffffff);d.text(number,x+9,103,13,dark?0xffcbb7ff:0xff7361c3,500);}
         text(subtitle,LEFT,137,13,0xff6c7891,false);
         if(module!=null)textRight(fit(module,460,10,false),1232,105,10,0xff7c72a6,false);
         ungroup();
     }
-    private String pageName(){return page==0?"个人主页":page==1?"我的称号":"我的签笺";}
+    private String pageName(){return page==0?"个人主页":page==1?"我的称号":page==2?"我的签笺":page==3?"更新日志":page==4?"玩家排行":"旅程档案";}
+    private void leaderboards() {
+        if(rankingsPreviewAt>0 && now>=rankingsPreviewAt){rankingsPreviewAt=0;if(!live())rankings.demoUpdate();}
+        heading("玩家排行",rankings.description(),null,-1);
+        group(0,340);float[] mouse=HubDraw.inversePoint(logical,mx,my);
+        rankings.render(d,mouse[0],mouse[1],focusId,reducedMotion,now);ungroup();
+    }
+    private void updates(){
+        heading("更新日志","每一点变化，都在这里与你分享。",live()?"PixelMC-Hub":"本地演示",updates.loaded()?updates.total():-1);
+        group(0,340);float[] mouse=HubDraw.inversePoint(logical,mx,my);
+        updates.render(d,mouse[0],mouse[1],focusId,pressedId,reducedMotion,playerName,now);ungroup();
+    }
 
+    private void memories(){
+        group(0,340);float[] mouse=HubDraw.inversePoint(logical,mx,my);
+        memories.render(d,mouse[0],mouse[1],focusId,pressedId,reducedMotion,dark,now);ungroup();
+    }
     private void home() {
         heading("个人主页",live()?(journeyDays()>0?"很高兴又见到你，今天是旅程的第 "+journeyDays()+" 天。":"很高兴又见到你。") :"很高兴又见到你，今天是旅程的第 18 天。",null,-1);
         group(0,340);
         icon("sun",1062,88,18,0xffbf8a37);text(live()?data.today.format(DateTimeFormatter.ofPattern("M 月 d 日，EEEE",Locale.CHINA)):"11 月 3 日，星期二",1089,103,12,0xff6e7990,false);
         ungroup();
         group(50,440);
-        d.boxShadow(LEFT,174,WIDTH,276,22,0,10,30,0,0x288980c5);
+        d.boxShadow(LEFT,174,WIDTH,276,22,0,10,dark?28:30,dark?-10:0,dark?0x700a102c:0x288980c5);
         d.linearGradientRoundRect(LEFT,174,WIDTH,276,22,110,new int[]{0xffd9f0ff,0xffe4e8ff,0xffdbc9f9},new float[]{0,.45f,1});
-        d.radialGradientRoundRect(LEFT,174,WIDTH,276,22,LEFT+WIDTH*.78f,174+276*.34f,WIDTH*.5f,276*.5f,new int[]{0xffbcbbff,0x00bcbbff},new float[]{0,1});
+        d.radialGradientRoundRect(LEFT,174,WIDTH,276,22,LEFT+WIDTH*.78f,174+276*.34f,WIDTH*.78f*1.41421356f,276*.66f*1.41421356f,new int[]{0xffbcbbff,0x00bcbbff},new float[]{0,.5f});
         d.captureGlassBackdrop(LEFT,174,WIDTH,276);d.glassSurface(LEFT,174,WIDTH,276,22,GlassStyle.IDENTITY);
-        d.insetBoxShadow(LEFT,174,WIDTH,276,22,0,1,2,0,0xffffffff);
-        d.insetBoxShadow(LEFT,174,WIDTH,276,22,0,0,5,0,0x298c9ac3);
-        d.boxShadow(LEFT,174,WIDTH,276,22,0,8,22,0,0x136c64aa);
+        d.insetBoxShadow(LEFT,174,WIDTH,276,22,0,1,dark?0:2,0,dark?0x1ae8efff:0xffffffff);
+        d.insetBoxShadow(LEFT,174,WIDTH,276,22,0,dark?-1:0,dark?0:5,0,dark?0x0acbd3ff:0x298c9ac3);
+        if(!dark)d.boxShadow(LEFT,174,WIDTH,276,22,0,8,22,0,0x136c64aa);
         d.save();d.clipRoundRect(LEFT,174,WIDTH,276,22);
         d.rect(LEFT,366,WIDTH,84,a(0x9effffff));
         d.line(LEFT,366,1232,366,1,a(0xc7ffffff));d.restore();
-        d.strokeRoundRect(LEFT,174,WIDTH,276,22,1,a(0xf2ffffff));
+        if(dark){
+            boolean previousColors=d.literalColors(true);
+            d.strokeRoundRect(LEFT+.5f,174.5f,WIDTH-1,275,22,1,a(0x26c3cef6));
+            d.line(LEFT+22,174.5f,1232-22,174.5f,1,a(0x3dd3e4ff));
+            d.line(LEFT+22,449.5f,1232-22,449.5f,1,a(0x2ba3a4d3));
+            d.literalColors(previousColors);
+        } else d.strokeRoundRect(LEFT,174,WIDTH,276,22,1,a(0xf2ffffff));
         text("你好",263,211,12,0xff586987,false);
         String name=fitTracked(playerName,390,35,-1,700,false);tracked(name,263,255,35,-1,0xff253657,700,false);
         float nameWidth=trackedWidth(name,35,-1,700,false);
@@ -283,17 +395,25 @@ public final class HubView {
         HubData.Title worn=data.title(equipped);
         if(worn==null)text(live()&&!ready("titles")?"称号资料未连接":live()&&!catalogueComplete?"正在读取称号…":"暂未佩戴称号",263,287,14,MUTED,true);else titleLabel(worn,263,287,14,1.4f,false,false);
         if(privacyKnown()&&!visible&&worn!=null){icon("eye-off",live()?750:371,276,13,MUTED);text("展示已隐藏",live()?769:390,287,10,MUTED,false);}
-        button("profile","个人资料  ↗",263,315,106,31,false,true,()->openOverlay("profile"));
+        button("profile","公开资料",263,315,106,31,false,true,()->openPublicProfile(selfPlayerId()),"arrow-up-right");
+        button("memories","旅程档案",379,315,106,31,false,true,()->openMemories(selfPlayerId(),""),"bookmark");
         d.save();d.translate(1080,268);d.canvas().rotate(-29);
         d.strokeRoundRect(-120,-57,240,114,57,2,a(0x70ffffff));d.restore();
         push(Matrix33.makeRotate(-5,1082,267));
         HubMotion.Tilt medallion=beginTilt("medallion",987,187,190,160,10,1.04f,true,.16f,26);
         glass(987,187,190,160,26,0x66ffffff,0x24e7e5ff);
         HubHead.draw(d,1055,214,54,-23,-2);
-        pill(live()?(journeyDays()>0?"✧ 旅程第 "+journeyDays()+" 天":"✧ 今天也有新旅程"):"✧ 旅程第 18 天",1020,309,0x6bffffff,0xff5d5491,false);
+        String journeyLabel=live()?(journeyDays()>0?"旅程第 "+journeyDays()+" 天":"今天也有新旅程"):"旅程第 18 天";
+        float journeyWidth=d.textWidthTracked(journeyLabel,10,400,1,false)+36,journeyX=1082-journeyWidth/2;
+        boolean badgeColors=d.literalColors(true);
+        d.roundRect(journeyX,309,journeyWidth,23,12,a(dark?0x14b3a9d5:0x6bffffff));
+        d.strokeRoundRect(journeyX+.5f,309.5f,journeyWidth-1,22,12,1,a(dark?0x24dacfff:0xaaffffff));
+        int journeyColor=dark?0xffd0c7ed:0xff5d5491;
+        icon("sparkles",journeyX+9,314,13,journeyColor);tracked(journeyLabel,journeyX+27,324.5f,10,1,journeyColor,400,false);
+        d.literalColors(badgeColors);
         endTilt(medallion,987,187,190,160,26,10,.75f);pop();
         text("✦",1190,222,27,0xffffffff,false);text("✧",967,321,21,0xffffffff,false);
-        stat(263,391,"clock",live()?"当前存档 · 累计在线":"累计在线 · 演示",live()?(data.managerLoaded?Long.toString(data.onlineMillis(now)/3600000):"—"):"128",live()?"小时  "+(data.onlineMillis(now)/60000%60)+" 分钟":"小时  42 分钟",0xff6b7dd6,0xffe8eeff);
+        onlineStat(263,391);
         d.line(566,388,566,430,1,a(0x4ab7c1e0));
         stat(590,391,"log-in",live()?"当前存档 · 登录次数":"登录次数 · 演示",live()?(data.managerLoaded?Long.toString(data.joinCount):"—"):"36","次",0xffaa75c6,0xfff1e9ff);
         d.line(887,388,887,430,1,a(0x4ab7c1e0));
@@ -312,9 +432,24 @@ public final class HubView {
         text(label,x+45,y+9,11,0xff72809c,false);text(main,x+45,y+34,21,0xff344566,true);
         text(unit,x+49+d.textWidth(main,21,600),y+33,10,0xff78869d,false);
     }
+    private void onlineStat(float x,float y) {
+        d.roundRect(x,y,33,33,11,a(0xffe8eeff));icon("clock",x+8,y+8,17,0xff6b7dd6);
+        text(live()?"当前存档 · 累计在线":"累计在线 · 演示",x+45,y+9,11,0xff72809c,false);
+        boolean known=!live()||data.managerLoaded;
+        long millis=live()?data.onlineMillis(now):((128L*60+42)*60_000);
+        String hours=known?Long.toString(millis/3_600_000):"—",minutes=known?Long.toString(millis/60_000%60):"—";
+        float cursor=x+45;
+        text(hours,cursor,y+34,21,0xff344566,true);cursor+=d.textWidth(hours,21,600)+4;
+        text("小时",cursor,y+33,10,0xff78869d,false);cursor+=d.textWidth("小时",10,400)+4;
+        text(minutes,cursor,y+34,21,0xff344566,true);cursor+=d.textWidth(minutes,21,600)+4;
+        text("分钟",cursor,y+33,10,0xff78869d,false);
+    }
     private void homeToday() {
-        glass(LEFT,470,515,310,22,0xfffffefa,0xfffff9ef);
-        d.radialGradientRoundRect(LEFT,470,515,310,22,751,600,335,202,new int[]{0x9cffe9bf,0x00ffe9bf},new float[]{0,1});
+        shadow(LEFT,470,515,310,22,0x104b5d85);
+        d.linearGradientRoundRect(LEFT,470,515,310,22,120,new int[]{0xfffffefa,0xfffff9ef},new float[]{0,1});
+        d.radialGradientRoundRect(LEFT,470,515,310,22,751,470+310*.42f,515*1.41421356f,310*.58f*1.41421356f,new int[]{0x9cffe9bf,0x00ffe9bf},new float[]{0,.65f});
+        d.strokeRoundRect(LEFT+.5f,470.5f,514,309,22,1,a(0xe9ffffff));
+        d.line(LEFT+22,471,729,471,1,a(0xd9ffffff));
         icon("leaf",259,493,19,0xffbc9345);text("今日签笺",287,510,16,INK,true);
         textRight("每日一签",728,508,10,MUTED,false);
         HubData.Fortune f=live()?(data.todayRecord==null?null:data.todayRecord.fortune()):data.fortune(1);
@@ -372,8 +507,19 @@ public final class HubView {
     private void keepsake(float y,String title,String subtitle,String art,int bg,int color,String grade,Runnable click,HubData.Title style) {
         float hover=transition("keepsake-hover-"+y,inside(793,y-1,417,60)?1:0,140);
         if(hover>0)d.roundRect(793,y-1,417,60,0,withAlpha(0x80f5f2ff,hover));
-        glass(793,y+5,36,39,12,bg,lighten(bg,.1f));
-        if(art.equals("fortune-slip"))image(art,797,y+7,28,34,1);else icon(art,800,y+13,22,color);
+        float iconY=y+6.5f;boolean previousColors=d.literalColors(true);
+        d.boxShadow(793,iconY,36,36,12,0,3,8,0,a(dark?0x220b1122:0x187e708b));
+        if(art.equals("fortune-slip"))d.roundRect(793,iconY,36,36,12,a(dark?0x24bd9c57:0xfff8edda));
+        else d.linearGradientRoundRect(793,iconY,36,36,12,135,
+            dark?new int[]{withAlpha(color,.21f),withAlpha(color,.12f)}:new int[]{bg,lighten(bg,.1f)},new float[]{0,1});
+        d.insetBoxShadow(793,iconY,36,36,12,1,1,1,0,a(dark?0x10eee3c7:0xffffffff));
+        d.strokeRoundRect(793.5f,iconY+.5f,35,35,12,1,a(dark?0x21d9c498:0xffffffff));
+        if(art.equals("fortune-slip")){
+            var artwork=d.imageResource("textures/ui/fortune-slip.png");float scale=32f/Math.max(artwork.getWidth(),artwork.getHeight());
+            float imageWidth=artwork.getWidth()*scale,imageHeight=artwork.getHeight()*scale;
+            image(art,793+(36-imageWidth)/2,iconY+(36-imageHeight)/2,imageWidth,imageHeight,1);
+        } else icon(art,800,iconY+7,22,dark?mix(color,0xffe8eeff,.35f):color);
+        d.literalColors(previousColors);
         if(style==null)text(title,841,y+19,13,0xff4c5570,false);else titleLabel(style,841,y+19,13,0,false,false,340);
         if(grade!=null){float x=848+d.textWidth(title,13,false);d.strokeRoundRect(x,y+6,d.textWidth(grade,9,false)+10,17,4,.7f,a(0xffeadfc7));text(grade,x+5,y+18,9,color,false);}
         text(subtitle,841,y+40,10,0xff8490a5,false);icon("chevron-right",1195,y+19,16,0xffa5a9c0);
@@ -448,9 +594,18 @@ public final class HubView {
         boolean selected=selectedTitle.equals(t.id()),hover=inside(x,y,w,h);
         beginAlpha(t.owned()?1:.8f,x,y,w,h);
         HubMotion.Tilt tilt=beginTilt("title-"+t.id(),x,y,w,h,5,1.018f,false,.12f,18);
-        shadow(x,y,w,h,18,selected?0x1f607097:0x0b607097);
-        d.radialGradientRoundRect(x,y,w,h,18,x+w,y,w,h,new int[]{t.light(),0xd9ffffff},new float[]{0,.74f});
-        d.strokeRoundRect(x,y,w,h,18,selected?1.5f:1,a(selected?mix(t.color(),0xff6452ad,.2f):0xfaffffff));
+        boolean previousColors=d.literalColors(true);
+        d.boxShadow(x,y,w,h,18,0,selected?5:3,selected?16:10,0,a(dark?(selected?0x4d0b142d:0x290c122a):selected?withAlpha(t.color(),.15f):0x0c607097));
+        int wash=dark?mix(t.color(),0xff273148,.77f):t.light();
+        d.radialGradientRoundRect(x,y,w,h,18,x+w,y+h*.1f,w*1.41421356f,h*.9f*1.41421356f,
+            new int[]{a(wash),a(dark?0xe8293247:0xd9ffffff)},new float[]{0,.74f});
+        int edge=dark?(selected?mix(t.color(),0xffd5c7fb,.28f):cssMix(t.color(),0x3b7987a6,.76f))
+            :selected?mix(t.color(),0xff6452ad,.2f):0xfaffffff;
+        d.strokeRoundRect(x+.5f,y+.5f,w-1,h-1,18,1,a(edge));
+        if(selected)d.strokeRoundRect(x+1.5f,y+1.5f,w-3,h-3,17,1,a(withAlpha(t.color(),dark?.25f:.48f)));
+        else if(dark)d.insetBoxShadow(x,y,w,h,18,0,1,0,0,a(0x12deebff));
+        else d.strokeRoundRect(x+1.5f,y+1.5f,w-3,h-3,17,1,a(0xccffffff));
+        d.literalColors(previousColors);
         if(compact) {
             emblem(t,x+16,y+13,42);
             titleLabel(t,x+75,y+30,17,1,false,!t.owned(),w-178);
@@ -480,12 +635,15 @@ public final class HubView {
         d.save();d.translate(x+size/2,y+size/2);d.canvas().rotate(-9);
         d.save();d.canvas().rotate(12);d.translate(4,-5);
         int back=t.owned()?t.color():desaturate(t.color(),.35f);
-        d.boxShadow(-size/2,-size/2,size,size,radius,0,9,18,0,withAlpha(back,.35f));
-        d.linearGradientRoundRect(-size/2,-size/2,size,size,radius,145,new int[]{back,mix(back,0xff463169,.17f)},new float[]{0,1});d.restore();
+        boolean previousColors=d.literalColors(true);
+        d.boxShadow(-size/2,-size/2,size,size,radius,0,9,18,0,a(dark?0x400b152e:withAlpha(back,.35f)));
+        d.linearGradientRoundRect(-size/2,-size/2,size,size,radius,145,new int[]{a(back),a(mix(back,0xff463169,.17f))},new float[]{0,1});d.restore();
         d.captureGlassBackdrop(-size/2,-size/2,size,size);d.blurBackdrop(-size/2,-size/2,size,size,radius,4,1);
-        d.linearGradientRoundRect(-size/2,-size/2,size,size,radius,145,new int[]{0xa6ffffff,0x47ffffff},new float[]{0,1});
-        d.strokeRoundRect(-size/2,-size/2,size,size,radius,1,a(0xe8ffffff));
-        icon("stroke-1.5/"+t.icon(),-size*.27f,-size*.27f,size*.54f,mix(t.color(),0xff25364c,.32f));d.restore();
+        d.linearGradientRoundRect(-size/2,-size/2,size,size,radius,145,dark?new int[]{a(0x29d3defc),a(0x0ec8d2f2)}:new int[]{a(0xa6ffffff),a(0x47ffffff)},new float[]{0,1});
+        d.strokeRoundRect(-size/2,-size/2,size,size,radius,1,a(dark?0x47d9e4ff:0xd9ffffff));
+        d.insetBoxShadow(-size/2,-size/2,size,size,radius,1,1,1,0,a(dark?0x36e7eeff:0xffffffff));
+        d.literalColors(previousColors);
+        icon("stroke-1.5/"+t.icon(),-size*.27f,-size*.27f,size*.54f,dark?mix(t.color(),0xfff4f7ff,.45f):mix(t.color(),0xff25364c,.32f));d.restore();
     }
     private void titleDetail() {
         HubData.Title t=data.title(selectedTitle);if(t==null&&!data.titles.isEmpty())t=data.titles.get(0);
@@ -495,10 +653,19 @@ public final class HubView {
         text("佩戴预览",940,207,13,0xff4f5a73,true);
         boolean worn=Objects.equals(equipped,t.id());
         pill(worn?"✓ 已佩戴":"◉ 仅预览",1144,188,worn?0xffeff9f4:0xfff6f1ff,worn?0xff4c8573:0xff85709d,false);
-        d.gradientRoundRect(940,225,274,226,18,a(t.light()),a(0xffe8e3ff));
-        d.strokeRoundRect(940,225,274,226,18,1,a(0xffffffff));d.strokeRoundRect(948,233,258,210,11,1,a(0x8cffffff));
+        boolean previousColors=d.literalColors(true);
+        d.boxShadow(940,225,274,226,18,0,4,12,0,a(dark?0x2e0b142f:0x108f85ad));
+        d.linearGradientRoundRect(940,225,274,226,18,135,
+            new int[]{a(dark?mix(t.color(),0xff263349,.77f):t.light()),a(dark?0x99423a5c:0xb0e8e3ff)},new float[]{0,1});
+        int sheen=dark?0x24bfcef2:0xecffffff;
+        d.radialGradientRoundRect(940,225,274,226,18,1077,225,137*1.41421356f,226*1.41421356f,
+            new int[]{a(sheen),sheen&0xffffff},new float[]{0,.75f});
+        d.insetBoxShadow(940,225,274,226,18,0,1,3,0,a(dark?0x14d7e6ff:0xffffffff));
+        d.strokeRoundRect(940.5f,225.5f,273,225,18,1,a(dark?0x2ec5d6f4:0xffffffff));
+        d.strokeRoundRect(948,233,258,210,11,1,a(dark?0x16d3e3ff:0x8cffffff));
+        d.literalColors(previousColors);
         d.save();d.clipRoundRect(940,225,274,226,18);d.translate(1077,338);d.canvas().rotate(-30);
-        d.strokeRoundRect(-134,-49,268,98,49,1,a(0xb8ffffff));d.restore();
+        d.strokeRoundRect(-134,-49,268,98,49,1,a(dark?0x26cadaff:0xb8ffffff));d.restore();
         icon("stroke-1.0/"+t.icon(),931,292,106,withAlpha(t.color(),.14f));
         // Web line boxes: top26 + height31.5 + margin5, then the 17px player-name line.
         // Measured baselines relative to the preview top are 50 and 76.5 (not glyph-top positions).
@@ -507,11 +674,13 @@ public final class HubView {
         float previewPlayerWidth=d.textWidthTracked(previewPlayer,13,500,.5f,false);
         d.textTracked(previewPlayer,1077-previewPlayerWidth*.5f,301.5f,13,a(0xff62718f),500,.5f,false);
         // .nameplate-preview::before + .preview-ground: two true ellipses form the source pedestal.
-        d.ovalShadow(1007,377,140,42,0,5,12,a(0x277184b8));
-        d.oval(1007,377,140,42,a(0x9cf6f8ff));
-        d.insetOvalShadow(1008,378,138,40,0,-5,7,a(0x17b0a8d0));
-        d.strokeOval(1007.5f,377.5f,139,41,1,a(0xffffffff));
-        d.oval(1021.5f,379,111,26,a(0x4da3b4d5));
+        previousColors=d.literalColors(true);
+        d.ovalShadow(1007,377,140,42,0,5,12,a(dark?0x4d101e3d:0x277184b8));
+        d.oval(1007,377,140,42,a(dark?0x21adbed5:0x9cf6f8ff));
+        d.insetOvalShadow(1008,378,138,40,0,-5,7,a(dark?0x10a9a0d4:0x17b0a8d0));
+        d.strokeOval(1007.5f,377.5f,139,41,1,a(dark?0x30d1e2ff:0xffffffff));
+        d.oval(1021.5f,379,111,26,a(dark?0x400f1b33:0x4da3b4d5));
+        d.literalColors(previousColors);
         // The projected cube's bottom meets the ground ellipse at y=392, as in the web preview.
         if(opacity>.04f)HubHead.draw(d,1051,335,51,-23);
         textCenter("游戏内效果示意",1077,419.5f,10,0xff7d87a1,false);
@@ -589,18 +758,32 @@ public final class HubView {
             float x=258+(i%7)*(cellW+gap),y=292+(i/7)*(cellH+gap);
             boolean future=date.isAfter(data.today),selected=date.equals(selectedDate),today=date.equals(data.today);
             int grade=entry==null?0xffa0a7bb:HubData.gradeColor(entry.fortune().grade());
-            if(entry!=null)d.gradientRoundRect(x,y,cellW,cellH,11,a(0xffffffff),a(lighten(grade,.43f)));
-            else d.roundRect(x,y,cellW,cellH,11,a(future?0xfff5f5fa:0xfff4f4fa));
+            boolean previousColors=d.literalColors(true);
+            if(entry!=null){
+                int[] colors=dark?new int[]{0xff354058,0xff303d51,mix(grade,0xff30394a,.74f),mix(grade,0xff30394a,.44f)}
+                    :new int[]{0xffffffff,0xcfffffff,lighten(grade,.8f),lighten(grade,.43f)};
+                for(int index=0;index<colors.length;index++)colors[index]=a(colors[index]);
+                d.linearGradientRoundRect(x,y,cellW,cellH,11,140,colors,new float[]{.08f,.4f,.69f,1});
+                d.insetBoxShadow(x,y,cellW,cellH,11,0,1,0,0,a(dark?0x14d8e3f5:0xffffffff));
+            } else d.roundRect(x,y,cellW,cellH,11,a(dark?(future?0x3820283d:0x5c202b40):(future?0xfff5f5fa:0xfff4f4fa)));
             float selection=stateTransition("day-selected-"+date,selected?1:0,160);
-            d.strokeRoundRect(x,y,cellW,cellH,11,1,mix(entry!=null?0xffe1d9d0:0xffe6e7f1,0xff8b6bb9,selection));
-            if(selection>0){d.boxShadow(x,y,cellW,cellH,11,0,0,0,2,withAlpha(0x279a7bc3,selection));d.boxShadow(x,y,cellW,cellH,11,0,4,9,0,withAlpha(0x198876aa,selection));}
+            int edge=dark?(future?0x0caabade:0x20adbfde):(future?0xffeeedf5:0xffe6e7f1);
+            d.strokeRoundRect(x+.5f,y+.5f,cellW-1,cellH-1,11,1,a(mix(edge,dark?0xffc2a6e6:0xff8b6bb9,selection)));
+            if(selection>0){d.boxShadow(x,y,cellW,cellH,11,0,0,0,2,a(withAlpha(dark?0x2bb395d6:0x279a7bc3,selection)));d.boxShadow(x,y,cellW,cellH,11,0,4,9,0,a(withAlpha(dark?0x38121932:0x198876aa,selection)));}
             float hover=transition("day-hover-"+date,!future&&inside(x+slide,y,cellW,cellH)?1:0,160);
-            if(hover>0)d.strokeRoundRect(x,y,cellW,cellH,11,1,withAlpha(0xffb396d8,hover));
+            if(hover>0)d.strokeRoundRect(x+.5f,y+.5f,cellW-1,cellH-1,11,1,a(withAlpha(dark?0xffb39ace:0xffb396d8,hover)));
+            d.literalColors(previousColors);
             text(Integer.toString(day),x+10,y+20,12,future?0xffacb2c2:0xff65728b,false);
             if(today)textRight("今天",x+cellW-7,y+18,9,0xff8f70ad,false);
             float slipH=Math.min(38,cellH-26),slipW=slipH*.83f;
             if(!future){d.save();d.translate(x+cellW/2,y+cellH/2+slipH/2-10);d.canvas().rotate(-8);image("fortune-slip",-slipW/2,-slipH/2,slipW,slipH,entry!=null?1:.14f);d.restore();}
-            if(entry!=null)textRight(entry.fortune().grade(),x+cellW-5,y+cellH-6,9,grade,false);
+            if(entry!=null){
+                String label=entry.fortune().grade();float labelWidth=d.textWidth(label,9,400)+6;
+                previousColors=d.literalColors(true);
+                d.roundRect(x+cellW-3-labelWidth,y+cellH-17,labelWidth,14,3,a(dark?0x9c172335:0x80ffffff));
+                textRight(label,x+cellW-6,y+cellH-6,9,dark?mix(grade,0xfff4edda,.48f):mix(grade,0xff24352e,.1f),false);
+                d.literalColors(previousColors);
+            }
             if(!future)hit("day-"+date,date+(entry==null?" 未收藏":" "+entry.fortune().title()),x+slide,y,cellW,cellH,()->selectedDate=date);
         }
     }
@@ -634,12 +817,19 @@ public final class HubView {
         } else {
             HubData.Fortune f=entry.fortune();
             paper(937,219,280,331);
-            glass(1053,238,48,49,13,0x94f2deac,0xfffff7e6);image("fortune-slip",1062,244,29,37,1);
+            boolean previousColors=d.literalColors(true);
+            d.save();d.translate(1077,262.5f);d.canvas().rotate(-6);
+            d.boxShadow(-24,-24.5f,48,49,13,0,3,8,0,a(dark?0x40161126:0x29b69c64));
+            d.linearGradientRoundRect(-24,-24.5f,48,49,13,145,
+                new int[]{a(dark?0x33c7a360:0x94f2deac),a(dark?0x12e3c47d:0xfffff7e6)},new float[]{0,1});
+            d.insetBoxShadow(-24,-24.5f,48,49,13,1,1,1,0,a(dark?0x1ff1ddb5:0xffffffff));
+            d.strokeRoundRect(-23.5f,-24,47,48,13,1,a(dark?0x2bdac18d:0x99ffffff));
+            image("fortune-slip",-15.5f,-21.5f,31,43,1);d.restore();d.literalColors(previousColors);
             textCenter(f.grade()+" · 第"+f.id()+"签",1077,310,11,HubData.gradeColor(f.grade()),false);
             trackedCenter(f.title(),1077,348,25,3,0xff615b4f,true,true);
-            d.line(961,365,1193,365,1,a(0x36c9b78d));
+            previousColors=d.literalColors(true);d.line(961,365,1193,365,1,a(dark?0x29d3bd8a:0x36c9b78d));d.literalColors(previousColors);
             for(int i=0;i<f.poem().size();i++)trackedCenter(f.poem().get(i),1077,391+i*30.55f,13,1.6f,0xff817967,false,true);
-            d.line(961,494,1193,494,1,a(0x36c9b78d));
+            previousColors=d.literalColors(true);d.line(961,494,1193,494,1,a(dark?0x29d3bd8a:0x36c9b78d));d.literalColors(previousColors);
             text(fit(playerName,190,9,false)+" 所得",960,526,9,0xffae9565,false);textRight(entry.time(),1195,526,9,0xffae9565,false);
             icon("check-check",940,582,14,0xff7f8f87);text("已收藏",962,594,10,0xff7f8f87,false);
             button("read-selected","阅读解签  →",1093,572,123,35,true,true,()->openReading(entry));
@@ -656,9 +846,16 @@ public final class HubView {
         textCenter("仅用于手册，方块展示在游戏内设置",1077,783,9,0xff948ba6,false);
     }
     private void paper(float x,float y,float w,float h) {
-        d.gradientRoundRect(x,y,w,h,14,a(0xfffff9ec),a(0xfffffef9));
-        d.strokeRoundRect(x,y,w,h,14,1,a(0xffe9dcbf));
-        d.strokeRoundRect(x+6,y+6,w-12,h-12,9,1,a(0x2bcdb57e));
+        boolean previousColors=d.literalColors(true);
+        d.boxShadow(x,y,w,h,14,0,4,12,0,a(dark?0x261a152a:0x088c704e));
+        d.linearGradientRoundRect(x,y,w,h,14,120,new int[]{a(dark?0xff3e3932:0xfffff9ec),a(dark?0xff34343b:0xfffffef9)},new float[]{0,1});
+        int sheen=dark?0x30b39049:0x52f2dda8;
+        d.radialGradientRoundRect(x,y,w,h,14,x+w*.5f,y+h*.04f,w*.5f*1.41421356f,h*.96f*1.41421356f,
+            new int[]{a(sheen),sheen&0xffffff},new float[]{0,.7f});
+        d.insetBoxShadow(x,y,w,h,14,0,1,2,0,a(dark?0x1aeadcc1:0xffffffff));
+        d.strokeRoundRect(x+.5f,y+.5f,w-1,h-1,14,1,a(dark?0x3dc7ad71:0xffe9dcbf));
+        d.strokeRoundRect(x+6,y+6,w-12,h-12,9,1,a(dark?0x1fdcc08c:0x2bcdb57e));
+        d.literalColors(previousColors);
     }
     private void shiftMonth(int amount) {
         YearMonth target=month.plusMonths(amount);if(target.isAfter(YearMonth.from(data.today)))return;
@@ -678,18 +875,19 @@ public final class HubView {
         d.captureGlassBackdrop(viewportX,viewportY,viewportW,viewportH);
         float backdrop=reducedMotion?1:HubMotion.ease(progress(now-modalAt,180_000_000L));
         beginAlpha(backdrop,viewportX,viewportY,viewportW,viewportH);d.blurBackdrop(viewportX,viewportY,viewportW,viewportH,0,9,1);
-        d.rect(viewportX,viewportY,viewportW,viewportH,0x3634405c);
+        d.rect(viewportX,viewportY,viewportW,viewportH,dark?0x590a1029:0x3634405c);
         boolean wide=reading!=null;
         modalW=wide?720:440;
-        modalH=wide?147+Math.max(357,178.5f+trackedLines(reading.fortune().interpretation(),319.5f,15,1,400,true).size()*31.5f):"settings".equals(overlay)?520:"profile".equals(overlay)?590:"preview".equals(overlay)?430:355;
+        modalH=wide?147+Math.max(357,178.5f+trackedLines(reading.fortune().interpretation(),319.5f,15,1,400,true).size()*31.5f):"settings".equals(overlay)?516:"profile".equals(overlay)?590:"preview".equals(overlay)?430:355;
         modalX=(1260-modalW)/2;modalY=(850-modalH)/2;
         float enter=reducedMotion?1:HubMotion.bezier(progress(now-modalAt,220_000_000L),.2f,.8f,.2f,1);
         beginAlpha(enter,modalX,modalY,modalW,modalH);
         push(HubDraw.cssPerspective(630,425,800,0,0,0,.985f+.015f*enter,0,9*(1-enter)));
-        d.boxShadow(modalX,modalY,modalW,modalH,25,0,28,90,0,0x4235416c);
+        d.boxShadow(modalX,modalY,modalW,modalH,25,0,28,76,-18,dark?0x99030920:0x4035416c);
+        d.boxShadow(modalX,modalY,modalW,modalH,25,0,5,16,-8,dark?0x59060e27:0x2453658e);
         d.linearGradientRoundRect(modalX,modalY,modalW,modalH,25,135,new int[]{0xf5fcfdff,0xeff5f3ff},new float[]{0,1});
         d.strokeRoundRect(modalX,modalY,modalW,modalH,25,1,0xffffffff);
-        String title=wide?"签笺详情":switch(overlay){case "settings"->"界面设置";case "profile"->"个人资料";case "preview"->"预览选项";case "title-name"->"称号全文";case "title-display"->"称号展示位置";default->fortuneState==0?"如何抽签":"如何解签";};
+        String title=wide?"签笺详情":switch(overlay){case "settings"->"界面设置";case "profile"->"账户信息";case "preview"->"预览选项";case "title-name"->"称号全文";case "title-display"->"称号展示位置";default->fortuneState==0?"如何抽签":"如何解签";};
         String subtitle=wide?reading.date().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))+" · "+playerName+" 所得":switch(overlay){case "settings"->"让手册更符合你的习惯";case "profile"->"你在这段旅程中留下的足迹";case "preview"->"仅用于体验不同状态，不会修改游戏数据";case "title-name"->"完整文字与原始样式";case "title-display"->"个人偏好与服务器展示规则";default->"DailyFortunes · 玩法提示";};
         text(title,modalX+27,modalY+39,19,0xff35415e,true);
         text(subtitle,modalX+27,modalY+63,12,0xff8c8fa5,false);
@@ -702,33 +900,58 @@ public final class HubView {
     }
     private void settingsModal() {
         float x=modalX+28,y=modalY+118;
-        text("开屏动画",x,y,14,INK,true);textRight("从低到高",modalX+modalW-28,y,10,0xff9694ac,false);
-        glass(x,y+22,384,94,14,0x96eaf0ff,0x8cf1eafe);
+        text("开屏动画",x,y,14,INK,true);textRight("从低到高",modalX+modalW-28,y,10,dark?0xff9daac3:0xff9694ac,false);
+        boolean previousColors=d.literalColors(true);
+        d.boxShadow(x,y+22,384,94,14,0,2,6,0,a(dark?0x1a0a1022:0x09767ca2));
+        d.linearGradientRoundRect(x,y+22,384,94,14,125,
+            dark?new int[]{0x80364568,0x73443655}:new int[]{0x96eaf0ff,0x8cf1eafe},new float[]{0,1});
+        d.insetBoxShadow(x,y+22,384,94,14,0,1,2,0,a(dark?0x2e0a1533:0x18a7acd7));
+        d.strokeRoundRect(x+.5f,y+22.5f,383,93,14,1,a(dark?0x2bb6c4e1:0xd9ffffff));
         int selected=welcomeIndex();float start=x+64,trackY=y+48;
-        d.roundRect(start,trackY,256,6,4,0xffd9dced);
-        if(selected>0)d.gradientRoundRect(start,trackY,selected*128,6,4,0xff819de0,0xff9575da);
-        for(int i=0;i<3;i++){d.circle(start+i*128,trackY+3,3,0xffffffff);d.strokeRoundRect(start+i*128-3,trackY,6,6,3,1,0xffbdc4dd);}
-        d.circle(start+selected*128,trackY+5,12,0x226b61ae);d.circle(start+selected*128,trackY+3,11,0xffffffff);
-        d.circle(start+selected*128,trackY+3,8,selected==0?0xff96b4f1:selected==1?0xff97a0e8:0xff9172d8);
+        d.roundRect(start,trackY,256,6,4,a(dark?0xff57607b:0xffd9dced));
+        if(selected>0)d.linearGradientRoundRect(start,trackY,selected*128,6,4,90,
+            dark?new int[]{0xff8daee8,0xffb595e8}:new int[]{0xff819de0,0xff9575da},new float[]{0,1});
+        for(int i=0;i<3;i++){d.circle(start+i*128,trackY+3,3,a(dark?0xffccd5ec:0xffffffff));d.strokeRoundRect(start+i*128-3,trackY,6,6,3,1,a(dark?0xff64718f:0xffbdc4dd));}
+        float thumbX=start+selected*128-11,thumbY=trackY-8;
+        d.boxShadow(thumbX,thumbY,22,22,11,0,2,6,0,a(dark?0x660d153b:0x406b61ae));
+        d.linearGradientRoundRect(thumbX,thumbY,22,22,11,135,
+            dark?new int[]{0xffa5c3f3,0xffb194e3}:new int[]{0xff96b4f1,0xff9172d8},new float[]{0,1});
+        d.strokeRoundRect(thumbX+1.5f,thumbY+1.5f,19,19,9.5f,3,a(dark?0xffd5ddf2:0xffffffff));
         hit("frequency","开屏动画频率",start-15,trackY-12,286,30,()->setWelcomeFromX(mx));
         String[] labels={"仅初次","每次登录","每次打开"};
         for(int i=0;i<3;i++) {
             final int index=i;float bx=x+5+i*125;
-            if(i==selected)d.roundRect(bx,y+74,124,28,8,0x8fffffff);
+            if(i==selected){d.boxShadow(bx,y+74,124,28,8,0,1,3,0,a(dark?0x2b0e1524:0x0c767ca2));d.roundRect(bx,y+74,124,28,8,a(dark?0x1fc7b6ed:0x8fffffff));}
             float hover=transition("frequency-label-"+i+"-hover",inside(bx,y+74,124,28)?1:0,180);
-            if(hover>0)d.roundRect(bx,y+74,124,28,8,withAlpha(0x66ffffff,hover));
-            textCenter(labels[i],bx+62,y+93,11,i==selected?0xff7056af:mix(0xff81869e,0xff67509d,hover),i==selected);
+            if(hover>0)d.roundRect(bx,y+74,124,28,8,a(withAlpha(dark?0x10d2c5ff:0x66ffffff,hover)));
+            textCenter(labels[i],bx+62,y+93,11,i==selected?(dark?0xffd5bff9:0xff7056af)
+                :mix(dark?0xffa5b0ca:0xff81869e,dark?0xffd1bdf1:0xff67509d,hover),i==selected);
             hit("frequency-label-"+i,labels[i],bx,y+74,124,28,()->welcomeMode=List.of("once","login","always").get(index));
         }
+        d.literalColors(previousColors);
         String explanation=reducedMotion?"减少动态效果已开启，开屏动画会跳过。":switch(welcomeMode){case "once"->"仅首次打开时播放；已经看过的记录会保留。";case "login"->"每次进入游戏后，首次打开手册时播放。";default->"每次打开手册时播放约 3 秒的手写问候。";};
-        wrap(explanation,x,y+139,384,12,19.2f,0xff8c8fa5,false);
+        wrap(explanation,x,y+139,384,12,19.2f,dark?0xff9daac3:0xff8c8fa5,false);
         d.line(x,y+169,x+384,y+169,1,0xffe7e6f1);
         text("减少动态效果",x,y+203,14,INK,true);text("关闭开屏动画、卡片倾斜与页面过渡",x,y+229,12,0xff8c8fa5,false);
-        toggle("reduce-motion",reducedMotion,x+351,y+190,()->setReducedMotion(!reducedMotion));
+        toggle("reduce-motion",localReducedMotion,x+351,y+190,()->setReducedMotion(!localReducedMotion));
         d.line(x,y+252,x+384,y+252,1,0xffe7e6f1);
-        text("界面主题",x,y+284,14,INK,true);text("Liquid Glass · 浅色",x,y+309,12,0xff8c8fa5,false);
-        glass(x+345,y+270,39,38,11,0xffe0e9ff,0xfff3e0ff);icon("check",x+357,y+282,14,0xff817393);
-        icon("info",x,y+345,15,0xff8c8fa5);wrap(live()?"偏好按玩家与当前服务器／存档隔离保存。":"偏好保存在当前测试实例；统计与收藏为本地演示。",x+25,y+357,359,11,18,0xff8c8fa5,false);
+        text("界面主题",x,y+284,14,INK,true);text(dark?"深灰蓝紫玻璃":"浅色液态玻璃",x,y+309,12,0xff8c8fa5,false);
+        float choiceX=x+242,choiceY=y+270;
+        previousColors=d.literalColors(true);
+        d.roundRect(choiceX,choiceY,142,42,12,a(dark?0xff20283b:0xfff5f6ff));
+        d.strokeRoundRect(choiceX+.5f,choiceY+.5f,141,41,12,1,a(dark?0x29a5b7e0:0xffdfe4ef));
+        for(int index=0;index<2;index++){
+            boolean chosen=(index==1)==dark;float bx=choiceX+5+index*68;
+            if(chosen){d.boxShadow(bx,choiceY+5,64,32,8,0,2,7,0,a(0x12303b64));d.roundRect(bx,choiceY+5,64,32,8,a(dark?0xff252d44:0xffffffff));}
+            int color=chosen?(dark?0xffa28ae7:0xff765bd4):(dark?0xffaeb9d0:0xff6c7891);
+            icon(index==0?"sun":"moon",bx+9,choiceY+13.5f,15,color);
+            text(index==0?"浅色":"深色",bx+30,choiceY+26,11,color,false);
+            final boolean chooseDark=index==1;
+            hit(index==0?"theme-light":"theme-dark",index==0?"浅色主题":"深色主题",bx,choiceY+5,64,32,()->dark=chooseDark);
+        }
+        d.literalColors(previousColors);
+        d.line(x,y+335,x+384,y+335,1,0xffe7e6f1);
+        icon("info",x,y+346,15,0xff8c8fa5);wrap(live()?"偏好按玩家与当前服务器／存档隔离保存。":"偏好保存在当前测试实例；统计与收藏为本地演示。",x+25,y+358,359,11,18,0xff8c8fa5,false);
     }
     private void profileModal() {
         float cx=630,top=modalY+115;
@@ -751,7 +974,8 @@ public final class HubView {
             button("preview-state-"+i,(fortuneState==i?"✓ ":"")+labels[i],bx,by,187,42,fortuneState==i,true,()->{fortuneState=state;notify("今日状态："+stateLabel()+" · 本地演示");});
         }
         wrap("未解签不会显示结果；已解但未归档的签不会出现在收藏和月历中。",x,y+164,384,12,22,0xff8c8fa5,false);
-        button("reset-demo","还原演示数据",x,y+236,148,37,false,true,()->{equipped="dew";visible=true;fortuneState=3;displayDate=data.today;selectedDate=data.today;notify("样例已还原，界面偏好保留");});
+        button("reset-demo","还原演示数据",x,y+236,148,37,false,true,()->{equipped="dew";visible=true;fortuneState=3;displayDate=data.today;selectedDate=data.today;rankings.demo();notify("样例已还原，界面偏好保留");});
+        button("ranking-demo","播放排行变动",x+164,y+236,220,37,false,true,()->{dismissOverlay();navigate(4);rankingsPreviewAt=System.nanoTime()+500_000_000L;});
         text("F8 打开此面板 · 界面偏好不参与演示还原",x,y+295,11,MUTED,false);
     }
     private void fortuneHelp() {
@@ -979,6 +1203,9 @@ public final class HubView {
         if(dot)d.circle(x+9,y+11,2,a(color));text(label,x+(dot?17:8),y+15,10,color,false);
     }
     private void button(String id,String label,float x,float y,float w,float h,boolean primary,boolean enabled,Runnable click) {
+        button(id,label,x,y,w,h,primary,enabled,click,null);
+    }
+    private void button(String id,String label,float x,float y,float w,float h,boolean primary,boolean enabled,Runnable click,String iconName) {
         boolean hover=enabled&&inside(x,y,w,h),press=enabled&&Objects.equals(pressedId,id);
         float hval=transition(id+"-hover",hover?1:0,140),move=transition(id+"-move",primary?(press?1:hover?-1:0):0,140);
         boolean displayDisabled=!enabled&&id.equals("display-selected");
@@ -988,12 +1215,21 @@ public final class HubView {
         int from=primary?(hover?0xff987af5:0xff8b6cf1):mix(0xb8ffffff,0xffffffff,hval);
         int to=primary?(hover?0xff694acb:0xff6d53d6):mix(0xb8ffffff,0xffffffff,hval);
         if(displayDisabled){from=0x59ffffff;to=0x59ffffff;}
-        d.boxShadow(x,y,w,h,12,0,primary?4+2*hval:3+2*hval,primary?10+6*hval:10+6*hval,0,
-            primary?mix(0x337558d1,0x4d7558d1,hval):mix(0x186c6588,0x2b6c6588,hval));
+        boolean equippedButton=id.equals("equip")&&!primary;
+        boolean darkProfileLink=dark&&(id.equals("profile")||id.equals("memories"));
+        if(equippedButton){from=to=dark?mix(0x24ab8bdf,0x38ab8bdf,hval):mix(0xfff0ebff,0xffe9e0ff,hval);}
+        if(darkProfileLink)from=to=0x14c5c7ef;
+        d.boxShadow(x,y,w,h,12,0,darkProfileLink?2+2*hval:primary?4+2*hval:3+2*hval,
+            darkProfileLink?7+5*hval:10+6*hval,darkProfileLink?-3*hval:0,
+            darkProfileLink?mix(0x1f081127,0x42080f2b,hval):primary?mix(0x337558d1,0x4d7558d1,hval):mix(0x186c6588,0x2b6c6588,hval));
         d.linearGradientRoundRect(x,y,w,h,12,primary?130:135,new int[]{from,to},new float[]{0,1});
-        d.insetBoxShadow(x,y,w,h,12,0,1,0,0,primary?mix(0x61ffffff,0x70ffffff,hval):0xffffffff);
-        d.strokeRoundRect(x,y,w,h,12,1,a(primary?0xff8c71e6:0xe6ffffff));
-        d.text(label,x+(w-d.textWidth(label,12,500))/2,y+(h+10)/2,12,displayDisabled?0xff9a90b3:primary?0xffffffff:0xff64539e,500);
+        d.insetBoxShadow(x,y,w,h,12,0,1,0,0,dark&&!primary?mix(0x0cdbe6ff,0x16dbe6ff,hval):primary?mix(0x61ffffff,0x70ffffff,hval):0xffffffff);
+        d.strokeRoundRect(x,y,w,h,12,1,a(darkProfileLink?mix(0x2ebeccec,0x42c6d4f4,hval):equippedButton?(dark?0x40b69be5:0xffddd4f5):primary?0xff8c71e6:0xe6ffffff));
+        int color=displayDisabled?0xff9a90b3:darkProfileLink?0xffcbbbeb:equippedButton?(dark?0xffd1bbf5:0xff7964b6):primary?0xffffffff:0xff64539e;
+        float size=iconName==null?12:11,labelWidth=d.textWidth(label,size,500),contentWidth=labelWidth+(iconName==null?0:21);
+        float labelX=x+(w-contentWidth)/2;
+        d.text(label,labelX,y+(h+10)/2,size,color,500);
+        if(iconName!=null)icon(iconName,labelX+labelWidth+6,y+(h-15)/2,15,color);
         if(enabled)hit(id,label,x,y,w,h,click);
         pop();endAlpha();
     }
@@ -1045,21 +1281,33 @@ public final class HubView {
     }
     private static float clamp(float value,float minimum,float maximum){return Math.max(minimum,Math.min(maximum,value));}
     private static float progress(long elapsed,long duration){return clamp((float)elapsed/duration,0,1);}
+    /** CSS color-mix(in srgb) interpolates premultiplied alpha. */
+    private static int cssMix(int from,int to,float amount){
+        float first=(from>>>24)*(1-amount),second=(to>>>24)*amount,total=first+second;
+        int result=Math.round(total)<<24;
+        for(int shift=0;shift<=16;shift+=8)result|=Math.round((((from>>>shift)&255)*first+((to>>>shift)&255)*second)/total)<<shift;
+        return result;
+    }
     private static float ease(float p){return 1-(1-p)*(1-p)*(1-p);}
     private static String shortDate(LocalDate date){return String.format(Locale.ROOT,"%02d/%02d",date.getMonthValue(),date.getDayOfMonth());}
     private String stateLabel(){return List.of("尚未抽签","等待解签","已经解签","已收进藏签匣").get(fortuneState);}
-    private void setReducedMotion(boolean value){
+    private void setReducedMotion(boolean value){localReducedMotion=value;updateReducedMotion();}
+    private void updateReducedMotion(){
+        boolean value=localReducedMotion||systemReducedMotion;
         if(reducedMotion==value)return;reducedMotion=value;if(value)playWelcome=false;
         navAt=System.nanoTime();tilts.clear();
         for(HubMotion.Navigation state:navigation){state.enter.snap(value?1:0);state.hover.snap(0);state.press.snap(0);state.x.snap(0);state.y.snap(0);}
     }
     private int welcomeIndex(){return Math.max(0,List.of("once","login","always").indexOf(welcomeMode));}
     private void notify(String value){toast.show(value,HubToast.Kind.INFO,System.nanoTime());}
-    private void navigate(int destination){if((destination==0||destination==1)&&!hasSnapshot("titles"))request("titles","snapshot",new JsonObject());if(destination==0&&!hasSnapshot("fortunes"))request("fortunes","snapshot",new JsonObject());if(destination==2)calendarRequest();page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;if(destination==2)monthAt=pageAt;if(destination==0)tilts.remove("medallion");}
+    private void navigate(int destination){if(destination!=5)memories.deactivate();if(destination==3)updates.activate();else updates.deactivate();if(destination==4)rankings.activate();else rankings.deactivate();if((destination==0||destination==1)&&!hasSnapshot("titles"))request("titles","snapshot",new JsonObject());if(destination==0&&!hasSnapshot("fortunes"))request("fortunes","snapshot",new JsonObject());if(destination==2)calendarRequest();page=destination;pageAt=System.nanoTime();focusId=null;titleScroll=0;if(destination==2)monthAt=pageAt;if(destination==0)tilts.remove("medallion");}
     private void openOverlay(String value){restoreFocus=focusId;overlay=value;reading=null;focusId="modal-close";sliderDragging=false;modalAt=System.nanoTime();hits.clear();}
     private void openReading(HubData.Entry value){if(value!=null)showReading(value);}
     private void showReading(HubData.Entry value){restoreFocus=focusId;reading=value;overlay=null;focusId="modal-close";modalAt=System.nanoTime();hits.clear();}
     public boolean dismissOverlay() {
+        if(profiles.isOpen()){profiles.requestClose();return true;}
+        if(page==5&&overlay==null&&reading==null&&memories.dismiss())return true;
+        if(page==3&&!profiles.isOpen()&&overlay==null&&reading==null&&updates.dismiss())return true;
         if(overlay==null&&reading==null)return false;
         overlay=null;reading=null;sliderDragging=false;focusId=restoreFocus;restoreFocus=null;hits.clear();return true;
     }
@@ -1068,16 +1316,24 @@ public final class HubView {
         welcomeMode=List.of("once","login","always").get(index);
     }
 
-    public boolean mouseClicked(float x,float y,int button) {
+    public boolean mouseClicked(float x,float y,int button){return mouseClicked(x,y,button,false);}
+    public boolean mouseClicked(float x,float y,int button,boolean shift) {
         if(button!=0)return false;
         if(toast.press(x,y,System.nanoTime()))return true;
         if(isWelcomePlaying())return true;
         mx=x;my=y;keyboardFocus=false;keyboardPress=false;pressMoved=false;pressX=x;pressY=y;
+        if(profiles.isOpen()){
+            if(profiles.pointerDown(x,y,shift)){pressedId=null;pressedHit=null;return true;}
+        }
+        if(page==5&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,x,y);if(memories.pointerDown(point[0],point[1],shift)){pressedId=null;pressedHit=null;return true;}}
+        if(page==3&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,x,y);if(updates.pointerDown(point[0],point[1],shift)){pressedId=null;pressedHit=null;return true;}}
+        if(page==4&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,x,y);if(rankings.pointerDown(point[0],point[1])){pressedId=null;pressedHit=null;return true;}}
         for(int i=hits.size()-1;i>=0;i--) {
             Hit hit=hits.get(i);if(!hit.contains(x,y))continue;
             focusId=hit.id();pressedId=hit.id();pressedHit=hit;sliderDragging="frequency".equals(hit.id());sliderTransform=hit.transform();
-            if(sliderDragging||"search".equals(hit.id()))hit.action().run();return true;
+            if(sliderDragging||"search".equals(hit.id())||updates.textFocused(hit.id()))hit.action().run();return true;
         }
+        if(profiles.isOpen())return true;
         if(overlay!=null||reading!=null) {
             if(x<modalX||x>modalX+modalW||y<modalY||y>modalY+modalH)dismissOverlay();
             return true;
@@ -1087,20 +1343,31 @@ public final class HubView {
     public boolean mouseReleased(float x,float y,int button){
         if(button!=0)return false;
         if(toast.release(x,y,System.nanoTime()))return true;
+        if(profiles.isOpen()&&profiles.pointerUp()){pressedId=null;pressedHit=null;return true;}
+        if(page==5&&!profiles.isOpen()&&memories.pointerUp()){pressedId=null;pressedHit=null;return true;}
+        if(page==4&&!profiles.isOpen()&&rankings.pointerUp()){pressedId=null;pressedHit=null;return true;}
+        if(page==3&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,x,y);updates.pointerAt(point[0],point[1]);if(updates.pointerUp()){pressedId=null;pressedHit=null;return true;}}
         boolean active=sliderDragging||pressedHit!=null;
         Hit released=pressedHit==null?null:hits.stream().filter(hit->hit.id().equals(pressedHit.id())).findFirst().orElse(null);
-        if(released!=null&&!sliderDragging&&!"search".equals(released.id())&&released.contains(x,y)&&(!released.id().startsWith("title-")||!pressMoved))released.action().run();
+        if(released!=null&&!sliderDragging&&!"search".equals(released.id())&&!updates.textFocused(released.id())&&released.contains(x,y)&&(!released.id().startsWith("title-")||!pressMoved))released.action().run();
         sliderDragging=false;pressedId=null;pressedHit=null;return active;
     }
     public boolean mouseDragged(float x,float y,int button,float dx,float dy){
         mx=x;my=y;
         if(button==0&&toast.drag(y,System.nanoTime()))return true;
+        if(button==0&&profiles.isOpen()&&profiles.pointerDrag(x,y))return true;
+        if(button==0&&page==5&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,x,y);if(memories.pointerDrag(point[0],point[1]))return true;}
+        if(button==0&&page==3&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,x,y);if(updates.pointerDrag(point[0],point[1]))return true;}
+        if(button==0&&page==4&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,x,y);if(rankings.pointerDrag(point[1]))return true;}
         if(button==0&&pressedId!=null&&Math.hypot(x-pressX,y-pressY)>6)pressMoved=true;
         if(sliderDragging&&button==0){setWelcomeFromX(x);return true;}return pressedId!=null;
     }
     public boolean mouseScrolled(float x,float y,double amount) {
+        if(profiles.isOpen()){profiles.scroll(x,y,amount);return true;}
         if(isWelcomePlaying()||overlay!=null||reading!=null)return true;
         float[] p=HubDraw.inversePoint(pageTransform,x,y);
+        if(page==5)return memories.scroll(p[0],p[1],amount);
+        if(page==3)return updates.scroll(p[0],p[1],amount);if(page==4)return rankings.scroll(p[0],p[1],amount);
         if(page==1&&p[0]>=230&&p[0]<=908&&p[1]>=272&&p[1]<=796){titleScroll-=amount*52;return true;}
         if(page==2&&history&&p[0]>=254&&p[0]<=898&&p[1]>=252&&p[1]<=746){historyScroll-=amount*48;return true;}
         return false;
@@ -1115,7 +1382,11 @@ public final class HubView {
             for(int i=0;i<hits.size();i++)if(hits.get(i).id().equals(focusId)){index=i;break;}
             boolean shift=(modifiers&1)!=0;index=Math.floorMod(index+(shift?-1:1),hits.size());focusId=hits.get(index).id();return true;
         }
-        if("search".equals(focusId)&&page==1&&overlay==null&&reading==null) {
+        if(profiles.isOpen()&&profiles.key(keyCode,modifiers,focusId))return true;
+        if(page==5&&!profiles.isOpen()&&overlay==null&&reading==null&&memories.key(keyCode,modifiers,focusId))return true;
+        if(page==4&&!profiles.isOpen()&&overlay==null&&reading==null&&rankings.key(keyCode,focusId))return true;
+        if(page==3&&!profiles.isOpen()&&overlay==null&&reading==null&&updates.key(keyCode,modifiers,focusId))return true;
+        if("search".equals(focusId)&&page==1&&!profiles.isOpen()&&overlay==null&&reading==null) {
             if((keyCode==259||keyCode==261)&&searchSelectAll){query="";searchCaret=0;searchSelectAll=false;titleScroll=0;return true;}
             if(keyCode==259&&searchCaret>0){int at=query.offsetByCodePoints(searchCaret,-1);query=query.substring(0,at)+query.substring(searchCaret);searchCaret=at;titleScroll=0;return true;}
             if(keyCode==261&&searchCaret<query.length()){int end=query.offsetByCodePoints(searchCaret,1);query=query.substring(0,searchCaret)+query.substring(end);titleScroll=0;return true;}
@@ -1139,7 +1410,7 @@ public final class HubView {
                 if(keyCode!=32)hit.action().run();return true;
             }
         }
-        return textInputFocused()||overlay!=null||reading!=null;
+        return textInputFocused()||profiles.isOpen()||overlay!=null||reading!=null;
     }
     public boolean keyReleased(int keyCode,int scanCode,int modifiers) {
         if(!keyboardPress||(keyCode!=257&&keyCode!=335&&keyCode!=32))return false;
@@ -1148,22 +1419,34 @@ public final class HubView {
     }
     public boolean charTyped(char codePoint,int modifiers) {
         if(textInputFocused()&&!Character.isISOControl(codePoint)&&(modifiers&6)==0) {
-            pasteText(Character.toString(codePoint));return true;
+            if(profiles.isOpen()){profiles.type(codePoint,focusId);return true;}
+            if(page==5){memories.type(codePoint,focusId);return true;}
+            if(page==3){updates.type(codePoint,focusId);return true;}pasteText(Character.toString(codePoint));return true;
         }
         return overlay!=null||reading!=null;
     }
     public boolean textInputFocused() {
-        return page==1&&overlay==null&&reading==null&&"search".equals(focusId)&&!isWelcomePlaying();
+        if(isWelcomePlaying())return false;
+        if(profiles.isOpen())return profiles.textFocused(focusId);
+        return overlay==null&&reading==null&&(page==1&&"search".equals(focusId)||page==3&&updates.textFocused(focusId)||page==5&&memories.textFocused(focusId));
     }
+    public String selectedInputText(){if(profiles.isOpen())return profiles.selectedText(focusId);if(page==5)return memories.selectedText(focusId);if(page==3)return updates.selectedText(focusId);return page==1&&"search".equals(focusId)&&searchSelectAll?query:"";}
+    public String cutInputText(){if(profiles.isOpen())return profiles.cutText(focusId);if(page==5)return memories.cutText(focusId);if(page==3)return updates.cutText(focusId);String value=selectedInputText();if(!value.isEmpty()){query="";searchCaret=0;searchSelectAll=false;}return value;}
+    public void panelVisibility(boolean open){if(!open){updates.deactivate();rankings.deactivate();memories.deactivate();}else if(page==4)rankings.activate();}
     public String pointerCursor() {
         if(toast.pointer(mx,my))return "pointer";
         if(isWelcomePlaying())return "default";
-        for(int i=hits.size()-1;i>=0;i--)if(hits.get(i).contains(mx,my))return hits.get(i).id().equals("search")?"text":"pointer";
+        if(page==4&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,mx,my);if(rankings.pointerOnRail(point[0],point[1]))return "pointer";}
+        if(page==3&&!profiles.isOpen()&&overlay==null&&reading==null){float[] point=HubDraw.inversePoint(pageTransform,mx,my);if(updates.pointerOnRail(point[0],point[1]))return "pointer";}
+        for(int i=hits.size()-1;i>=0;i--)if(hits.get(i).contains(mx,my))return (hits.get(i).id().equals("search")||updates.textFocused(hits.get(i).id())||profiles.textFocused(hits.get(i).id())||memories.textFocused(hits.get(i).id()))?"text":"pointer";
         return "default";
     }
     /** Clipboard access belongs to the Minecraft screen; only sanitized text enters this UI. */
     public void pasteText(String value) {
         if(!textInputFocused()||value==null)return;
+        if(profiles.isOpen()){profiles.paste(value,focusId);return;}
+        if(page==5){memories.paste(value,focusId);return;}
+        if(page==3){updates.paste(value,focusId);return;}
         int available=60-(searchSelectAll?0:query.length());StringBuilder sanitized=new StringBuilder();
         value.codePoints().filter(codePoint->!Character.isISOControl(codePoint)&&codePoint!=0x7f)
             .forEach(codePoint->{if(sanitized.length()+Character.charCount(codePoint)<=available)sanitized.appendCodePoint(codePoint);});

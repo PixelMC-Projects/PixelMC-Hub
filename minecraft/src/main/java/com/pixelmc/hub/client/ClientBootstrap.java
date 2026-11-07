@@ -35,11 +35,19 @@ public final class ClientBootstrap {
     private static boolean scopeApplied;
     private static boolean preloadOnNextTick;
     private static final LoginNotice loginNotice=new LoginNotice();
+    private static final HubSystemMotion systemMotion=new HubSystemMotion();
+    private static int openingRequest;
 
     private ClientBootstrap() {}
 
     public static void initialize() {
+        systemMotion.refresh();
+        HubClientGraphics.initialize();
         com.pixelmc.hub.network.HubNetwork.clientReceiver(ClientHubSession::receive);
+        com.pixelmc.hub.network.HubNetwork.updatesReceiver(ClientHubSession::updatesChanged);
+        com.pixelmc.hub.network.HubNetwork.rankingsReceiver(ClientHubSession::rankingsChanged);
+        com.pixelmc.hub.network.HubNetwork.communityReceiver(ClientHubSession::communityChanged);
+        com.pixelmc.hub.network.HubNetwork.partsReceiver(ClientHubSession::receiveUpdatesPart);
         MinecraftForge.EVENT_BUS.addListener(ClientBootstrap::tick);
         MinecraftForge.EVENT_BUS.addListener(ClientBootstrap::login);
         MinecraftForge.EVENT_BUS.addListener(ClientBootstrap::logout);
@@ -55,6 +63,10 @@ public final class ClientBootstrap {
     private static void tick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft minecraft = Minecraft.getInstance();
+        if(minecraft.screen instanceof HubScreen) {
+            systemMotion.refresh();
+            if(view!=null)view.setSystemReducedMotion(systemMotion.reducedMotion());
+        }
         if(preloadOnNextTick&&minecraft.player!=null&&minecraft.getConnection()!=null){preloadOnNextTick=false;prepareLive(minecraft);}
         if(minecraft.player!=null&&minecraft.getConnection()!=null&&loginNotice.claim(minecraft.getConnection().getConnection(),System.nanoTime())) {
             Component key=OPEN.isUnbound()?Component.literal("未绑定"):OPEN.getTranslatedKeyMessage();
@@ -81,12 +93,14 @@ public final class ClientBootstrap {
     private static void login(ClientPlayerNetworkEvent.LoggingIn event) { resetSession();preloadOnNextTick=true;loginNotice.start(event.getConnection(),System.nanoTime()); }
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) { resetSession(); }
     private static void resetSession() {
+        openingRequest++;
         loginNotice.cancel();
         preloadOnNextTick=false;
         shownThisLogin = false;
         ClientHubSession.close();activeScope="";fallbackScope="";scopeApplied=false;
+        if(view!=null)view.releaseCommunityResources();
         view = null;
-        Minecraft.getInstance().execute(HubHead::clearSkin);
+        HubClientGraphics.sessionChanged();
     }
 
     private static void screenInitialized(ScreenEvent.Init.Post event) {
@@ -98,8 +112,18 @@ public final class ClientBootstrap {
 
     public static void open() {
         Minecraft minecraft = Minecraft.getInstance();
+        int request=++openingRequest;
+        var previousScreen=minecraft.screen;
+        var previousPlayer=minecraft.player;
+        var previousConnection=minecraft.getConnection();
+        if(!systemMotion.refreshForOpening(()->minecraft.execute(()->{
+            if(request==openingRequest&&minecraft.screen==previousScreen&&minecraft.player==previousPlayer
+                    &&minecraft.getConnection()==previousConnection)open();
+        })))return;
+        HubClientGraphics.panelOpening();
         if(minecraft.player!=null)prepareLive(minecraft);
         HubPreferences prefs = preferences();
+        prefs.setSystemReducedMotion(systemMotion.reducedMotion());
         boolean live=minecraft.player!=null;
         if (view == null||!live) view = new HubView();
         if(live&&fallbackScope.isEmpty())fallbackScope=scope(minecraft);
@@ -109,7 +133,8 @@ public final class ClientBootstrap {
         prefs.select(scope);
         prefs.fallbackScope(live?fallbackScope:"");
         view.setSettings(prefs.welcomeMode(), prefs.reducedMotion());
-        view.setCompact(prefs.compact());
+        view.setSystemReducedMotion(systemMotion.reducedMotion());
+        view.setCompact(prefs.compact());view.setDark(prefs.dark());
         view.setPlayerName(minecraft.player == null ? minecraft.getUser().getName() : minecraft.player.getGameProfile().getName());
         boolean welcome = (!live||!scope.isEmpty())&&prefs.shouldPlay(scope, shownThisLogin);
         view.open(welcome);
@@ -123,7 +148,8 @@ public final class ClientBootstrap {
         if(fallbackScope.isEmpty())fallbackScope=scope(minecraft);
         if(activeScope.isEmpty())activeScope=fallbackScope;
         HubPreferences prefs=preferences();prefs.select(activeScope);prefs.fallbackScope(fallbackScope);
-        view.setSettings(prefs.welcomeMode(),prefs.reducedMotion());view.setCompact(prefs.compact());
+        view.setSettings(prefs.welcomeMode(),prefs.reducedMotion());view.setCompact(prefs.compact());view.setDark(prefs.dark());
+        view.setSystemReducedMotion(systemMotion.reducedMotion());
         view.setPlayerName(minecraft.player.getGameProfile().getName());
         ClientHubSession.open(view);
     }
@@ -131,8 +157,8 @@ public final class ClientBootstrap {
     static void persist(HubView current) {
         HubPreferences prefs = preferences();
         prefs.setWelcomeMode(current.welcomeMode());
-        prefs.setReducedMotion(current.reducedMotion());
-        prefs.setCompact(current.compact());
+        prefs.setReducedMotion(current.localReducedMotion());
+        prefs.setCompact(current.compact());prefs.setDark(current.dark());
         prefs.save();
     }
 
@@ -149,7 +175,7 @@ public final class ClientBootstrap {
             if(resolved.equals(activeScope)&&scopeApplied)return;
             HubPreferences prefs=preferences();persist(view);prefs.copyScope(activeScope,resolved);
             activeScope=resolved;scopeApplied=true;prefs.select(resolved);prefs.fallbackScope(fallbackScope);
-            view.setSettings(prefs.welcomeMode(),prefs.reducedMotion());view.setCompact(prefs.compact());
+            view.setSettings(prefs.welcomeMode(),prefs.reducedMotion());view.setCompact(prefs.compact());view.setDark(prefs.dark());
             if(shownThisLogin)prefs.markSeen(resolved);prefs.save();
         }catch(Exception invalid){LogUtils.getLogger().debug("PixelMC-Hub stable player scope unavailable",invalid);}
     }
@@ -167,6 +193,7 @@ public final class ClientBootstrap {
 
     @Mod.EventBusSubscriber(modid = PixelMCHub.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
     public static final class Registration {
+        @SubscribeEvent public static void registerReload(net.minecraftforge.client.event.RegisterClientReloadListenersEvent event){HubClientGraphics.registerReload(event);}
         @SubscribeEvent public static void registerKeys(RegisterKeyMappingsEvent event) { event.register(OPEN); }
     }
 }

@@ -1,10 +1,7 @@
 package com.pixelmc.hub.client;
 
-import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.logging.LogUtils;
 import com.pixelmc.hub.client.render.HubRenderer;
-import com.pixelmc.hub.client.ui.HubHead;
 import com.pixelmc.hub.client.ui.HubView;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -14,7 +11,6 @@ import net.minecraft.client.renderer.PanoramaRenderer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
-import org.lwjgl.opengl.GL11;
 
 /** Native GPU composition and input bridge. Player requests use the authenticated optional channel. */
 public final class HubScreen extends Screen {
@@ -23,12 +19,12 @@ public final class HubScreen extends Screen {
     private final Screen previous;
     private final boolean welcomeRequested;
     private HubRenderer renderer;
+    private com.pixelmc.hub.client.render.HubRenderResources.Lease rendererLease;
     private boolean firstFrame = true;
     private boolean failed;
     private boolean disposed;
     private float panelX, panelY, panelScale = 1;
-    private ResourceLocation capturedSkin;
-    private long lastSkinAttempt;
+
     private long firstFrameAt;
     private boolean automaticScreenshot;
     private boolean welcomeMarked;
@@ -49,6 +45,7 @@ public final class HubScreen extends Screen {
     }
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        long displayBegan=System.nanoTime();
         if (failed) {
             updateCursor("default");
             graphics.fill(0, 0, width, height, 0xe5182033);
@@ -61,6 +58,12 @@ public final class HubScreen extends Screen {
         if (minecraft.level == null) {
             graphics.flush();
             menuPanorama.render(partialTick, 1);
+        } else {
+            // Use the normal Screen background hook before Skija captures it.
+            // Menu-effect mods (e.g. Modern UI) own world blur and its transition;
+            // vanilla 1.20.1 supplies dimming when no such effect is installed.
+            graphics.flush();
+            super.renderBackground(graphics);
         }
         graphics.flush();
         int framebufferWidth = minecraft.getWindow().getWidth();
@@ -72,16 +75,19 @@ public final class HubScreen extends Screen {
         view.setViewportBounds(-panelX / panelScale, -panelY / panelScale,
             framebufferWidth / panelScale, framebufferHeight / panelScale);
         float localX = localX(mouseX), localY = localY(mouseY);
+        long acquiredAt=System.nanoTime();
         try {
-            capturePlayerSkin();
-            if (renderer == null) renderer = new HubRenderer();
-            renderer.render(framebufferWidth, framebufferHeight, panelX, panelY, panelScale,minecraft.level!=null,
+            if(!HubClientGraphics.valid(rendererLease)){rendererLease=HubClientGraphics.acquire();renderer=rendererLease.renderer();disposed=false;}
+            HubClientGraphics.requestRankingSkins(view.rankingPlayerNames());
+            double acquireMs=(System.nanoTime()-acquiredAt)/1_000_000.0;
+            renderer.render(framebufferWidth, framebufferHeight, panelX, panelY, panelScale,
                 draw -> view.render(draw, localX, localY, System.nanoTime()));
             updateCursor(view.pointerCursor());
             if (firstFrame) {
                 firstFrame = false;
                 firstFrameAt = System.nanoTime();
-                LogUtils.getLogger().info("PixelMC-Hub native frame rendered: {}x{}, logical scale {}", framebufferWidth, framebufferHeight, panelScale);
+                LogUtils.getLogger().info("PixelMC-Hub first displayed screen CPU submission size={}x{} scale={} acquireMs={} nativeMs={} totalMs={} warmupComplete={}",
+                    framebufferWidth,framebufferHeight,panelScale,String.format(java.util.Locale.ROOT,"%.3f",acquireMs),String.format(java.util.Locale.ROOT,"%.3f",renderer.lastTiming().totalMs()),String.format(java.util.Locale.ROOT,"%.3f",(System.nanoTime()-displayBegan)/1_000_000.0),renderer.warmupProgress().complete());
             }
             if(!welcomeMarked&&view.isWelcomePlaying()) {
                 welcomeMarked=true;
@@ -96,6 +102,7 @@ public final class HubScreen extends Screen {
             if (view.consumeCloseRequest()) onClose();
         } catch (Throwable failure) {
             failed = true;
+            try{HubClientGraphics.failed(rendererLease);}catch(Throwable cleanup){failure.addSuppressed(cleanup);}
             LogUtils.getLogger().error("PixelMC-Hub native preview rendering failed; the screen can be closed with Esc", failure);
         }
     }
@@ -139,7 +146,7 @@ public final class HubScreen extends Screen {
     private float localY(double guiY) { return (float) ((guiY * minecraft.getWindow().getHeight() / height - panelY) / panelScale); }
 
     @Override public boolean mouseClicked(double x,double y,int button) {
-        return !failed && view.mouseClicked(localX(x),localY(y),button) || super.mouseClicked(x,y,button);
+        return !failed && view.mouseClicked(localX(x),localY(y),button,Screen.hasShiftDown()) || super.mouseClicked(x,y,button);
     }
     @Override public boolean mouseReleased(double x,double y,int button) {
         return !failed && view.mouseReleased(localX(x),localY(y),button) || super.mouseReleased(x,y,button);
@@ -158,6 +165,8 @@ public final class HubScreen extends Screen {
             if (failed || !view.dismissOverlay()) onClose();
             return true;
         }
+        if(!failed&&view.textInputFocused()&&Screen.isCopy(keyCode)){minecraft.keyboardHandler.setClipboard(view.selectedInputText());return true;}
+        if(!failed&&view.textInputFocused()&&Screen.isCut(keyCode)){minecraft.keyboardHandler.setClipboard(view.cutInputText());return true;}
         if (!failed && view.textInputFocused() && Screen.isPaste(keyCode)) {
             view.pasteText(minecraft.keyboardHandler.getClipboard());
             return true;
@@ -176,41 +185,15 @@ public final class HubScreen extends Screen {
         // Connection-owned data stays warm while this screen and its GPU resources close.
         ClientHubSession.panelClosed();
         ClientBootstrap.persist(view);
+        view.releaseCommunityResources();
         updateCursor("default");
         if (handCursor != 0) { GLFW.glfwDestroyCursor(handCursor); handCursor = 0; }
         if (textCursor != 0) { GLFW.glfwDestroyCursor(textCursor); textCursor = 0; }
         if (!disposed && renderer != null) {
             disposed = true;
-            try { renderer.close(); }
+            try { HubClientGraphics.release(rendererLease); }
             catch (Throwable failure) { LogUtils.getLogger().warn("PixelMC-Hub renderer cleanup failed", failure); }
         }
     }
 
-    private void capturePlayerSkin() {
-        if (minecraft.player == null) return;
-        long now = System.nanoTime();
-        if (now - lastSkinAttempt < 1_000_000_000L) return;
-        lastSkinAttempt = now;
-        ResourceLocation location = minecraft.player.getSkinTextureLocation();
-        if (location.equals(capturedSkin)) return;
-        int previousTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-        int previousPackAlignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
-        try {
-            var texture = minecraft.getTextureManager().getTexture(location);
-            RenderSystem.bindTexture(texture.getId());
-            int w = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
-            int h = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
-            if (w < 64 || w > 4096 || h < 32 || h > 4096) return;
-            try (NativeImage image = new NativeImage(w, h, false)) {
-                image.downloadTexture(0, false);
-                HubHead.setSkinPng(image.asByteArray());
-                capturedSkin = location;
-            }
-        } catch (Exception exception) {
-            LogUtils.getLogger().debug("PixelMC-Hub could not capture local skin yet", exception);
-        } finally {
-            RenderSystem.bindTexture(previousTexture);
-            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, previousPackAlignment);
-        }
-    }
 }

@@ -1,0 +1,521 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pixelmc:leaderboards:projection:1",
+  "title": "PixelMC public leaderboard projection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "board",
+    "status",
+    "supported",
+    "period",
+    "ranking",
+    "scope",
+    "unit",
+    "rows",
+    "total",
+    "page",
+    "size",
+    "updatedAt",
+    "viewer",
+    "self"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "board": {
+      "enum": [
+        "food",
+        "fortunes",
+        "online"
+      ]
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "loading",
+        "unavailable",
+        "unsupported",
+        "empty",
+        "error"
+      ]
+    },
+    "supported": {
+      "type": "boolean"
+    },
+    "period": {
+      "const": "all"
+    },
+    "ranking": {
+      "const": "competition"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "archive",
+            "global"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "unit": {
+      "enum": [
+        "foods",
+        "fortunes",
+        "ms"
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/row"
+      }
+    },
+    "total": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "updatedAt": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "viewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "playerId",
+        "name"
+      ],
+      "properties": {
+        "playerId": {
+          "$ref": "#/$defs/playerId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "self": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/selfRow"
+        }
+      ]
+    },
+    "comparisonRevision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "board": {
+            "const": "food"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "unit": {
+            "const": "foods"
+          },
+          "scope": {
+            "properties": {
+              "kind": {
+                "const": "archive"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "board": {
+            "const": "fortunes"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "unit": {
+            "const": "fortunes"
+          },
+          "scope": {
+            "properties": {
+              "kind": {
+                "const": "global"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "board": {
+            "const": "online"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "unit": {
+            "const": "ms"
+          },
+          "scope": {
+            "properties": {
+              "kind": {
+                "const": "archive"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "unsupported"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "supported": {
+            "const": false
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "supported": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ready"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "rows": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "empty"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "total": {
+            "const": 0
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "loading",
+              "unavailable",
+              "unsupported",
+              "error"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "total": {
+            "type": "null"
+          },
+          "updatedAt": {
+            "type": "null"
+          },
+          "self": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "rows": {
+                "contains": {
+                  "type": "object",
+                  "required": [
+                    "rankDelta"
+                  ],
+                  "properties": {
+                    "rankDelta": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "self": {
+                "type": "object",
+                "required": [
+                  "rankDelta"
+                ],
+                "properties": {
+                  "rankDelta": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "required": [
+          "revision",
+          "comparisonRevision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "comparisonRevision": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "comparisonRevision"
+        ],
+        "properties": {
+          "comparisonRevision": {
+            "type": "string"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "revision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "playerId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "avatar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "version"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^/(?!/)(?!.*\\\\)(?!.*%5[cC])\\S*$",
+          "maxLength": 2048
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "playerId",
+        "name",
+        "rank",
+        "value"
+      ],
+      "properties": {
+        "playerId": {
+          "$ref": "#/$defs/playerId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "avatar": {
+          "$ref": "#/$defs/avatar"
+        },
+        "rankDelta": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "selfRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "playerId",
+        "name",
+        "rank",
+        "value"
+      ],
+      "properties": {
+        "playerId": {
+          "$ref": "#/$defs/playerId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "rank": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "avatar": {
+          "$ref": "#/$defs/avatar"
+        },
+        "rankDelta": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  }
+}
