@@ -23,46 +23,93 @@ public final class HubHead {
     private static final float HAT_SCALE = 9f / 8f;
     private static final String FALLBACK = "textures/ui/avatar.png";
     private static Image skin;
-    private record PeerSkin(Image image,long bytes) {}
-    private static final java.util.LinkedHashMap<String,PeerSkin> players=new java.util.LinkedHashMap<>(16,.75f,true);
+    private static Paint facePaint;
+    private static final java.util.Map<Float, ColorFilter> faceLights = new java.util.HashMap<>();
+
+    private static Paint paint() {
+        if (facePaint == null) facePaint = new Paint();
+        return facePaint.reset().setAntiAlias(false);
+    }
+
+    private record PeerSkin(Image image, long bytes) {}
+
+    private static final java.util.LinkedHashMap<String, PeerSkin> players =
+            new java.util.LinkedHashMap<>(16, .75f, true);
     private static long playerBytes;
-    public static void setPlayerSkinRgba(String player,int width,int height,byte[] rgba) {
-        if(!java.util.UUID.fromString(player).toString().equals(player))throw new IllegalArgumentException("Invalid skin owner");
-        long bytes=(long)width*height*4;
-        if(width<64 || width>1024 || width%64!=0 || (height!=width && height*2!=width) || rgba==null || bytes!=rgba.length)
+
+    public static void setPlayerSkinRgba(String player, int width, int height, byte[] rgba) {
+        if (!java.util.UUID.fromString(player).toString().equals(player))
+            throw new IllegalArgumentException("Invalid skin owner");
+        long bytes = (long) width * height * 4;
+        if (width < 64
+                || width > 1024
+                || width % 64 != 0
+                || (height != width && height * 2 != width)
+                || rgba == null
+                || bytes != rgba.length)
             throw new IllegalArgumentException("Unsupported peer skin size");
-        Image image=Image.makeRaster(new io.github.humbleui.skija.ImageInfo(width,height,
-                io.github.humbleui.skija.ColorType.RGBA_8888,io.github.humbleui.skija.ColorAlphaType.UNPREMUL,
-                io.github.humbleui.skija.ColorSpace.getSRGB()),rgba,width*4L);
-        if(image==null)throw new IllegalStateException("Cannot create player skin");
-        PeerSkin prior=players.remove(player);
-        if(prior!=null){playerBytes-=prior.bytes;prior.image.close();}
-        while(!players.isEmpty() && (players.size()>=64 || playerBytes+bytes>16*1024*1024)) {
-            PeerSkin removed=players.remove(players.keySet().iterator().next());playerBytes-=removed.bytes;removed.image.close();
+        Image image =
+                Image.makeRaster(
+                        new io.github.humbleui.skija.ImageInfo(
+                                width,
+                                height,
+                                io.github.humbleui.skija.ColorType.RGBA_8888,
+                                io.github.humbleui.skija.ColorAlphaType.UNPREMUL,
+                                io.github.humbleui.skija.ColorSpace.getSRGB()),
+                        rgba,
+                        width * 4L);
+        if (image == null) throw new IllegalStateException("Cannot create player skin");
+        PeerSkin prior = players.remove(player);
+        if (prior != null) {
+            playerBytes -= prior.bytes;
+            prior.image.close();
         }
-        players.put(player,new PeerSkin(image,bytes));playerBytes+=bytes;
+        while (!players.isEmpty()
+                && (players.size() >= 64 || playerBytes + bytes > 16 * 1024 * 1024)) {
+            PeerSkin removed = players.remove(players.keySet().iterator().next());
+            playerBytes -= removed.bytes;
+            removed.image.close();
+        }
+        players.put(player, new PeerSkin(image, bytes));
+        playerBytes += bytes;
     }
-    public static boolean hasPlayerSkin(String player) { return players.containsKey(player); }
-    private static Image playerSkin(String player,boolean self) {
-        if(self)return skin;
-        PeerSkin cached=players.get(player);return cached==null?null:cached.image;
+
+    public static boolean hasPlayerSkin(String player) {
+        return players.containsKey(player);
     }
-    public static void drawPlayer(HubDraw draw,String player,boolean self,float x,float y,float size,float yaw,float pitch) {
-        drawTexture(draw,playerSkin(player,self),x,y,size,yaw,0,pitch);
+
+    private static Image playerSkin(String player, boolean self) {
+        if (self) return skin;
+        PeerSkin cached = players.get(player);
+        return cached == null ? null : cached.image;
     }
-    public static void drawPlayer2D(HubDraw draw,String player,boolean self,float x,float y,float size) {
-        drawFlat(draw,playerSkin(player,self),x,y,size);
+
+    public static void drawPlayer(
+            HubDraw draw,
+            String player,
+            boolean self,
+            float x,
+            float y,
+            float size,
+            float yaw,
+            float pitch) {
+        drawTexture(draw, playerSkin(player, self), x, y, size, yaw, 0, pitch);
+    }
+
+    public static void drawPlayer2D(
+            HubDraw draw, String player, boolean self, float x, float y, float size) {
+        drawFlat(draw, playerSkin(player, self), x, y, size);
     }
 
     // Each face lists the UV top-left, 3D top-left, right and down unit vectors.
     // This is the same CSS face transform order as the reference's six spans.
     private static final Face[] FACES = {
-        new Face(8, 8, 1f,   -1,-1, 1,   1,0,0,   0,1,0), // front
-        new Face(24,8, 1f,    1,-1,-1,  -1,0,0,   0,1,0), // back
-        new Face(0, 8,.82f,  -1,-1,-1,   0,0,1,   0,1,0), // left
-        new Face(16,8,.88f,   1,-1, 1,   0,0,-1,  0,1,0), // right
-        new Face(8, 0,1.04f, -1,-1,-1,   1,0,0,   0,0,1), // top
-        new Face(16,0,.70f,  -1, 1, 1,   1,0,0,   0,0,-1) // bottom
+        new Face(8, 8, 1f, -1, -1, 1, 1, 0, 0, 0, 1, 0), // front
+        new Face(24, 8, 1f, 1, -1, -1, -1, 0, 0, 0, 1, 0), // back
+        new Face(0, 8, .82f, -1, -1, -1, 0, 0, 1, 0, 1, 0), // left
+        new Face(16, 8, .88f, 1, -1, 1, 0, 0, -1, 0, 1, 0), // right
+        new Face(8, 0, 1.04f, -1, -1, -1, 1, 0, 0, 0, 0, 1), // top
+        new Face(16, 0, .70f, -1, 1, 1, 1, 0, 0, 0, 0, -1) // bottom
     };
 
     private HubHead() {}
@@ -78,7 +125,8 @@ public final class HubHead {
             candidate = Image.makeFromEncoded(encoded);
             int width = candidate.getWidth(), height = candidate.getHeight();
             if (width < 64 || width % 64 != 0 || (height != width && height * 2 != width)) {
-                throw new IllegalArgumentException("Expected a 64x64 or 64x32 Minecraft skin (or integer-scale HD skin)");
+                throw new IllegalArgumentException(
+                        "Expected a 64x64 or 64x32 Minecraft skin (or integer-scale HD skin)");
             }
             Image previous = skin;
             skin = candidate;
@@ -90,18 +138,45 @@ public final class HubHead {
     }
 
     /** RGBA bytes from an existing Minecraft texture; no PNG compression/decompression round trip. */
-    public static void setSkinRgba(int width,int height,byte[] rgba){
-        if(width<64||width>4096||width%64!=0||height>4096||(height!=width&&height*2!=width)||rgba==null||(long)rgba.length!=(long)width*height*4)throw new IllegalArgumentException("Invalid skin RGBA dimensions");
-        Image candidate=Image.makeRaster(new io.github.humbleui.skija.ImageInfo(width,height,io.github.humbleui.skija.ColorType.RGBA_8888,io.github.humbleui.skija.ColorAlphaType.UNPREMUL,io.github.humbleui.skija.ColorSpace.getSRGB()),rgba,width*4L);
-        if(candidate==null)throw new IllegalStateException("Cannot create session skin image");
-        Image previous=skin;skin=candidate;if(previous!=null)previous.close();
+    public static void setSkinRgba(int width, int height, byte[] rgba) {
+        if (width < 64
+                || width > 4096
+                || width % 64 != 0
+                || height > 4096
+                || (height != width && height * 2 != width)
+                || rgba == null
+                || (long) rgba.length != (long) width * height * 4)
+            throw new IllegalArgumentException("Invalid skin RGBA dimensions");
+        Image candidate =
+                Image.makeRaster(
+                        new io.github.humbleui.skija.ImageInfo(
+                                width,
+                                height,
+                                io.github.humbleui.skija.ColorType.RGBA_8888,
+                                io.github.humbleui.skija.ColorAlphaType.UNPREMUL,
+                                io.github.humbleui.skija.ColorSpace.getSRGB()),
+                        rgba,
+                        width * 4L);
+        if (candidate == null) throw new IllegalStateException("Cannot create session skin image");
+        Image previous = skin;
+        skin = candidate;
+        if (previous != null) previous.close();
     }
+
     /** Release cached skin when the player/session changes or the renderer closes. */
     public static void clearSkin() {
-        for(PeerSkin cached:players.values())cached.image.close();
-        players.clear();playerBytes=0;
+        if (facePaint != null) {
+            facePaint.close();
+            facePaint = null;
+        }
+        faceLights.values().forEach(ColorFilter::close);
+        faceLights.clear();
+        for (PeerSkin cached : players.values()) cached.image.close();
+        players.clear();
+        playerBytes = 0;
         if (skin != null) {
-            Image previous=skin;skin=null;
+            Image previous = skin;
+            skin = null;
             previous.close();
         }
     }
@@ -111,60 +186,138 @@ public final class HubHead {
     }
 
     /** Local roll is applied before yaw and pitch, exactly like CSS rotateX rotateY rotateZ. */
-    public static void draw(HubDraw draw, float x, float y, float size, float yawDegrees, float rollDegrees) {
-        drawTexture(draw,skin,x,y,size,yawDegrees,rollDegrees,-12);
+    public static void draw(
+            HubDraw draw, float x, float y, float size, float yawDegrees, float rollDegrees) {
+        drawTexture(draw, skin, x, y, size, yawDegrees, rollDegrees, -12);
     }
-    private static void drawTexture(HubDraw draw,Image texture,float x,float y,float size,float yawDegrees,float rollDegrees,float pitchDegrees) {
-        if (!(size > 0) || !Float.isFinite(size) || !Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(yawDegrees) || !Float.isFinite(rollDegrees) || !Float.isFinite(pitchDegrees)) return;
+
+    private static void drawTexture(
+            HubDraw draw,
+            Image texture,
+            float x,
+            float y,
+            float size,
+            float yawDegrees,
+            float rollDegrees,
+            float pitchDegrees) {
+        if (!(size > 0)
+                || !Float.isFinite(size)
+                || !Float.isFinite(x)
+                || !Float.isFinite(y)
+                || !Float.isFinite(yawDegrees)
+                || !Float.isFinite(rollDegrees)
+                || !Float.isFinite(pitchDegrees)) return;
         float yaw = (float) Math.toRadians(yawDegrees % 360);
         float roll = (float) Math.toRadians(rollDegrees % 360);
-        float pitch=(float)Math.toRadians(pitchDegrees);
+        float pitch = (float) Math.toRadians(pitchDegrees);
+        Rotation rotation =
+                new Rotation(
+                        (float) Math.cos(yaw),
+                        (float) Math.sin(yaw),
+                        (float) Math.cos(pitch),
+                        (float) Math.sin(pitch),
+                        (float) Math.cos(roll),
+                        (float) Math.sin(roll));
         // Supersample the assembled cube, so shared edges remain opaque. Per-face AA leaks
         // the background through the seams; nearest texture sampling is retained below.
         float half = size * (texture == null ? 1 : HAT_SCALE) / 2;
-        Point axisX = project(1, 0, 0, yaw, roll, pitch);
-        Point axisY = project(0, 1, 0, yaw, roll, pitch);
-        Point axisZ = project(0, 0, 1, yaw, roll, pitch);
+        Point axisX = project(1, 0, 0, rotation);
+        Point axisY = project(0, 1, 0, rotation);
+        Point axisZ = project(0, 0, 1, rotation);
         float extentX = half * (Math.abs(axisX.x) + Math.abs(axisY.x) + Math.abs(axisZ.x)) + 2;
         float extentY = half * (Math.abs(axisX.y) + Math.abs(axisY.y) + Math.abs(axisZ.y)) + 2;
-        if (draw.supersample(x + size / 2 - extentX, y + size / 2 - extentY, extentX * 2, extentY * 2, 2,
-                () -> drawCubes(draw, texture, x, y, size, yaw, roll, pitch))) return;
-        drawCubes(draw, texture, x, y, size, yaw, roll, pitch);
+        if (draw.supersample(
+                x + size / 2 - extentX,
+                y + size / 2 - extentY,
+                extentX * 2,
+                extentY * 2,
+                2,
+                () -> drawCubes(draw, texture, x, y, size, rotation))) return;
+        drawCubes(draw, texture, x, y, size, rotation);
     }
 
-    private static void drawCubes(HubDraw draw, Image texture, float x, float y, float size, float yaw, float roll, float pitch) {
-        drawLayer(draw, texture, x, y, size, yaw, roll, pitch, false);
+    private static void drawCubes(
+            HubDraw draw, Image texture, float x, float y, float size, Rotation rotation) {
+        drawLayer(draw, texture, x, y, size, rotation, false);
         // Do not merge the hat into the skin: transparent texels expose the real base cube.
-        if (texture != null) drawLayer(draw, texture, x, y, size, yaw, roll, pitch, true);
+        if (texture != null) drawLayer(draw, texture, x, y, size, rotation, true);
     }
 
     /** Minecraft's original flat face plus alpha hat. Only the current player's in-memory skin is used. */
-    public static void draw2D(HubDraw draw,float x,float y,float size) {
-        drawFlat(draw,skin,x,y,size);
+    public static void draw2D(HubDraw draw, float x, float y, float size) {
+        drawFlat(draw, skin, x, y, size);
     }
-    private static void drawFlat(HubDraw draw,Image source,float x,float y,float size) {
-        if(!(size>0))return;
-        try(Paint paint=new Paint().setAntiAlias(false)) {
-            if(source==null){Image fallback=draw.imageResource(FALLBACK);draw.canvas().drawImageRect(fallback,Rect.makeWH(fallback.getWidth(),fallback.getHeight()),Rect.makeXYWH(x,y,size,size),SamplingMode.DEFAULT,paint,true);return;}
-            float scale=source.getWidth()/64f;
-            Rect dst=Rect.makeXYWH(x,y,size,size);
-            draw.canvas().drawImageRect(source,Rect.makeXYWH(8*scale,8*scale,8*scale,8*scale),dst,SamplingMode.DEFAULT,paint,true);
-            draw.canvas().drawImageRect(source,Rect.makeXYWH(40*scale,8*scale,8*scale,8*scale),dst,SamplingMode.DEFAULT,paint,true);
+
+    private static void drawFlat(HubDraw draw, Image source, float x, float y, float size) {
+        if (!(size > 0)) return;
+        Paint paint = paint();
+        try {
+            if (source == null) {
+                Image fallback = draw.imageResource(FALLBACK);
+                draw.canvas()
+                        .drawImageRect(
+                                fallback,
+                                Rect.makeWH(fallback.getWidth(), fallback.getHeight()),
+                                Rect.makeXYWH(x, y, size, size),
+                                SamplingMode.DEFAULT,
+                                paint,
+                                true);
+                return;
+            }
+            float scale = source.getWidth() / 64f;
+            Rect dst = Rect.makeXYWH(x, y, size, size);
+            draw.canvas()
+                    .drawImageRect(
+                            source,
+                            Rect.makeXYWH(8 * scale, 8 * scale, 8 * scale, 8 * scale),
+                            dst,
+                            SamplingMode.DEFAULT,
+                            paint,
+                            true);
+            draw.canvas()
+                    .drawImageRect(
+                            source,
+                            Rect.makeXYWH(40 * scale, 8 * scale, 8 * scale, 8 * scale),
+                            dst,
+                            SamplingMode.DEFAULT,
+                            paint,
+                            true);
+        } finally {
+            paint.reset();
         }
     }
 
-    private static void drawLayer(HubDraw draw, Image texture, float x, float y, float size, float yaw, float roll, float pitch, boolean hat) {
+    private static void drawLayer(
+            HubDraw draw,
+            Image texture,
+            float x,
+            float y,
+            float size,
+            Rotation rotation,
+            boolean hat) {
         float layerSize = size * (hat ? HAT_SCALE : 1);
         float half = layerSize / 2;
         float centerX = x + size / 2, centerY = y + size / 2;
         List<ProjectedFace> visible = new ArrayList<>(3);
         for (Face face : FACES) {
-            Point origin = project(face.x * half, face.y * half, face.z * half, yaw, roll, pitch);
-            Point right = project(face.rx * layerSize, face.ry * layerSize, face.rz * layerSize, yaw, roll, pitch);
-            Point down = project(face.dx * layerSize, face.dy * layerSize, face.dz * layerSize, yaw, roll, pitch);
+            Point origin = project(face.x * half, face.y * half, face.z * half, rotation);
+            Point right =
+                    project(
+                            face.rx * layerSize,
+                            face.ry * layerSize,
+                            face.rz * layerSize,
+                            rotation);
+            Point down =
+                    project(
+                            face.dx * layerSize,
+                            face.dy * layerSize,
+                            face.dz * layerSize,
+                            rotation);
             float determinant = right.x * down.y - right.y * down.x;
             if (determinant <= 0.0001f) continue; // CSS backface-visibility:hidden.
-            visible.add(new ProjectedFace(face, origin, right, down, origin.z + (right.z + down.z) / 2));
+            visible.add(
+                    new ProjectedFace(
+                            face, origin, right, down, origin.z + (right.z + down.z) / 2));
         }
         visible.sort(Comparator.comparingDouble(ProjectedFace::depth));
         Canvas canvas = draw.canvas();
@@ -172,44 +325,63 @@ public final class HubHead {
             Face face = projected.face;
             Point p = projected.origin, r = projected.right, d = projected.down;
             canvas.save();
-            try (Paint paint = new Paint().setAntiAlias(false);
-                 ColorFilter light = brightness(face.brightness)) {
-                paint.setColorFilter(light);
-                canvas.concat(new Matrix33(
-                    r.x, d.x, centerX + p.x,
-                    r.y, d.y, centerY + p.y,
-                    0, 0, 1));
+            Paint paint = paint();
+            try {
+                paint.setColorFilter(brightness(face.brightness));
+                canvas.concat(
+                        new Matrix33(r.x, d.x, centerX + p.x, r.y, d.y, centerY + p.y, 0, 0, 1));
                 Rect destination = Rect.makeXYWH(0, 0, 1, 1);
                 if (texture != null) {
                     float scale = texture.getWidth() / 64f;
-                    Rect source = Rect.makeXYWH((face.u + (hat ? 32 : 0)) * scale, face.v * scale, 8 * scale, 8 * scale);
-                    canvas.drawImageRect(texture, source, destination, SamplingMode.DEFAULT, paint, true);
+                    Rect source =
+                            Rect.makeXYWH(
+                                    (face.u + (hat ? 32 : 0)) * scale,
+                                    face.v * scale,
+                                    8 * scale,
+                                    8 * scale);
+                    canvas.drawImageRect(
+                            texture, source, destination, SamplingMode.DEFAULT, paint, true);
                 } else if (face == FACES[0]) {
                     // Existing, licensed demo avatar; never package a personal test skin.
                     Image fallback = draw.imageResource(FALLBACK);
-                    if (fallback != null) canvas.drawImageRect(fallback, Rect.makeXYWH(0, 0, fallback.getWidth(), fallback.getHeight()), destination, SamplingMode.DEFAULT, paint, true);
+                    if (fallback != null)
+                        canvas.drawImageRect(
+                                fallback,
+                                Rect.makeXYWH(0, 0, fallback.getWidth(), fallback.getHeight()),
+                                destination,
+                                SamplingMode.DEFAULT,
+                                paint,
+                                true);
                     else canvas.drawRect(destination, paint.setColor(0xFF69523A));
                 } else {
-                    canvas.drawRect(destination, paint.setColor(face == FACES[4] ? 0xFF47372A : 0xFF69523A));
+                    canvas.drawRect(
+                            destination,
+                            paint.setColor(face == FACES[4] ? 0xFF47372A : 0xFF69523A));
                 }
             } finally {
+                paint.reset();
                 canvas.restore();
             }
         }
     }
 
     private static ColorFilter brightness(float amount) {
-        return ColorFilter.makeMatrix(new ColorMatrix(
-            amount,0,0,0,0,
-            0,amount,0,0,0,
-            0,0,amount,0,0,
-            0,0,0,1,0));
+        return faceLights.computeIfAbsent(
+                amount,
+                value ->
+                        ColorFilter.makeMatrix(
+                                new ColorMatrix(
+                                        amount, 0, 0, 0, 0, 0, amount, 0, 0, 0, 0, 0, amount, 0, 0,
+                                        0, 0, 0, 1, 0)));
     }
 
-    private static Point project(float x, float y, float z, float yaw, float roll, float pitch) {
-        float cy = (float) Math.cos(yaw), sy = (float) Math.sin(yaw);
-        float cp = (float) Math.cos(pitch), sp = (float) Math.sin(pitch);
-        float cr = (float) Math.cos(roll), sr = (float) Math.sin(roll);
+    private static Point project(float x, float y, float z, Rotation rotation) {
+        float cy = rotation.cy,
+                sy = rotation.sy,
+                cp = rotation.cp,
+                sp = rotation.sp,
+                cr = rotation.cr,
+                sr = rotation.sr;
         float rolledX = cr * x - sr * y, rolledY = sr * x + cr * y;
         float rotatedX = cy * rolledX + sy * z;
         float rotatedZ = -sy * rolledX + cy * z;
@@ -217,10 +389,23 @@ public final class HubHead {
         return new Point(rotatedX, cp * rolledY - sp * rotatedZ, sp * rolledY + cp * rotatedZ);
     }
 
+    private record Rotation(float cy, float sy, float cp, float sp, float cr, float sr) {}
+
     private record Point(float x, float y, float z) {}
+
     private record ProjectedFace(Face face, Point origin, Point right, Point down, float depth) {}
-    private record Face(int u, int v, float brightness,
-                        float x, float y, float z,
-                        float rx, float ry, float rz,
-                        float dx, float dy, float dz) {}
+
+    private record Face(
+            int u,
+            int v,
+            float brightness,
+            float x,
+            float y,
+            float z,
+            float rx,
+            float ry,
+            float rz,
+            float dx,
+            float dy,
+            float dz) {}
 }

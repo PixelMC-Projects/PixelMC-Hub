@@ -29,7 +29,8 @@ final class HubGlContext implements AutoCloseable {
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
             glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
             window = glfwCreateWindow(1, 1, "PixelMC-Hub GPU", 0, gameWindow);
-            if (window == 0) throw new IllegalStateException("Cannot create an isolated Hub GPU context");
+            if (window == 0)
+                throw new IllegalStateException("Cannot create an isolated Hub GPU context");
             glfwMakeContextCurrent(window);
             capabilities = GL.createCapabilities();
         } catch (Throwable failure) {
@@ -47,15 +48,18 @@ final class HubGlContext implements AutoCloseable {
 
     private void requireGame() {
         if (Thread.currentThread() != owner || glfwGetCurrentContext() != gameWindow)
-            throw new IllegalStateException("Hub GPU handoff requires the original game render context");
+            throw new IllegalStateException(
+                    "Hub GPU handoff requires the original game render context");
     }
 
     void enter() {
         requireGame();
-        if (entered || window == 0) throw new IllegalStateException("Hub GPU context unavailable or already entered");
+        if (entered || window == 0)
+            throw new IllegalStateException("Hub GPU context unavailable or already entered");
         gameCapabilities = GL.getCapabilities();
         long fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-        if (fence == 0) throw new IllegalStateException("Cannot synchronize the game color attachment");
+        if (fence == 0)
+            throw new IllegalStateException("Cannot synchronize the game color attachment");
         glFlush();
         try {
             glfwMakeContextCurrent(window);
@@ -78,14 +82,20 @@ final class HubGlContext implements AutoCloseable {
         long fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         if (fence == 0) {
             // A failed synchronization must not let the game sample unfinished Hub rendering.
-            try { glFinish(); }
-            finally { restoreGame(); }
+            try {
+                glFinish();
+            } finally {
+                restoreGame();
+            }
             throw new IllegalStateException("Cannot synchronize the completed Hub frame");
         }
         glFlush();
         restoreGame();
-        try { glWaitSync(fence, 0, GL_TIMEOUT_IGNORED); }
-        finally { glDeleteSync(fence); }
+        try {
+            glWaitSync(fence, 0, GL_TIMEOUT_IGNORED);
+        } finally {
+            glDeleteSync(fence);
+        }
     }
 
     private void restoreGame() {
@@ -94,7 +104,8 @@ final class HubGlContext implements AutoCloseable {
         entered = false;
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         if (window == 0) return;
         if (entered) leave();
         requireGame();

@@ -27,15 +27,20 @@ final class GlState {
     private final int elementBuffer = glGetInteger(GL_ELEMENT_ARRAY_BUFFER_BINDING);
     private final int packBuffer = glGetInteger(GL_PIXEL_PACK_BUFFER_BINDING);
     private final int unpackBuffer = glGetInteger(GL_PIXEL_UNPACK_BUFFER_BINDING);
-    private final boolean indirectBuffers = GL.getCapabilities().OpenGL40 || GL.getCapabilities().GL_ARB_draw_indirect;
-    private final int indirectBuffer = indirectBuffers ? glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING) : 0;
+    private final boolean indirectBuffers =
+            GL.getCapabilities().OpenGL40 || GL.getCapabilities().GL_ARB_draw_indirect;
+    private final int indirectBuffer =
+            indirectBuffers ? glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING) : 0;
     private final int activeTexture = glGetInteger(GL_ACTIVE_TEXTURE);
     private final int[] viewport = integers(GL_VIEWPORT, 4);
     private final int[] scissorBox = integers(GL_SCISSOR_BOX, 4);
     private final int[] polygonMode = integers(GL_POLYGON_MODE, 2);
-    private final int blendSrcRgb = glGetInteger(GL_BLEND_SRC_RGB), blendDstRgb = glGetInteger(GL_BLEND_DST_RGB);
-    private final int blendSrcAlpha = glGetInteger(GL_BLEND_SRC_ALPHA), blendDstAlpha = glGetInteger(GL_BLEND_DST_ALPHA);
-    private final int blendEquationRgb = glGetInteger(GL_BLEND_EQUATION_RGB), blendEquationAlpha = glGetInteger(GL_BLEND_EQUATION_ALPHA);
+    private final int blendSrcRgb = glGetInteger(GL_BLEND_SRC_RGB),
+            blendDstRgb = glGetInteger(GL_BLEND_DST_RGB);
+    private final int blendSrcAlpha = glGetInteger(GL_BLEND_SRC_ALPHA),
+            blendDstAlpha = glGetInteger(GL_BLEND_DST_ALPHA);
+    private final int blendEquationRgb = glGetInteger(GL_BLEND_EQUATION_RGB),
+            blendEquationAlpha = glGetInteger(GL_BLEND_EQUATION_ALPHA);
     private final float[] blendColor = new float[4];
     private final float[] clearColor = new float[4];
     private final double clearDepth = glGetDouble(GL_DEPTH_CLEAR_VALUE);
@@ -45,19 +50,37 @@ final class GlState {
     // tested driver; its GLboolean query can report the last context's write mask.
     private final boolean depthMask = glGetInteger(GL_DEPTH_WRITEMASK) != 0;
     private final int depthFunc = glGetInteger(GL_DEPTH_FUNC);
-    private final int cullFace = glGetInteger(GL_CULL_FACE_MODE), frontFace = glGetInteger(GL_FRONT_FACE);
+    private final int cullFace = glGetInteger(GL_CULL_FACE_MODE),
+            frontFace = glGetInteger(GL_FRONT_FACE);
     private final Stencil frontStencil = new Stencil(false), backStencil = new Stencil(true);
     private final float lineWidth = glGetFloat(GL_LINE_WIDTH);
-    private final int packAlignment = glGetInteger(GL_PACK_ALIGNMENT), unpackAlignment = glGetInteger(GL_UNPACK_ALIGNMENT);
-    private final int packRowLength = glGetInteger(GL_PACK_ROW_LENGTH), unpackRowLength = glGetInteger(GL_UNPACK_ROW_LENGTH);
-    private final int packSkipPixels = glGetInteger(GL_PACK_SKIP_PIXELS), unpackSkipPixels = glGetInteger(GL_UNPACK_SKIP_PIXELS);
-    private final int packSkipRows = glGetInteger(GL_PACK_SKIP_ROWS), unpackSkipRows = glGetInteger(GL_UNPACK_SKIP_ROWS);
-    private final boolean samplerObjects = GL.getCapabilities().OpenGL33 || GL.getCapabilities().GL_ARB_sampler_objects;
+    private final int packAlignment = glGetInteger(GL_PACK_ALIGNMENT),
+            unpackAlignment = glGetInteger(GL_UNPACK_ALIGNMENT);
+    private final int packRowLength = glGetInteger(GL_PACK_ROW_LENGTH),
+            unpackRowLength = glGetInteger(GL_UNPACK_ROW_LENGTH);
+    private final int packSkipPixels = glGetInteger(GL_PACK_SKIP_PIXELS),
+            unpackSkipPixels = glGetInteger(GL_UNPACK_SKIP_PIXELS);
+    private final int packSkipRows = glGetInteger(GL_PACK_SKIP_ROWS),
+            unpackSkipRows = glGetInteger(GL_UNPACK_SKIP_ROWS);
+    private final boolean samplerObjects =
+            GL.getCapabilities().OpenGL33 || GL.getCapabilities().GL_ARB_sampler_objects;
     private final int[] texture2d = new int[glGetInteger(GL_MAX_TEXTURE_IMAGE_UNITS)];
     private final int[] samplers = new int[texture2d.length];
-    private final int[] capabilities = {GL_BLEND, GL_DEPTH_TEST, GL_STENCIL_TEST, GL_SCISSOR_TEST, GL_CULL_FACE,
-        GL_FRAMEBUFFER_SRGB, GL_MULTISAMPLE, GL_DITHER, GL_POLYGON_OFFSET_FILL, GL_RASTERIZER_DISCARD,
-        GL_SAMPLE_ALPHA_TO_COVERAGE, GL_SAMPLE_COVERAGE, GL_PROGRAM_POINT_SIZE};
+    private final int[] capabilities = {
+        GL_BLEND,
+        GL_DEPTH_TEST,
+        GL_STENCIL_TEST,
+        GL_SCISSOR_TEST,
+        GL_CULL_FACE,
+        GL_FRAMEBUFFER_SRGB,
+        GL_MULTISAMPLE,
+        GL_DITHER,
+        GL_POLYGON_OFFSET_FILL,
+        GL_RASTERIZER_DISCARD,
+        GL_SAMPLE_ALPHA_TO_COVERAGE,
+        GL_SAMPLE_COVERAGE,
+        GL_PROGRAM_POINT_SIZE
+    };
     private final boolean[] enabled = new boolean[capabilities.length];
 
     GlState() {
@@ -85,7 +108,8 @@ final class GlState {
         glBindVertexArray(vertexArray);
         glBindBuffer(GL_ARRAY_BUFFER, arrayBuffer);
         // Element binding belongs to the VAO and must be restored after that VAO.
-        if (vertexArray != 0 || GL.getCapabilities().GL_ARB_compatibility) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
+        if (vertexArray != 0 || GL.getCapabilities().GL_ARB_compatibility)
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, packBuffer);
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, unpackBuffer);
         if (indirectBuffers) glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuffer);
@@ -101,35 +125,54 @@ final class GlState {
         glBlendEquationSeparate(blendEquationRgb, blendEquationAlpha);
         glBlendColor(blendColor[0], blendColor[1], blendColor[2], blendColor[3]);
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
-        glClearDepth(clearDepth); glClearStencil(clearStencil);
+        glClearDepth(clearDepth);
+        glClearStencil(clearStencil);
         glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
-        glDepthMask(depthMask); glDepthFunc(depthFunc);
-        frontStencil.restore(GL_FRONT); backStencil.restore(GL_BACK);
-        glCullFace(cullFace); glFrontFace(frontFace);
+        glDepthMask(depthMask);
+        glDepthFunc(depthFunc);
+        frontStencil.restore(GL_FRONT);
+        backStencil.restore(GL_BACK);
+        glCullFace(cullFace);
+        glFrontFace(frontFace);
         glPolygonMode(GL_FRONT_AND_BACK, polygonMode[0]);
         glLineWidth(lineWidth);
-        glPixelStorei(GL_PACK_ALIGNMENT, packAlignment); glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
-        glPixelStorei(GL_PACK_ROW_LENGTH, packRowLength); glPixelStorei(GL_UNPACK_ROW_LENGTH, unpackRowLength);
-        glPixelStorei(GL_PACK_SKIP_PIXELS, packSkipPixels); glPixelStorei(GL_UNPACK_SKIP_PIXELS, unpackSkipPixels);
-        glPixelStorei(GL_PACK_SKIP_ROWS, packSkipRows); glPixelStorei(GL_UNPACK_SKIP_ROWS, unpackSkipRows);
+        glPixelStorei(GL_PACK_ALIGNMENT, packAlignment);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
+        glPixelStorei(GL_PACK_ROW_LENGTH, packRowLength);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, unpackRowLength);
+        glPixelStorei(GL_PACK_SKIP_PIXELS, packSkipPixels);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, unpackSkipPixels);
+        glPixelStorei(GL_PACK_SKIP_ROWS, packSkipRows);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, unpackSkipRows);
         for (int i = 0; i < capabilities.length; i++) {
-            if (enabled[i]) glEnable(capabilities[i]); else glDisable(capabilities[i]);
+            if (enabled[i]) glEnable(capabilities[i]);
+            else glDisable(capabilities[i]);
         }
     }
 
-    private static int[] integers(int key, int count) { int[] values = new int[count]; glGetIntegerv(key, values); return values; }
+    private static int[] integers(int key, int count) {
+        int[] values = new int[count];
+        glGetIntegerv(key, values);
+        return values;
+    }
 
     private static final class Stencil {
         final int func, ref, valueMask, writeMask, fail, depthFail, depthPass;
+
         Stencil(boolean back) {
             func = glGetInteger(back ? GL_STENCIL_BACK_FUNC : GL_STENCIL_FUNC);
             ref = glGetInteger(back ? GL_STENCIL_BACK_REF : GL_STENCIL_REF);
             valueMask = glGetInteger(back ? GL_STENCIL_BACK_VALUE_MASK : GL_STENCIL_VALUE_MASK);
             writeMask = glGetInteger(back ? GL_STENCIL_BACK_WRITEMASK : GL_STENCIL_WRITEMASK);
             fail = glGetInteger(back ? GL_STENCIL_BACK_FAIL : GL_STENCIL_FAIL);
-            depthFail = glGetInteger(back ? GL_STENCIL_BACK_PASS_DEPTH_FAIL : GL_STENCIL_PASS_DEPTH_FAIL);
-            depthPass = glGetInteger(back ? GL_STENCIL_BACK_PASS_DEPTH_PASS : GL_STENCIL_PASS_DEPTH_PASS);
+            depthFail =
+                    glGetInteger(
+                            back ? GL_STENCIL_BACK_PASS_DEPTH_FAIL : GL_STENCIL_PASS_DEPTH_FAIL);
+            depthPass =
+                    glGetInteger(
+                            back ? GL_STENCIL_BACK_PASS_DEPTH_PASS : GL_STENCIL_PASS_DEPTH_PASS);
         }
+
         void restore(int face) {
             glStencilFuncSeparate(face, func, ref, valueMask);
             glStencilMaskSeparate(face, writeMask);

@@ -17,9 +17,9 @@ import java.util.Map;
 
 /** GPU-only backdrop sampling. Every child shader samples an immutable snapshot, never its draw attachment. */
 final class HubGlass implements AutoCloseable {
-    private final HubCorners corners=new HubCorners();
+    private final HubCorners corners = new HubCorners();
     private static final int MAX_CAPTURES = 32;
-    private static final long MAX_CAPTURE_PIXELS=16_000_000;
+    private static final long MAX_CAPTURE_PIXELS = 16_000_000;
     private final Paint paint = new Paint();
     private final RuntimeEffect surfaceEffect = RuntimeEffect.makeForShader(SURFACE_SHADER);
     private final RuntimeEffect iconEffect = RuntimeEffect.makeForShader(ICON_SHADER);
@@ -34,286 +34,577 @@ final class HubGlass implements AutoCloseable {
     private float originX, originY;
     private long capturePixels;
     private boolean budgetWarning;
-    private final Map<FilterSize,Surface> filterPool=new LinkedHashMap<>(8,.75f,true);
+    private final Map<FilterSize, Surface> filterPool = new LinkedHashMap<>(8, .75f, true);
     private long filterPixels;
-    private int frameWidth,frameHeight;
+    private int frameWidth, frameHeight;
 
     void begin(Canvas value, Surface target) {
-        if(frameWidth!=target.getWidth()||frameHeight!=target.getHeight()) {
-            filterPool.values().forEach(Surface::close);filterPool.clear();filterPixels=0;
-            maps.values().forEach(Image::close);maps.clear();mapPixels=0;
-            frameWidth=target.getWidth();frameHeight=target.getHeight();
+        if (frameWidth != target.getWidth() || frameHeight != target.getHeight()) {
+            filterPool.values().forEach(Surface::close);
+            filterPool.clear();
+            filterPixels = 0;
+            maps.values().forEach(Image::close);
+            maps.clear();
+            mapPixels = 0;
+            frameWidth = target.getWidth();
+            frameHeight = target.getHeight();
         }
-        canvas = value; surface = target; captures = 0; capturePixels=0; originX = 0; originY = 0;
+        canvas = value;
+        surface = target;
+        captures = 0;
+        capturePixels = 0;
+        originX = 0;
+        originY = 0;
         game = new Backdrop(target.makeImageSnapshot(), 0, 0);
-        frameBackdrops.add(game); current = game;
+        frameBackdrops.add(game);
+        current = game;
     }
+
     void capture() {
         if (surface == null) throw new IllegalStateException("No active Hub GPU frame");
-        long pixels=(long)surface.getWidth()*surface.getHeight();
-        if(!allowCapture(pixels))return;
-        captures++;capturePixels+=pixels;
+        long pixels = (long) surface.getWidth() * surface.getHeight();
+        if (!allowCapture(pixels)) return;
+        captures++;
+        capturePixels += pixels;
         current = new Backdrop(surface.makeImageSnapshot(), originX, originY);
         frameBackdrops.add(current);
     }
-    void capture(float x,float y,float width,float height) {
-        if(surface==null)throw new IllegalStateException("No active Hub GPU frame");
-        float[] m=canvas.getLocalToDeviceAsMatrix33().getMat();
-        float minX=Float.POSITIVE_INFINITY,minY=minX,maxX=Float.NEGATIVE_INFINITY,maxY=maxX;
+
+    void capture(float x, float y, float width, float height) {
+        if (surface == null) throw new IllegalStateException("No active Hub GPU frame");
+        float[] m = canvas.getLocalToDeviceAsMatrix33().getMat();
+        float minX = Float.POSITIVE_INFINITY,
+                minY = minX,
+                maxX = Float.NEGATIVE_INFINITY,
+                maxY = maxX;
         // The sample halo covers CSS blur kernels and the maximum default refraction reach.
-        for(float xx:new float[]{x-96,x+width+96})for(float yy:new float[]{y-96,y+height+96}) {
-            float z=m[6]*xx+m[7]*yy+m[8],px=(m[0]*xx+m[1]*yy+m[2])/z,py=(m[3]*xx+m[4]*yy+m[5])/z;
-            minX=Math.min(minX,px);minY=Math.min(minY,py);maxX=Math.max(maxX,px);maxY=Math.max(maxY,py);
-        }
-        int l=Math.max(0,(int)Math.floor(minX)),t=Math.max(0,(int)Math.floor(minY));
-        int r=Math.min(surface.getWidth(),(int)Math.ceil(maxX)),b=Math.min(surface.getHeight(),(int)Math.ceil(maxY));
-        if(r<=l||b<=t)return;
-        long pixels=(long)(r-l)*(b-t);
-        if(!allowCapture(pixels))return;
-        Image image=surface.makeImageSnapshot(IRect.makeLTRB(l,t,r,b));
-        captures++;capturePixels+=pixels;
-        current=new Backdrop(image,originX+l,originY+t);frameBackdrops.add(current);
+        for (float xx : new float[] {x - 96, x + width + 96})
+            for (float yy : new float[] {y - 96, y + height + 96}) {
+                float z = m[6] * xx + m[7] * yy + m[8],
+                        px = (m[0] * xx + m[1] * yy + m[2]) / z,
+                        py = (m[3] * xx + m[4] * yy + m[5]) / z;
+                minX = Math.min(minX, px);
+                minY = Math.min(minY, py);
+                maxX = Math.max(maxX, px);
+                maxY = Math.max(maxY, py);
+            }
+        int l = Math.max(0, (int) Math.floor(minX)), t = Math.max(0, (int) Math.floor(minY));
+        int r = Math.min(surface.getWidth(), (int) Math.ceil(maxX)),
+                b = Math.min(surface.getHeight(), (int) Math.ceil(maxY));
+        if (r <= l || b <= t) return;
+        long pixels = (long) (r - l) * (b - t);
+        if (!allowCapture(pixels)) return;
+        Image image = surface.makeImageSnapshot(IRect.makeLTRB(l, t, r, b));
+        captures++;
+        capturePixels += pixels;
+        current = new Backdrop(image, originX + l, originY + t);
+        frameBackdrops.add(current);
     }
-    void useGame() { current = game; }
+
+    void useGame() {
+        current = game;
+    }
+
     /** Reuses the existing game snapshot and filter pool. Only 1/16-resolution pixels are filtered. */
     void sceneBlur(float physicalSigma) {
-        if(game==null||physicalSigma<=0)return;
-        int width=Math.max(1,(game.image.getWidth()+3)/4),height=Math.max(1,(game.image.getHeight()+3)/4);
-        if(game.sceneBlur==null) {
-            Surface filtered=filterTarget(width,height);
-            float sigma=Math.max(.25f,physicalSigma/4);
-            try(ImageFilter blur=ImageFilter.makeBlur(sigma,sigma,FilterTileMode.CLAMP);Paint filter=new Paint().setImageFilter(blur)) {
-                Canvas reduced=filtered.getCanvas();reduced.clear(0);
-                reduced.drawImageRect(game.image,Rect.makeWH(game.image.getWidth(),game.image.getHeight()),Rect.makeWH(width,height),SamplingMode.LINEAR,filter,false);
-                game.sceneBlur=filtered.makeImageSnapshot();
+        if (game == null || physicalSigma <= 0) return;
+        int width = Math.max(1, (game.image.getWidth() + 3) / 4),
+                height = Math.max(1, (game.image.getHeight() + 3) / 4);
+        if (game.sceneBlur == null) {
+            Surface filtered = filterTarget(width, height);
+            float sigma = Math.max(.25f, physicalSigma / 4);
+            try (ImageFilter blur = ImageFilter.makeBlur(sigma, sigma, FilterTileMode.CLAMP);
+                    Paint filter = new Paint().setImageFilter(blur)) {
+                Canvas reduced = filtered.getCanvas();
+                reduced.clear(0);
+                reduced.drawImageRect(
+                        game.image,
+                        Rect.makeWH(game.image.getWidth(), game.image.getHeight()),
+                        Rect.makeWH(width, height),
+                        SamplingMode.LINEAR,
+                        filter,
+                        false);
+                game.sceneBlur = filtered.makeImageSnapshot();
             }
         }
-        int save=canvas.save();
-        try {canvas.resetMatrix();canvas.drawImageRect(game.sceneBlur,Rect.makeWH(width,height),Rect.makeWH(game.image.getWidth(),game.image.getHeight()),SamplingMode.LINEAR,paint.reset(),false);}
-        finally {canvas.restoreToCount(save);paint.reset();}
+        int save = canvas.save();
+        try {
+            canvas.resetMatrix();
+            canvas.drawImageRect(
+                    game.sceneBlur,
+                    Rect.makeWH(width, height),
+                    Rect.makeWH(game.image.getWidth(), game.image.getHeight()),
+                    SamplingMode.LINEAR,
+                    paint.reset(),
+                    false);
+        } finally {
+            canvas.restoreToCount(save);
+            paint.reset();
+        }
     }
+
     private boolean allowCapture(long pixels) {
-        if(captures<MAX_CAPTURES&&capturePixels+pixels<=MAX_CAPTURE_PIXELS)return true;
-        if(!budgetWarning) {
-            budgetWarning=true;
-            System.getLogger(HubGlass.class.getName()).log(System.Logger.Level.WARNING,
-                "Hub glass backdrop budget reached; retaining the previous immutable snapshot. Use component ROI captures.");
+        if (captures < MAX_CAPTURES && capturePixels + pixels <= MAX_CAPTURE_PIXELS) return true;
+        if (!budgetWarning) {
+            budgetWarning = true;
+            System.getLogger(HubGlass.class.getName())
+                    .log(
+                            System.Logger.Level.WARNING,
+                            "Hub glass backdrop budget reached; retaining the previous immutable snapshot. Use component ROI captures.");
         }
         return false;
     }
-    void target(Canvas value, Surface target, float x, float y) { canvas=value; surface=target; originX=x; originY=y; }
-    Backdrop selection() { return current; }
-    void selection(Backdrop value) { current=value; }
+
+    void target(Canvas value, Surface target, float x, float y) {
+        canvas = value;
+        surface = target;
+        originX = x;
+        originY = y;
+    }
+
+    Backdrop selection() {
+        return current;
+    }
+
+    void selection(Backdrop value) {
+        current = value;
+    }
+
     void end() {
-        frameBackdrops.forEach(Backdrop::close); frameBackdrops.clear();
-        canvas = null; surface = null; current = null; game = null;
+        frameBackdrops.forEach(Backdrop::close);
+        frameBackdrops.clear();
+        canvas = null;
+        surface = null;
+        current = null;
+        game = null;
     }
 
     void surface(float x, float y, float w, float h, float radius, GlassStyle style) {
-        backdrop(x,y,w,h,radius,style,false,true);
-        if(style.decorations())decorations(x,y,w,h,radius,style.alpha(),!style.refraction());
+        backdrop(x, y, w, h, radius, style, false, true);
+        if (style.decorations())
+            decorations(x, y, w, h, radius, style.alpha(), !style.refraction());
     }
 
-    void backdrop(float x, float y, float w, float h, float radius, GlassStyle style,boolean dark,boolean fallbackBackground) {
+    void backdrop(
+            float x,
+            float y,
+            float w,
+            float h,
+            float radius,
+            GlassStyle style,
+            boolean dark,
+            boolean fallbackBackground) {
         if (w <= 0 || h <= 0 || style.alpha() <= 0) return;
         boolean refractive = style.refraction();
         float sigma = refractive ? 0 : style.backdropBlur();
         float saturation = style.saturation() * (!refractive && style.decorations() ? 1.4f : 1);
         float brightness = !refractive && style.decorations() ? 1.04f : 1;
         Sample input = blurred(sigma, x, y, w, h);
-        Image mapImage=refractive?displacement(w,h,radius,style):null;
-        try (Shader backdrop = input.image.makeShader(FilterTileMode.CLAMP, FilterTileMode.CLAMP, SamplingMode.LINEAR, Matrix33.IDENTITY);
-             Shader map = refractive ? mapImage.makeShader(FilterTileMode.CLAMP, FilterTileMode.CLAMP, SamplingMode.LINEAR,
-                 Matrix33.makeScale(w/mapImage.getWidth(),h/mapImage.getHeight())) : null;
-             RuntimeEffectBuilder builder = new RuntimeEffectBuilder(surfaceEffect)) {
+        Image mapImage = refractive ? displacement(w, h, radius, style) : null;
+        try (Shader backdrop =
+                        input.image.makeShader(
+                                FilterTileMode.CLAMP,
+                                FilterTileMode.CLAMP,
+                                SamplingMode.LINEAR,
+                                Matrix33.IDENTITY);
+                Shader map =
+                        refractive
+                                ? mapImage.makeShader(
+                                        FilterTileMode.CLAMP,
+                                        FilterTileMode.CLAMP,
+                                        SamplingMode.LINEAR,
+                                        Matrix33.makeScale(
+                                                w / mapImage.getWidth(), h / mapImage.getHeight()))
+                                : null;
+                RuntimeEffectBuilder builder = new RuntimeEffectBuilder(surfaceEffect)) {
             builder.setChild("backdrop", backdrop);
-            // Skia requires all declared children to be bound, even when a uniform disables a branch.
+            // Skia requires all declared children to be bound, even when a uniform disables a
+            // branch.
             builder.setChild("displacement", map != null ? map : backdrop);
             builder.setUniform("rect", x, y, w, h);
-            Matrix33 sampleTransform = Matrix33.makeTranslate(originX-input.originX, originY-input.originY)
-                .makeConcat(canvas.getLocalToDeviceAsMatrix33());
-            float[] m=sampleTransform.getMat();
+            Matrix33 sampleTransform =
+                    Matrix33.makeTranslate(originX - input.originX, originY - input.originY)
+                            .makeConcat(canvas.getLocalToDeviceAsMatrix33());
+            float[] m = sampleTransform.getMat();
             // SkMatrix is row-major, while SkSL matrix uniform storage is column-major.
-            builder.setUniform("localToDevice",new float[]{m[0],m[3],m[6],m[1],m[4],m[7],m[2],m[5],m[8]});
-            builder.setUniform("scales", style.distortionScale() + style.redOffset(), style.distortionScale() + style.greenOffset(), style.distortionScale() + style.blueOffset());
+            builder.setUniform(
+                    "localToDevice",
+                    new float[] {m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]});
+            builder.setUniform(
+                    "scales",
+                    style.distortionScale() + style.redOffset(),
+                    style.distortionScale() + style.greenOffset(),
+                    style.distortionScale() + style.blueOffset());
             builder.setUniform("refractive", refractive ? 1 : 0);
             builder.setUniform("tone", saturation, brightness);
-            float frost=0;
-            if(fallbackBackground)frost=refractive||!style.decorations()?style.backgroundOpacity():
-                dark?.04f+style.backgroundOpacity()*.3f:.12f+style.backgroundOpacity()*.5f;
+            float frost = 0;
+            if (fallbackBackground)
+                frost =
+                        refractive || !style.decorations()
+                                ? style.backgroundOpacity()
+                                : dark
+                                        ? .04f + style.backgroundOpacity() * .3f
+                                        : .12f + style.backgroundOpacity() * .5f;
             int tint = style.tint();
-            builder.setUniform("tint", ((tint >> 16) & 255)/255f, ((tint >> 8) & 255)/255f, (tint & 255)/255f,
-                frost * ((tint >>> 24) / 255f));
+            builder.setUniform(
+                    "tint",
+                    ((tint >> 16) & 255) / 255f,
+                    ((tint >> 8) & 255) / 255f,
+                    (tint & 255) / 255f,
+                    frost * ((tint >>> 24) / 255f));
             builder.setUniform("opacity", Math.min(1, style.alpha()));
             int count = canvas.save();
-            corners.clip(canvas,x,y,w,h,radius);
+            corners.clip(canvas, x, y, w, h, radius);
             try (Shader shader = builder.makeShader();
-                 ImageFilter blur = refractive && style.displace() > 0 ? ImageFilter.makeBlur(style.displace(), style.displace(), FilterTileMode.CLAMP) : null) {
+                    ImageFilter blur =
+                            refractive && style.displace() > 0
+                                    ? ImageFilter.makeBlur(
+                                            style.displace(),
+                                            style.displace(),
+                                            FilterTileMode.CLAMP)
+                                    : null) {
                 paint.reset().setAntiAlias(true).setShader(shader).setImageFilter(blur);
                 canvas.drawRect(Rect.makeXYWH(x, y, w, h), paint);
                 paint.reset();
-            } finally { canvas.restoreToCount(count); }
+            } finally {
+                canvas.restoreToCount(count);
+            }
         }
     }
 
     void blur(float x, float y, float w, float h, float radius, float sigma, float alpha) {
-        GlassStyle plain = new GlassStyle(0, 50, 0, 0, 0, 0, 1, 0,
-            0, 0, 0, false, 0, alpha, sigma, false);
+        GlassStyle plain =
+                new GlassStyle(0, 50, 0, 0, 0, 0, 1, 0, 0, 0, 0, false, 0, alpha, sigma, false);
         surface(x, y, w, h, radius, plain);
     }
 
-    private Sample blurred(float logicalSigma, float x,float y,float width,float height) {
-        if (current == null) throw new IllegalStateException("Glass helpers require HubRenderer's active GPU frame");
-        if (logicalSigma <= .01f) return new Sample(current.image,current.originX,current.originY);
-        Matrix33 ctm=canvas.getLocalToDeviceAsMatrix33();float[] m=ctm.getMat();
-        float sigma = logicalSigma * deviceScale(ctm, x+width/2, y+height/2);
-        // 1/64 physical pixel quantization prevents redundant filter images for equivalent transforms.
+    private Sample blurred(float logicalSigma, float x, float y, float width, float height) {
+        if (current == null)
+            throw new IllegalStateException("Glass helpers require HubRenderer's active GPU frame");
+        if (logicalSigma <= .01f)
+            return new Sample(current.image, current.originX, current.originY);
+        Matrix33 ctm = canvas.getLocalToDeviceAsMatrix33();
+        float[] m = ctm.getMat();
+        float sigma = logicalSigma * deviceScale(ctm, x + width / 2, y + height / 2);
+        // 1/64 physical pixel quantization prevents redundant filter images for equivalent
+        // transforms.
         float quantized = Math.max(1f / 64, Math.round(sigma * 64) / 64f);
-        float minX=Float.POSITIVE_INFINITY,minY=minX,maxX=Float.NEGATIVE_INFINITY,maxY=maxX;
-        for(float xx:new float[]{x,x+width})for(float yy:new float[]{y,y+height}) {
-            float z=m[6]*xx+m[7]*yy+m[8];
-            float px=(m[0]*xx+m[1]*yy+m[2])/z+originX-current.originX;
-            float py=(m[3]*xx+m[4]*yy+m[5])/z+originY-current.originY;
-            minX=Math.min(minX,px);minY=Math.min(minY,py);maxX=Math.max(maxX,px);maxY=Math.max(maxY,py);
-        }
-        int pad=(int)Math.ceil(quantized*3)+2;
-        int left=Math.max(0,(int)Math.floor(minX)-pad),top=Math.max(0,(int)Math.floor(minY)-pad);
-        int right=Math.min(current.image.getWidth(),(int)Math.ceil(maxX)+pad),bottom=Math.min(current.image.getHeight(),(int)Math.ceil(maxY)+pad);
-        if(right<=left||bottom<=top)return new Sample(current.image,current.originX,current.originY);
-        BlurKey key = new BlurKey(quantized,left,top,right,bottom);
+        float minX = Float.POSITIVE_INFINITY,
+                minY = minX,
+                maxX = Float.NEGATIVE_INFINITY,
+                maxY = maxX;
+        for (float xx : new float[] {x, x + width})
+            for (float yy : new float[] {y, y + height}) {
+                float z = m[6] * xx + m[7] * yy + m[8];
+                float px = (m[0] * xx + m[1] * yy + m[2]) / z + originX - current.originX;
+                float py = (m[3] * xx + m[4] * yy + m[5]) / z + originY - current.originY;
+                minX = Math.min(minX, px);
+                minY = Math.min(minY, py);
+                maxX = Math.max(maxX, px);
+                maxY = Math.max(maxY, py);
+            }
+        int pad = (int) Math.ceil(quantized * 3) + 2;
+        int left = Math.max(0, (int) Math.floor(minX) - pad),
+                top = Math.max(0, (int) Math.floor(minY) - pad);
+        int right = Math.min(current.image.getWidth(), (int) Math.ceil(maxX) + pad),
+                bottom = Math.min(current.image.getHeight(), (int) Math.ceil(maxY) + pad);
+        if (right <= left || bottom <= top)
+            return new Sample(current.image, current.originX, current.originY);
+        BlurKey key = new BlurKey(quantized, left, top, right, bottom);
         Sample existing = current.blurImages.get(key);
         if (existing != null) return existing;
-        Surface filtered=filterTarget(right-left,bottom-top);
+        Surface filtered = filterTarget(right - left, bottom - top);
         try (ImageFilter blur = ImageFilter.makeBlur(quantized, quantized, FilterTileMode.CLAMP);
-             Paint filterPaint = new Paint().setImageFilter(blur)) {
+                Paint filterPaint = new Paint().setImageFilter(blur)) {
             filtered.getCanvas().clear(0);
             filtered.getCanvas().drawImage(current.image, -left, -top, filterPaint);
-            Sample result = new Sample(filtered.makeImageSnapshot(),current.originX+left,current.originY+top);
+            Sample result =
+                    new Sample(
+                            filtered.makeImageSnapshot(),
+                            current.originX + left,
+                            current.originY + top);
             current.blurImages.put(key, result);
             if (current.blurImages.size() > 6) {
-                var iterator = current.blurImages.entrySet().iterator(); iterator.next().getValue().image.close(); iterator.remove();
+                var iterator = current.blurImages.entrySet().iterator();
+                iterator.next().getValue().image.close();
+                iterator.remove();
             }
             return result;
         }
     }
 
-    private Surface filterTarget(int width,int height) {
-        FilterSize key=new FilterSize(width,height);
-        Surface result=filterPool.get(key);
-        if(result!=null)return result;
-        result=surface.makeSurface(width,height);filterPool.put(key,result);filterPixels+=(long)width*height;
-        var iterator=filterPool.entrySet().iterator();
-        while((filterPool.size()>12||filterPixels>8_000_000)&&filterPool.size()>1&&iterator.hasNext()) {
-            Surface old=iterator.next().getValue();if(old==result)continue;
-            filterPixels-=(long)old.getWidth()*old.getHeight();old.close();iterator.remove();
+    private Surface filterTarget(int width, int height) {
+        FilterSize key = new FilterSize(width, height);
+        Surface result = filterPool.get(key);
+        if (result != null) return result;
+        result = surface.makeSurface(width, height);
+        filterPool.put(key, result);
+        filterPixels += (long) width * height;
+        var iterator = filterPool.entrySet().iterator();
+        while ((filterPool.size() > 12 || filterPixels > 8_000_000)
+                && filterPool.size() > 1
+                && iterator.hasNext()) {
+            Surface old = iterator.next().getValue();
+            if (old == result) continue;
+            filterPixels -= (long) old.getWidth() * old.getHeight();
+            old.close();
+            iterator.remove();
         }
         return result;
     }
 
     private Image displacement(float w, float h, float radius, GlassStyle style) {
-        MapKey key = new MapKey(w, h, radius, style.borderWidth(), style.brightness(), style.opacity(), style.blur());
+        MapKey key =
+                new MapKey(
+                        w,
+                        h,
+                        radius,
+                        style.borderWidth(),
+                        style.brightness(),
+                        style.opacity(),
+                        style.blur());
         Image existing = maps.get(key);
         if (existing != null) return existing;
         int width = Math.max(2, (int) Math.ceil(w)), height = Math.max(2, (int) Math.ceil(h));
-        try (Surface target = surface.makeSurface(width, height); Paint p = new Paint().setAntiAlias(true)) {
-            Canvas c = target.getCanvas(); c.clear(0xFF000000);
+        try (Surface target = surface.makeSurface(width, height);
+                Paint p = new Paint().setAntiAlias(true)) {
+            Canvas c = target.getCanvas();
+            c.clear(0xFF000000);
             c.scale(width / w, height / h);
-            try (Shader red = Shader.makeLinearGradient(w, 0, 0, 0, new int[]{0x00FF0000, 0xFFFF0000});
-                 Shader blue = Shader.makeLinearGradient(0, 0, 0, h, new int[]{0x000000FF, 0xFF0000FF});
-                 ImageFilter blur = ImageFilter.makeBlur(Math.max(0, style.blur()), Math.max(0, style.blur()), FilterTileMode.DECAL)) {
-                corners.draw(c,0,0,w,h,radius,p.setShader(red));
-                corners.draw(c,0,0,w,h,radius,p.setShader(blue).setBlendMode(BlendMode.DIFFERENCE));
+            try (Shader red =
+                            Shader.makeLinearGradient(
+                                    w, 0, 0, 0, new int[] {0x00FF0000, 0xFFFF0000});
+                    Shader blue =
+                            Shader.makeLinearGradient(
+                                    0, 0, 0, h, new int[] {0x000000FF, 0xFF0000FF});
+                    ImageFilter blur =
+                            ImageFilter.makeBlur(
+                                    Math.max(0, style.blur()),
+                                    Math.max(0, style.blur()),
+                                    FilterTileMode.DECAL)) {
+                corners.draw(c, 0, 0, w, h, radius, p.setShader(red));
+                corners.draw(
+                        c,
+                        0,
+                        0,
+                        w,
+                        h,
+                        radius,
+                        p.setShader(blue).setBlendMode(BlendMode.DIFFERENCE));
                 int level = Math.round(Math.max(0, Math.min(100, style.brightness())) * 2.55f);
-                int color = Math.round(Math.max(0, Math.min(1, style.opacity())) * 255) << 24 | level << 16 | level << 8 | level;
+                int color =
+                        Math.round(Math.max(0, Math.min(1, style.opacity())) * 255) << 24
+                                | level << 16
+                                | level << 8
+                                | level;
                 float edge = Math.min(w, h) * style.borderWidth() * .5f;
-                corners.draw(c,edge,edge,Math.max(0,w-edge*2),Math.max(0,h-edge*2),radius,
-                    p.reset().setAntiAlias(true).setColor(color).setImageFilter(blur),radius>=16);
+                corners.draw(
+                        c,
+                        edge,
+                        edge,
+                        Math.max(0, w - edge * 2),
+                        Math.max(0, h - edge * 2),
+                        radius,
+                        p.reset().setAntiAlias(true).setColor(color).setImageFilter(blur),
+                        radius >= 16);
             }
-            Image result = target.makeImageSnapshot(); maps.put(key, result); mapPixels += (long)width * height;
+            Image result = target.makeImageSnapshot();
+            maps.put(key, result);
+            mapPixels += (long) width * height;
             while ((maps.size() > 12 || mapPixels > 8_000_000) && maps.size() > 1) {
-                var iterator = maps.entrySet().iterator(); Image old = iterator.next().getValue();
-                mapPixels -= (long)old.getWidth() * old.getHeight(); old.close(); iterator.remove();
+                var iterator = maps.entrySet().iterator();
+                Image old = iterator.next().getValue();
+                mapPixels -= (long) old.getWidth() * old.getHeight();
+                old.close();
+                iterator.remove();
             }
             return result;
         }
     }
 
-    void decorations(float x, float y, float w, float h, float radius, float alpha, boolean frosted) {
-        if(!frosted||w<=0||h<=0||alpha<=0)return;
-        float cx=x+w*.5f,cy=y+h*.5f;
-        float extent=(w+h)*.3535534f;
-        int saved=canvas.save();corners.clip(canvas,x,y,w,h,radius);
-        try(Shader sheen=Shader.makeLinearGradient(cx-extent*.7071068f,cy-extent*.7071068f,cx+extent*.7071068f,cy+extent*.7071068f,
-                new int[]{0x6bffffff,0x00ffffff,0x00ffffff,0x2effffff},new float[]{0,.42f,.64f,1})) {
-            corners.draw(canvas,x,y,w,h,radius,paint.reset().setAntiAlias(true).setColor(0xffffffff).setAlphaf(alpha).setShader(sheen));
-            float rimExtent=w*.25f+h*.4330127f;
-            try(Shader rim=Shader.makeLinearGradient(cx-rimExtent*.5f,cy-rimExtent*.8660254f,cx+rimExtent*.5f,cy+rimExtent*.8660254f,
-                    new int[]{0xb3ffffff,0x1affffff,0x14ffffff,0x6bffffff},new float[]{0,.45f,.6f,1})) {
-                corners.draw(canvas,x,y,w,h,radius,paint.reset().setAntiAlias(true).setColor(0xffffffff).setAlphaf(alpha)
-                    .setShader(rim).setMode(PaintMode.STROKE).setStrokeWidth(6));
+    void decorations(
+            float x, float y, float w, float h, float radius, float alpha, boolean frosted) {
+        if (!frosted || w <= 0 || h <= 0 || alpha <= 0) return;
+        float cx = x + w * .5f, cy = y + h * .5f;
+        float extent = (w + h) * .3535534f;
+        int saved = canvas.save();
+        corners.clip(canvas, x, y, w, h, radius);
+        try (Shader sheen =
+                Shader.makeLinearGradient(
+                        cx - extent * .7071068f,
+                        cy - extent * .7071068f,
+                        cx + extent * .7071068f,
+                        cy + extent * .7071068f,
+                        new int[] {0x6bffffff, 0x00ffffff, 0x00ffffff, 0x2effffff},
+                        new float[] {0, .42f, .64f, 1})) {
+            corners.draw(
+                    canvas,
+                    x,
+                    y,
+                    w,
+                    h,
+                    radius,
+                    paint.reset()
+                            .setAntiAlias(true)
+                            .setColor(0xffffffff)
+                            .setAlphaf(alpha)
+                            .setShader(sheen));
+            float rimExtent = w * .25f + h * .4330127f;
+            try (Shader rim =
+                    Shader.makeLinearGradient(
+                            cx - rimExtent * .5f,
+                            cy - rimExtent * .8660254f,
+                            cx + rimExtent * .5f,
+                            cy + rimExtent * .8660254f,
+                            new int[] {0xb3ffffff, 0x1affffff, 0x14ffffff, 0x6bffffff},
+                            new float[] {0, .45f, .6f, 1})) {
+                corners.draw(
+                        canvas,
+                        x,
+                        y,
+                        w,
+                        h,
+                        radius,
+                        paint.reset()
+                                .setAntiAlias(true)
+                                .setColor(0xffffffff)
+                                .setAlphaf(alpha)
+                                .setShader(rim)
+                                .setMode(PaintMode.STROKE)
+                                .setStrokeWidth(6));
             }
-        } finally {paint.reset();canvas.restoreToCount(saved);}
+        } finally {
+            paint.reset();
+            canvas.restoreToCount(saved);
+        }
     }
 
     void icon(float x, float y, float size, int top, int bottom, IconPose pose, float alpha) {
         try (RuntimeEffectBuilder b = new RuntimeEffectBuilder(iconEffect)) {
-            b.setUniform("center", x + size/2, y + size/2).setUniform("size", size)
-                // Float uniforms must use the float overload: integer overloads write raw integer bits.
-                .setUniform("radius", (float)Math.round(size * .5f * .65f)).setUniform("bevel", (float)Math.max(2, Math.round(size * .26f * .6f)))
-                .setUniform("strength", size * .3f * .8f * pose.bend()).setUniform("split", 0f)
-                .setUniform("soft", 1 + .1f * size * .15f).setUniform("shine", .9f * pose.glow()).setUniform("shade", .22f)
-                .setUniform("light", pose.lightX(), pose.lightY()).setUniform("shift", pose.shiftX(), pose.shiftY())
-                .setUniform("offset", pose.offsetX(), pose.offsetY()).setUniform("plateScale", pose.plateScale())
-                .setUniform("lift", 0, pose.liftY()).setUniform("glassScale", pose.glassScale())
-                .setUniform("glassAlpha", pose.glassAlpha()).setUniform("plateAlpha", pose.plateAlpha())
-                .setUniform("pixel", 1 / deviceScale(canvas.getLocalToDeviceAsMatrix33(), x + size/2, y + size/2))
-                .setUniform("opacity", alpha);
+            b.setUniform("center", x + size / 2, y + size / 2)
+                    .setUniform("size", size)
+                    // Float uniforms must use the float overload: integer overloads write raw
+                    // integer bits.
+                    .setUniform("radius", (float) Math.round(size * .5f * .65f))
+                    .setUniform("bevel", (float) Math.max(2, Math.round(size * .26f * .6f)))
+                    .setUniform("strength", size * .3f * .8f * pose.bend())
+                    .setUniform("split", 0f)
+                    .setUniform("soft", 1 + .1f * size * .15f)
+                    .setUniform("shine", .9f * pose.glow())
+                    .setUniform("shade", .22f)
+                    .setUniform("light", pose.lightX(), pose.lightY())
+                    .setUniform("shift", pose.shiftX(), pose.shiftY())
+                    .setUniform("offset", pose.offsetX(), pose.offsetY())
+                    .setUniform("plateScale", pose.plateScale())
+                    .setUniform("lift", 0, pose.liftY())
+                    .setUniform("glassScale", pose.glassScale())
+                    .setUniform("glassAlpha", pose.glassAlpha())
+                    .setUniform("plateAlpha", pose.plateAlpha())
+                    .setUniform(
+                            "pixel",
+                            1
+                                    / deviceScale(
+                                            canvas.getLocalToDeviceAsMatrix33(),
+                                            x + size / 2,
+                                            y + size / 2))
+                    .setUniform("opacity", alpha);
             double turn = Math.toRadians(-pose.angle());
-            b.setUniform("turn", (float)Math.cos(turn), (float)Math.sin(turn));
-            b.setUniform("top", channel(top,16), channel(top,8), channel(top,0));
-            b.setUniform("bottom", channel(bottom,16), channel(bottom,8), channel(bottom,0));
+            b.setUniform("turn", (float) Math.cos(turn), (float) Math.sin(turn));
+            b.setUniform("top", channel(top, 16), channel(top, 8), channel(top, 0));
+            b.setUniform("bottom", channel(bottom, 16), channel(bottom, 8), channel(bottom, 0));
             try (Shader shader = b.makeShader()) {
                 float extent = size * 1.08f;
-                canvas.drawRect(Rect.makeXYWH(x + size/2 - extent, y + size/2 - extent, extent*2, extent*2),
-                    paint.reset().setAntiAlias(true).setShader(shader)); paint.reset();
+                canvas.drawRect(
+                        Rect.makeXYWH(
+                                x + size / 2 - extent,
+                                y + size / 2 - extent,
+                                extent * 2,
+                                extent * 2),
+                        paint.reset().setAntiAlias(true).setShader(shader));
+                paint.reset();
             }
         }
     }
 
     static float deviceScale(Matrix33 matrix, float x, float y) {
         float[] m = matrix.getMat();
-        float w = m[6]*x + m[7]*y + m[8];
+        float w = m[6] * x + m[7] * y + m[8];
         if (Math.abs(w) < .0001f) return 1;
-        float nx = m[0]*x+m[1]*y+m[2], ny=m[3]*x+m[4]*y+m[5];
-        double dx = Math.hypot((m[0]*w-nx*m[6])/(w*w), (m[3]*w-ny*m[6])/(w*w));
-        double dy = Math.hypot((m[1]*w-nx*m[7])/(w*w), (m[4]*w-ny*m[7])/(w*w));
-        return Math.max(.01f, (float)Math.sqrt(dx*dy));
+        float nx = m[0] * x + m[1] * y + m[2], ny = m[3] * x + m[4] * y + m[5];
+        double dx = Math.hypot((m[0] * w - nx * m[6]) / (w * w), (m[3] * w - ny * m[6]) / (w * w));
+        double dy = Math.hypot((m[1] * w - nx * m[7]) / (w * w), (m[4] * w - ny * m[7]) / (w * w));
+        return Math.max(.01f, (float) Math.sqrt(dx * dy));
     }
-    private static float channel(int color, int shift) { return ((color >> shift) & 255) / 255f; }
-    void releaseFrameResources(){
-        end();filterPool.values().forEach(Surface::close);filterPool.clear();filterPixels=0;
-        maps.values().forEach(Image::close);maps.clear();mapPixels=0;frameWidth=frameHeight=0;
+
+    private static float channel(int color, int shift) {
+        return ((color >> shift) & 255) / 255f;
     }
-    @Override public void close() {
+
+    void releaseFrameResources() {
+        end();
+        filterPool.values().forEach(Surface::close);
+        filterPool.clear();
+        filterPixels = 0;
+        maps.values().forEach(Image::close);
+        maps.clear();
+        mapPixels = 0;
+        frameWidth = frameHeight = 0;
+    }
+
+    @Override
+    public void close() {
         corners.close();
-        end(); maps.values().forEach(Image::close); maps.clear();
-        filterPool.values().forEach(Surface::close);filterPool.clear();filterPixels=0;
-        paint.close(); surfaceEffect.close(); iconEffect.close();
+        end();
+        maps.values().forEach(Image::close);
+        maps.clear();
+        filterPool.values().forEach(Surface::close);
+        filterPool.clear();
+        filterPixels = 0;
+        paint.close();
+        surfaceEffect.close();
+        iconEffect.close();
     }
+
     static final class Backdrop implements AutoCloseable {
         Image sceneBlur;
         final Image image;
         final float originX, originY;
         final Map<BlurKey, Sample> blurImages = new LinkedHashMap<>();
-        Backdrop(Image value, float x, float y) { image = value; originX=x; originY=y; }
-        public void close() { blurImages.values().forEach(value->value.image.close()); blurImages.clear();if(sceneBlur!=null){sceneBlur.close();sceneBlur=null;} image.close(); }
-    }
-    private record Sample(Image image,float originX,float originY) {}
-    private record BlurKey(float sigma,int left,int top,int right,int bottom) {}
-    private record FilterSize(int width,int height) {}
-    private record MapKey(float width,float height,float radius,float borderWidth,float brightness,float opacity,float blur) {}
 
-    private static final String SURFACE_SHADER = """
+        Backdrop(Image value, float x, float y) {
+            image = value;
+            originX = x;
+            originY = y;
+        }
+
+        public void close() {
+            blurImages.values().forEach(value -> value.image.close());
+            blurImages.clear();
+            if (sceneBlur != null) {
+                sceneBlur.close();
+                sceneBlur = null;
+            }
+            image.close();
+        }
+    }
+
+    private record Sample(Image image, float originX, float originY) {}
+
+    private record BlurKey(float sigma, int left, int top, int right, int bottom) {}
+
+    private record FilterSize(int width, int height) {}
+
+    private record MapKey(
+            float width,
+            float height,
+            float radius,
+            float borderWidth,
+            float brightness,
+            float opacity,
+            float blur) {}
+
+    private static final String SURFACE_SHADER =
+            """
         uniform shader backdrop;
         uniform shader displacement;
         uniform float4 rect;
@@ -342,7 +633,8 @@ final class HubGlass implements AutoCloseable {
         }
         """;
 
-    private static final String ICON_SHADER = """
+    private static final String ICON_SHADER =
+            """
         uniform float2 center;
         uniform float size;
         uniform float radius;
