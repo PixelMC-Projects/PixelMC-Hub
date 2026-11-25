@@ -4,6 +4,10 @@ Copyright © 2026 zhan_cpu / PixelMC Projects. 本项目自有应用代码使用
 
 本原型使用 PixelMC Projects 已有素材，不包含服务器凭据或生产玩家记录。
 
+- 冬日手册页边插画由 OpenAI ImageGen 为本项目生成。雪松路标、冬日来信、睡狐和松枝提灯以透明 WebP 存放在 `public/assets/winter/`。 / The winter grove, letter, sleeping fox, and lantern illustrations were generated for this project with OpenAI ImageGen.
+
+- `public/assets/wenzhou-items/`：问舟 Web 配方示例中的原版物品纹理与方块模型缩略图取自本机 Minecraft Java Edition 1.20.1 客户端。原版美术归 Mojang / Microsoft 所有，项目的 Apache-2.0 许可不涵盖这些素材。
+
 - `public/assets/fortune-slip.png`、`fortune-barrel.png`、`collection-chest.png`：来自本地 DailyFortunes 项目的签笺及默认像素模型物品图。Copyright © 2026 zhan_cpu / PixelMC Projects，AGPL-3.0-only。
 - `src/fortunes.json`：DailyFortunes 六十签文案，同上。
 - `public/assets/server-logo.png`：用户提供的 PixelMC 服务器 Logo，原文件用于品牌展示；该品牌标识不因应用代码使用 Apache-2.0 而被重新授权。 / User-provided PixelMC server logo; the application license does not relicense this brand asset.
@@ -28,3 +32,11 @@ Artwork and fortune text are reused from the local PixelMC projects under their 
 - `minecraft/src/main/resources/assets/pixelmc_hub/` 下复用的图像、签文和 Lucide 图标沿用上文对应许可；素材清单记录来源与文件摘要。运行时玩家皮肤只读取游戏内已加载的纹理，不保存或发布玩家皮肤文件。Reused native assets keep their original licenses; runtime skin textures are not published with the project.
 
 Original application code is Apache-2.0. React Bits is Copyright © 2026 David Haz, under its separate MIT + Commons Clause terms; it is not relicensed here. GlassIcons and TiltedCard were adapted on 2026-11-03 for application motion preferences and accessibility state. These components form part of the player application and are not offered as a standalone component library. The static build includes notices and license copies under `licenses/`.
+
+冬日称号收藏匣的日景、夜景与八枚徽章图集使用内置 ImageGen 为本项目生成。
+冬日签笺页的雪窗签案日景和夜景由 OpenAI ImageGen 为本项目绘制。 / The day and night fortune-desk illustrations were generated for this project with OpenAI ImageGen.
+签笺页的线装日记底图、雪路驿亭木刻、寒梅挂轴和页尾的红绳折签亦由 OpenAI ImageGen 为本项目绘制。 / The bound journal spread, snowy post house woodcut, plum-blossom scroll, and red-thread folded fortune slip were also generated for this project with OpenAI ImageGen.
+夹在手记中的芦岸长签纸由 OpenAI ImageGen 为本项目绘制。 / The loose fortune slip with the winter reed-bank vignette was generated for this project with OpenAI ImageGen.
+冬日更新日志的雪窗印刷间插画由 OpenAI ImageGen 为本项目绘制。 / The snowy print workshop illustration for the winter changelog was generated for this project with OpenAI ImageGen.
+冬日排行榜的雪地日景与夜景由 OpenAI ImageGen 为本项目绘制。预览缺少皮肤时使用本站的像素头像与原创旅行冬装。 / The day and night awards grounds were generated for this project with OpenAI ImageGen. The preview fallback pairs the bundled avatar with an original winter travel outfit.
+旅程档案使用的折叠地图与指南针插画由 OpenAI ImageGen 为本项目绘制。 / The folded travel map and compass illustration was generated for this project with OpenAI ImageGen.

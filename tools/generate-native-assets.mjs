@@ -51,7 +51,7 @@ async function rasterizeIcon(exportName, strokeWidth, subdirectory = "") {
   await write(target, png);
   mapping.icons.push({ exportName, target, dimensions: [192, 192], viewBox: [0,0,24,24], strokeWidth, color: "white RGBA, transparent background", license: "ISC", sha256: hash(png) });
 }
-for (const exportName of iconNames) await rasterizeIcon(exportName, 1.65);
+for (const exportName of new Set([...iconNames, "ChevronUp", "ScrollText", "Inbox", "BookmarkCheck", "ArrowDown", "Clock3", "Utensils"])) await rasterizeIcon(exportName, 1.65);
 // Only title preset symbols use the web's explicit emblem/preview width overrides.
 const titleIconNames = [...sources[1].matchAll(/import\s*\{([^}]+)\}\s*from\s*["']lucide-react["']/g)].flatMap((match) => match[1].split(",").map((name) => name.trim()).filter(Boolean));
 for (const exportName of titleIconNames) {

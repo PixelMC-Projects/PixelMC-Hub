@@ -92,13 +92,13 @@ public final class HubClientGraphics {
         SKIN_WINDOW.set(true);
     }
 
-    public static void requestRankingSkins(java.util.Map<String, String> players) {
+    public static void requestPlayerSkins(java.util.Map<String, String> players) {
         if (players.isEmpty()) return;
         try {
             HubRankingSkins.request(players);
         } catch (RuntimeException unavailable) {
             LogUtils.getLogger()
-                    .debug("Leaderboard skins are temporarily unavailable", unavailable);
+                    .debug("Player skins are temporarily unavailable", unavailable);
         }
     }
 

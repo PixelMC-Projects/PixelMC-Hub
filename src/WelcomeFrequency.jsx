@@ -11,13 +11,13 @@ export function shouldShowWelcome(mode, { reducedMotion, seenThisLogin, seenBefo
   return true;
 }
 
-export default function WelcomeFrequency({ value, onChange, reducedMotion }) {
+export default function WelcomeFrequency({ value, onChange, reducedMotion, winter }) {
   const index = Math.max(0, welcomeModes.findIndex((mode) => mode.id === value));
   return (
     <div className="setting-row welcome-setting">
       <div className="welcome-setting-heading">
         <strong id="welcome-frequency-label">开屏动画</strong>
-        <span>手写 hello</span>
+        <span>{winter ? "驿站亮灯" : "手写 hello"}</span>
       </div>
       <div className="welcome-frequency" style={{ "--welcome-progress": `${index * 50}%` }}>
         <div className="welcome-range-track">

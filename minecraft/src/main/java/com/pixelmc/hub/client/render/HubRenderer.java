@@ -185,6 +185,7 @@ public final class HubRenderer implements AutoCloseable {
                                 () -> {
                                     skia();
                                     fonts();
+                                    draw.prepareWinterArt();
                                     warmStage++;
                                 });
                 case 4 ->
@@ -360,6 +361,7 @@ public final class HubRenderer implements AutoCloseable {
             targetMs = ms(phase);
             phase = System.nanoTime();
             draw.begin(canvas, surface);
+            draw.useThemeOverlay(themeTransition);
             if (blurGameScene) draw.blurGameScene(3f * scale);
             backdrop = ms(phase);
             phase = System.nanoTime();

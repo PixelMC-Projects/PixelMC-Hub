@@ -75,6 +75,28 @@ public final class ClientBootstrap {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof HubScreen) {
+            if (view != null
+                    && view.showingStation()
+                    && minecraft.player != null
+                    && minecraft.getConnection() != null
+                    && minecraft.player.tickCount % 10 == 0) {
+                var self = minecraft.player.getUUID();
+                view.setStationPlayers(
+                        minecraft.getConnection().getListedOnlinePlayers().stream()
+                                .map(net.minecraft.client.multiplayer.PlayerInfo::getProfile)
+                                .filter(player -> !self.equals(player.getId()))
+                                .map(
+                                        player ->
+                                                new HubView.StationPlayer(
+                                                        player.getId().toString(),
+                                                        player.getName()))
+                                .sorted(
+                                        java.util.Comparator.comparing(
+                                                        HubView.StationPlayer::name,
+                                                        String.CASE_INSENSITIVE_ORDER)
+                                                .thenComparing(HubView.StationPlayer::id))
+                                .toList());
+            }
             systemMotion.refresh();
             if (view != null) view.setSystemReducedMotion(systemMotion.reducedMotion());
         }
@@ -189,6 +211,7 @@ public final class ClientBootstrap {
         view.setSystemReducedMotion(systemMotion.reducedMotion());
         view.setCompact(prefs.compact());
         view.setDark(prefs.dark());
+        view.setWinter(prefs.winter());
         view.setPlayerName(
                 minecraft.player == null
                         ? minecraft.getUser().getName()
@@ -218,6 +241,7 @@ public final class ClientBootstrap {
         view.setSettings(prefs.welcomeMode(), prefs.reducedMotion());
         view.setCompact(prefs.compact());
         view.setDark(prefs.dark());
+        view.setWinter(prefs.winter());
         view.setSystemReducedMotion(systemMotion.reducedMotion());
         view.setPlayerName(minecraft.player.getGameProfile().getName());
         ClientHubSession.open(view);
@@ -229,6 +253,7 @@ public final class ClientBootstrap {
         prefs.setReducedMotion(current.localReducedMotion());
         prefs.setCompact(current.compact());
         prefs.setDark(current.dark());
+        prefs.setWinter(current.winter());
         prefs.save();
     }
 
@@ -267,6 +292,7 @@ public final class ClientBootstrap {
             view.setSettings(prefs.welcomeMode(), prefs.reducedMotion());
             view.setCompact(prefs.compact());
             view.setDark(prefs.dark());
+            view.setWinter(prefs.winter());
             if (shownThisLogin) prefs.markSeen(resolved);
             prefs.save();
         } catch (Exception invalid) {

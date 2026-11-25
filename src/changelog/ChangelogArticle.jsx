@@ -16,17 +16,17 @@ function DocumentNode({node}) {
 export function UpdateBody({ body = '', bodyDocument }) {
   return <div className="hub-update-body"><DocumentNode node={entryDocument({body,bodyDocument})}/></div>;
 }
-export default function ChangelogArticle({ entry, packName, children, bodySlot }) {
+export default function ChangelogArticle({ entry, packName, children, bodySlot, cover }) {
   if (!entry) return null;
   const art=categoryArt[entry.category] || categoryArt['功能更新'];
   return <article className="hub-update-article">
-    <header className="hub-update-cover">
+    {cover ?? <header className="hub-update-cover">
       <div className="hub-update-kicker"><span className="hub-update-version">{formatVersion(entry)}</span><span>{entry.category}</span>{entry.pinned && <span className="hub-update-pin"><Pin size={12}/>置顶</span>}</div>
       <span className="hub-update-art" data-category={entry.category} aria-hidden="true" style={{'--art-ink':art.color,'--art-wash':art.wash}}><span/><CategoryIcon category={entry.category} size={34}/></span>
       <h2>{entry.title || '填写更新标题'}</h2>
       {entry.summary && <p>{entry.summary}</p>}
       <div className="hub-update-meta"><span><CalendarDays size={13}/>{formatTime(entry.publishedAt)}</span><span>{entry.packName ? entry.packName+(entry.packVersion || '') : packName}</span></div>
-    </header>
+    </header>}
     <div className="hub-update-copy">{bodySlot ?? <UpdateBody body={entry.body} bodyDocument={entry.bodyDocument}/>}</div>
     {children}
   </article>;

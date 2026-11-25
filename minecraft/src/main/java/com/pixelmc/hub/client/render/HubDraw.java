@@ -65,10 +65,32 @@ public final class HubDraw implements AutoCloseable {
     private long layerPixels;
     private int rootWidth, rootHeight;
     private java.util.List<String> warmAssets;
+    private int winterAssetStart;
+    private WinterRouteArt winterArt;
+
+    void prepareWinterArt() {
+        if (winterArt == null) winterArt = new WinterRouteArt();
+    }
     private boolean dark, literalColors, supersampling;
     private final HubCorners corners = new HubCorners();
     private final HubShadowCache shadows = new HubShadowCache();
     private final Map<String, Surface> headLayers = new LinkedHashMap<>(8, .75f, true);
+
+    private static final WinterPaper WINTER_LIGHT = new WinterPaper(false);
+    private static final WinterPaper WINTER_DARK = new WinterPaper(true);
+    private boolean winter;
+
+    public boolean winter() {
+        return winter;
+    }
+
+    public void setWinter(boolean value) {
+        winter = value;
+    }
+
+    public WinterPaper winterPaper() {
+        return dark ? WINTER_DARK : WINTER_LIGHT;
+    }
 
     public void setDark(boolean value) {
         dark = value;
@@ -172,7 +194,24 @@ public final class HubDraw implements AutoCloseable {
         glass.begin(value, target);
     }
 
+    private HubThemeTransition themeOverlay;
+
+    void useThemeOverlay(HubThemeTransition overlay) {
+        themeOverlay = overlay;
+        if (overlay != null) overlay.beginFrame();
+    }
+
+    /** Keep an independently animated control visible above the outgoing theme snapshot. */
+    public void keepThemeControlLive(float x, float y, float w, float h, float radius) {
+        if (themeOverlay == null) return;
+        Matrix33 device = canvas.getLocalToDeviceAsMatrix33();
+        if (surfaceOriginX != 0 || surfaceOriginY != 0)
+            device = Matrix33.makeTranslate(surfaceOriginX, surfaceOriginY).makeConcat(device);
+        themeOverlay.excludeControl(device, x, y, w, h, radius);
+    }
+
     void end() {
+        themeOverlay = null;
         while (!alphaLayers.isEmpty()) restoreAlphaLayer();
         if (glass != null) glass.end();
         canvas = null;
@@ -1234,6 +1273,8 @@ public final class HubDraw implements AutoCloseable {
                 throw new IllegalStateException("Cannot read bundled public asset list", error);
             }
         }
+        winterAssetStart = names.size();
+        names.addAll(WinterRouteArt.ROUTES);
         warmAssets = java.util.List.copyOf(names);
         return warmAssets;
     }
@@ -1243,7 +1284,14 @@ public final class HubDraw implements AutoCloseable {
     }
 
     int warmAssetBatch(int start, int maximum) {
-        int end = Math.min(warmAssets().size(), start + maximum);
+        var assets = warmAssets();
+        if (start >= winterAssetStart) {
+            // Upload at most one prepared page image per idle frame. Never wait for the decoder.
+            if (start < assets.size() && winterArt != null && winterArt.ready(assets.get(start)))
+                image(assets.get(start), 8, 10, 24, 24, 1);
+            return Math.min(start + 1, assets.size());
+        }
+        int end = Math.min(winterAssetStart, start + maximum);
         for (int i = start; i < end; i++)
             image(
                     warmAssets().get(i),
@@ -1292,15 +1340,21 @@ public final class HubDraw implements AutoCloseable {
         return images.computeIfAbsent(
                 path,
                 name -> {
-                    try (InputStream stream = HubDraw.class.getResourceAsStream(ROOT + name)) {
-                        if (stream == null)
-                            throw new IllegalArgumentException("Missing Hub image: " + name);
-                        return Image.makeFromEncoded(stream.readAllBytes());
-                    } catch (IOException exception) {
-                        throw new IllegalStateException(
-                                "Cannot decode Hub image " + name, exception);
+                    if (winterArt != null && name.startsWith("images/winter/")) {
+                        Image prepared = winterArt.take(name);
+                        if (prepared != null) return prepared;
                     }
+                    return bundledImage(name);
                 });
+    }
+
+    static Image bundledImage(String name) {
+        try (InputStream stream = HubDraw.class.getResourceAsStream(ROOT + name)) {
+            if (stream == null) throw new IllegalArgumentException("Missing Hub image: " + name);
+            return Image.makeFromEncoded(stream.readAllBytes());
+        } catch (IOException exception) {
+            throw new IllegalStateException("Cannot decode Hub image " + name, exception);
+        }
     }
 
     public void image(String asset, float x, float y, float w, float h, float alpha) {
@@ -1492,6 +1546,7 @@ public final class HubDraw implements AutoCloseable {
         canvas = null;
         lines.values().forEach(TextLine::close);
         fonts.values().forEach(Font::close);
+        if (winterArt != null) winterArt.close();
         images.values().forEach(Image::close);
         iconTints.values().forEach(ColorFilter::close);
         iconTints.clear();

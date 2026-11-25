@@ -13,7 +13,8 @@ public final class HubRequestQueue {
             JsonObject payload,
             long epoch,
             long at,
-            boolean write) {}
+            boolean write,
+            boolean stationList) {}
 
     private final Map<Long, Ticket> active = new LinkedHashMap<>();
     private final Deque<Ticket> queued = new ArrayDeque<>();
@@ -38,7 +39,7 @@ public final class HubRequestQueue {
         queued.removeIf(t -> t.module.equals(module));
         writes.remove(module);
         epochs.merge(module, 1L, Long::sum);
-        latest.keySet().removeIf(k -> k.startsWith(module + ":"));
+        latest.keySet().removeIf(k -> k.startsWith(module + ":") || k.startsWith(module + "/"));
     }
 
     public boolean writing(String module) {
@@ -53,11 +54,37 @@ public final class HubRequestQueue {
     public void invalidateReads(String module) {
         if (writing(module)) throw new IllegalStateException("正在等待服务器确认");
         epochs.merge(module, 1L, Long::sum);
-        queued.removeIf(t -> !t.write && t.module.equals(module));
+        queued.removeIf(t -> !t.write && t.module.equals(module) && !receipt(t));
         latest.keySet().removeIf(k -> k.startsWith(module + ":"));
     }
 
     public void offer(String module, String action, JsonObject payload, long now) {
+        offer(module, action, payload, now, false);
+    }
+
+    public boolean readingStationNotices() {
+        return latest.containsKey("updates:stationNotices");
+    }
+
+    public boolean stationNoticeResponse(long id, String module, String action) {
+        Ticket ticket = active.get(id);
+        return ticket != null
+                && ticket.stationList
+                && ticket.module.equals(module)
+                && ticket.action.equals(action);
+    }
+
+    public void cancelStationNotices() {
+        queued.removeIf(Ticket::stationList);
+        latest.remove("updates:stationNotices");
+    }
+
+    public void offerStationNotices(JsonObject payload, long now) {
+        offer("updates", "list", payload, now, true);
+    }
+
+    private void offer(
+            String module, String action, JsonObject payload, long now, boolean stationList) {
         boolean write =
                 module.equals("community")
                         ? HubCommunityProtocol.write(action)
@@ -74,7 +101,7 @@ public final class HubRequestQueue {
                                                 ? HubProtocol.updatesPlain(action)
                                                 : action);
         if (write && writing(module)) throw new IllegalStateException("正在等待服务器确认");
-        String key = key(module, action, payload);
+        String key = key(module, action, payload, stationList);
         if (!write
                 && java.util.stream.Stream.concat(active.values().stream(), queued.stream())
                         .anyMatch(
@@ -82,14 +109,15 @@ public final class HubRequestQueue {
                                         current(t)
                                                 && t.module.equals(module)
                                                 && t.action.equals(action)
+                                                && t.stationList == stationList
                                                 && t.payload.equals(payload))) return;
-        queued.removeIf(t -> !t.write && key(t.module, t.action, t.payload).equals(key));
+        queued.removeIf(t -> !t.write && key(t).equals(key));
         if (queued.size() >= 16
                 && (!write || queued.stream().noneMatch(t -> t.module.equals(module) && !t.write)))
             throw new IllegalStateException("请求较多，请稍后重试");
         if (write) {
             epochs.merge(module, 1L, Long::sum);
-            queued.removeIf(t -> t.module.equals(module) && !t.write);
+            queued.removeIf(t -> t.module.equals(module) && !t.write && !receipt(t));
             latest.keySet().removeIf(k -> k.startsWith(module + ":"));
         }
         Ticket ticket =
@@ -100,7 +128,8 @@ public final class HubRequestQueue {
                         payload.deepCopy(),
                         epochs.getOrDefault(module, 0L),
                         now,
-                        write);
+                        write,
+                        stationList);
         latest.put(key, ticket.id);
         if (write) {
             writes.put(module, ticket.id);
@@ -125,26 +154,39 @@ public final class HubRequestQueue {
                             ticket.payload,
                             ticket.epoch,
                             now,
-                            ticket.write);
+                            ticket.write,
+                            ticket.stationList);
             active.put(sent.id, sent);
             result.add(sent);
         }
         return result;
     }
 
-    private static String key(String module, String action, JsonObject payload) {
+    private static boolean receipt(Ticket t) {
+        return HubProtocol.isUpdateReceipt(t.module, t.action);
+    }
+
+    private static String key(Ticket ticket) {
+        return key(ticket.module, ticket.action, ticket.payload, ticket.stationList);
+    }
+
+    private static String key(
+            String module, String action, JsonObject payload, boolean stationList) {
+        if (stationList) return "updates:stationNotices";
+        if (HubProtocol.isUpdateReceipt(module, action))
+            return module + "/" + action + "/" + payload.get("id");
         return module.equals("community") && !HubCommunityProtocol.write(action)
                 ? module + ":" + HubCommunityProtocol.stream(action, payload)
                 : module + ":" + action;
     }
 
     private boolean current(Ticket t) {
-        return t.epoch == epochs.getOrDefault(t.module, 0L)
-                && latest.getOrDefault(key(t.module, t.action, t.payload), 0L) == t.id;
+        return (receipt(t) || t.epoch == epochs.getOrDefault(t.module, 0L))
+                && latest.getOrDefault(key(t), 0L) == t.id;
     }
 
     private void forget(Ticket ticket) {
-        latest.remove(key(ticket.module, ticket.action, ticket.payload), ticket.id);
+        latest.remove(key(ticket), ticket.id);
     }
 
     public Ticket complete(long id, String module, String action) {

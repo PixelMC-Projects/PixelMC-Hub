@@ -114,12 +114,16 @@ This personal selection never changes a physical chest. Hub does not remotely dr
 - The monthly response contains metadata plus `updated`, `removed`, `total`, `unchanged` and `recordsHash`. Only changed/new archived records carry content; deleted dates are removed locally. The client verifies the reconstructed complete month before displaying/persisting the authoritative result. A mismatch with an existing cache triggers one full-month recovery. Empty/missing/corrupt cache on another computer sends an empty summary and receives every current record, regardless of whether that account downloaded them elsewhere.
 - Server-side history is authoritative. Client cache never changes visibility/ownership validation, never contains unread results, and logout never deletes persistent titles, fortune records or statistics.
 
+## Verification and handoff
+
+Each agent reports changed paths, contract deviations before implementation, appropriate build/test evidence, unresolved limitations and artifact paths. Do not commit/push unrelated pre-existing changes. Root coordinates Git and private change log. Do not claim successful local gameplay or production acceptance from builds/static checks.
+
 ## Changelog extension (0.3.0-dev, local candidate)
 
 Manager Forge 1.20.1 and its independent service provide `com.pixelmc.pixelmcmanager.api.PlayerHubUpdatesApi`, Java protocol 1, exposed to Hub as `updates`. Manager remains server-only. This feature requires the matching 0.7.0-dev Manager mod/service plus Hub 0.3.0-dev on client and server; it is not a port to other loaders. Existing Titles/Fortunes providers and the mobile administration routes retain their contracts.
 
 - Player identity comes only from the admitted Minecraft connection. The bridge RPC is `playerhub/playerHub` with `[authenticated UUID, action, payload]` and the same admission proof. No administrator operation or arbitrary identity is exposed. Both game bridge and service enforce admission and scope.
-- `snapshot {}` preloads settings, the first bounded pack page and 12 initial entry summaries once per login. Fields: `settings`, `packs`, `packsTotal`, `packsPage`, `packsHasMore`, `selectedPackId`, `list`, `revision`. The article and the player's own conversations load on demand. Cached content stays visible during ordinary refreshes; authoritative withdrawal/hiding/disable removes unavailable content. Logout clears connection data, drafts and pending responses, while the bounded disk-cache extension retains already-read data.
+- `snapshot {}` preloads settings, the first bounded pack page and 12 initial entry summaries once per login. Fields: `settings`, `packs`, `packsTotal`, `packsPage`, `packsHasMore`, `selectedPackId`, `list`, `revision`. Newer services include optional `stationNotices`, up to two summaries of published entries from the visible current pack by descending publication time. The closed or hidden current pack yields an empty array. Fields are `id`, `packId`, `packName`, `packVersion`, `updateVersion`, `title`, `summary`, `category` and `publishedAt`. Browsing the home page does not send a read receipt. When an older service omits this field, the client uses the current pack's authorized, pin-first list and reads the few additional pages needed to locate the first unpinned articles. These background requests share the existing rate limit and leave directory search, reading receipts and persistent caches alone. Only pages from the same pack and revision contribute to the result. Older services without a revision can supply a complete first-page result; when additional reads lack revision continuity or exceed the existing page limit, the home feed is unavailable until a consistent snapshot is available. The article and the player's own conversations load on demand. Cached content stays visible during ordinary refreshes; authoritative withdrawal/hiding/disable removes unavailable content. Logout clears connection data, drafts and pending responses, while the bounded disk-cache extension retains already-read data.
 - `packs {page}` returns `{rows,total,page,size:100,hasMore,revision}`. Extra pack pages are explicitly reachable; there is no silent first-page-only catalogue. `list {packId,page,search}` returns at most 12 published visible summaries, pinned first. Only packs from the authenticated instance can be read.
 - `read {id,commentsPage,replyPages?}` returns `{entry,comments,revision}`. Comments are paged by 12 and limited to this player's UUID; each thread returns 20 replies with total/page/hasMore. `replyPages` contains at most 12 comment IDs. An ID in this map does not grant access to someone else's thread.
 - `like {id,liked}` uses an explicit desired boolean. `comment {id,text,operationId}` is idempotent, bounded to the configured 50–2000 character limit and cooldown (defaults 500 and 10 seconds). `deleteComment {id,commentId}` deletes only the player's own thread. State is shown as committed only after a successful server response.
@@ -127,13 +131,13 @@ Manager Forge 1.20.1 and its independent service provide `com.pixelmc.pixelmcman
 - Plain request cap is 8192 UTF-8 bytes; the updates-only cache negotiation has its own bounded manifest cap. The updates response cap is 2 MiB; larger native replies use bounded connection/request-scoped packet fragments because Minecraft's single clientbound custom packet limit is 1 MiB. Other modules retain their 512 KiB cap. Oversized/malformed/stale responses fail clearly and never become a different session's data.
 - Restricted rich content supports paragraphs, heading level 3, bold text, bullet lists and line breaks. Arbitrary HTML, images and embeds are not accepted. Legacy Markdown is display-compatible. Native Skija performs the equivalent text layout without a browser or remote fonts.
 - Pack groups use stable instance plus full pack name, independent of ordinary world/archive replacement. A version change updates group metadata; entries keep their own short pack-name/version snapshots. A new full pack name starts a new group, with the preceding group hidden by default. Administrators can hide or restore any entire pack, including current, without deleting entries or interactions.
-- Manager owns `ph_settings`, `ph_packs`, `ph_instances`, `ph_entries`, `ph_likes`, `ph_comments`, `ph_replies`, `ph_operations` in existing unified storage. Existing global profiles and avatar cache are reused. Native-table manifests participate in complete backup/restore and global player deletion/recovery; no database credentials enter Hub.
+- Manager owns `ph_settings`, `ph_packs`, `ph_instances`, `ph_entries`, `ph_likes`, `ph_comments`, `ph_replies`, `ph_operations`, `ph_update_reads` in existing unified storage. Existing global profiles and avatar cache are reused. Native-table manifests participate in complete backup/restore and global player deletion/recovery; no database credentials enter Hub.
 
 The production Manager entry uses `/api/playerhub/*` with the existing authenticated session and CSRF boundary. Its Word-style editor reuses the player article presentation; prototype browser storage stays isolated. Entry deletion requires the exact persisted title and revision and removes its interactions. Archived pack history remains accessible to administrators regardless of player visibility.
 
 This is a local integration candidate, not a deployment or gameplay acceptance record. Build artifacts and isolated verification evidence are retained in the private integration handoff; do not treat automated rendering as full client compatibility acceptance.
 
-## Changelog persistent cache and scrolling
+## Changelog persistent-cache and scroll decision (2026-11-05)
 
 This user-approved extension supersedes the earlier updates-only session-cache decision. UI lists, comments and replies scroll continuously while the existing backend keeps bounded pages. A next-page read is driven by actual scroll/viewport demand, not an idle polling timer. Authority refreshes replace/reconcile their page; appending another page must not resurrect deleted rows or duplicate IDs. Preserve the visible reading anchor.
 
@@ -153,7 +157,13 @@ Both peers explicitly negotiate support. Old peers continue with full DTOs. Plai
 The persistent LRU spans at most 64 MiB and 256 query files. Connection memory retains at most 24 DTO query keys. An entry-scoped articleBase permits body reuse across comment/reply queries. Failed write reconstruction retries the identical action and operationId once; it never creates a second comment to repair a cache. Every accepted write and change hint invalidates pending read IO intents; purge also clears queued/in-flight update tickets. These checks are transport/cache safeguards, not an authorization substitute.
 
 
-## Client graphics warmup
+### Changelog visit and article receipts
+
+The login snapshot supplies `list.publication`, `list.seenThrough` and per-article `unread`. Manager's standard player directory stores the visit watermark for each server instance in `playerhub.updates_seen`. It stores the read edition for each article in `ph_update_reads`. The sidebar badge compares the two watermarks and clears on entry to the changelog through `markSectionSeen {publication}`.
+
+The article badge clears through `markEntrySeen {id,publication}` when that edition's selected body is visible in the native reader, including the default first article. Preloading the snapshot, requesting or receiving a body, and painting a hidden or transparent transition frame have no receipt side effects. Markers use the current authenticated player's identity and the visible publication version. Legacy snapshots without receipt fields continue to render with badges hidden. The Web preview reset operates on preview data.
+
+## Client graphics warmup (0.3.1-dev, 2026-11-05)
 
 Graphics preparation is independent of authenticated player-data preloading. Client render ticks perform a bounded sequence of startup stages after loading is ready: native library, isolated shared GL context, Skija, local fonts, representative GPU work and bundled image batches. Warmup uses its own small offscreen target, not the live Minecraft color attachment or a real HubView. It must not advance welcome settings, submit player requests or display preview data in a live session. An early open can complete the required resources through the normal guarded path.
 
@@ -175,9 +185,18 @@ Manager coalesces simultaneous viewer requests into authenticated batches of up 
 
 Manager 0.8.0-dev migrates three `ph_ranking_*` projection tables and advertises an 11-table PlayerHub storage manifest v2. Complete backup, empty-database restore and global player deletion/recovery include these tables. Deploy the matching Manager service and game bridge with the Hub candidate on both sides. The new FortuneBackend aggregate is bundled into Manager service, so this feature needs no extra standalone DailyFortunes installation step.
 
+Source checks and isolated SQL/HTTP/GPU checks cover this Forge target. Other loaders and real modpack acceptance remain separate.
 
 
-## Community profiles and journey memories
+## Community administration Web preview
+
+The isolated Manager preview now has player-card and per-pack memory editors. Its explicitly named administrator preview commands share local browser data with the Hub prototype. Records are scoped by known player UUID and, for memories, pack archive ID. Profile choices use owned acquisitions, and per-pack showcases retain the acquisition interval constraint.
+
+Player self commands still enforce ownership, archived original-note immutability and the supplement deletion deadline. Administrator preview commands can edit/delete historical originals and older supplements. They are separate entry points and carry revision checks. Tombstones prevent deleted content from returning through retries or default fixtures.
+
+This preview does not establish a production capability or authenticated administrator API. A production implementation must enforce administrator identity, CSRF, field allowlists and audit through the Manager administration boundary. It must retain the own-player provider restrictions and committed-change notification model.
+
+## Community profiles and journey memories, 2026-11-07
 
 Hub 0.5.0-dev uses the optional `community` provider `com.pixelmc.pixelmcmanager.api.PlayerHubCommunityApi`, protocol 1, capability `communityApi=1`. Manager 0.9.0-dev game bridge and independent service provide the implementation. Native live mode displays confirmed server records and explicit unavailable states. The formal Manager application uses authenticated administrator HTTP, with its preview adapters isolated from the production dependency graph.
 
@@ -189,8 +208,72 @@ Current original notes are owner-editable. Archived originals remain owner-read-
 
 Bounded pages contain 100 archive/options rows or 20 supplements. Native windows retain continuous nearby pages, scroll anchors and selected full objects. Per-query connection caches are limited to 48 entries and 8 MiB. Logout clears private cache and drafts. Server `communityRevision` changes generate subscribed connection-generation hints. The client refreshes open targets after committed hints, with deferred reads while hidden. No periodic full scan is added. Wire deltas remain ordered even when a UI response is stale.
 
+Community snapshots may include `sharedArchiveCounts`, a map of up to 128 authenticated online peer UUIDs to the number of public archive memberships they share with the viewer in the current Manager instance. The Manager uses one bounded database aggregate on the existing snapshot request. Clients display counts only for peers present in the game roster. A missing peer or field has no count. Session replacement clears the map, and existing community-change hints refresh newly admitted players. The winter roster renders the visible page's peer skins by UUID through the existing bounded Minecraft client skin cache, with the bundled default face when a skin is unavailable.
+
 Client-only `_hubViewRequestId` identifies each view request. It is retained in local queue metadata and removed before transmission. It is excluded from transport stream hashes. It never becomes a provider field. Failures retain the original query so expired or superseded targets cannot overwrite newer editors. Timeout, malformed response and queue/transport rejection terminate pending UI state.
 
 Manager registers PlayerHub native manifest v3 with 15 tables, adding four `ph_community_*` tables. Full registered backup/restore and player deletion/recovery include community data. Downgrading the v3 manifest through an old binary is rejected. Rollback requires the verified pre-upgrade database and matched old binaries, with newer writes retained separately for review.
 
 The detailed administrator routes, DTOs and migration contract are maintained in the Manager repository at `manager-service/docs/playerhub-community-api.md`. Archive cover metadata currently returns explicit default artwork, `arcs` with current `sage` or historical `mist`. Administrator pack-cover selection remains deferred.
+
+
+## 2026-11-07 existing-loader provider parity
+
+Manager 0.9.0-dev now carries the authenticated manager/updates/rankings/community Java provider boundaries on Forge 1.20.1, Fabric 1.20.1, Fabric 1.21.1 and NeoForge 1.21.1. The shared Java17 Service is packaged once. Historical sections above describe the original Forge implementation; they do not imply a new Hub renderer for these other loaders. Hub remains Forge 1.20.1, currently 0.5.1-dev.
+
+DailyFortunes 0.4.0-hub.3 carries its placement/gameplay and safe owner APIs on these same four targets. MemorialTitles 0.5.0-hub.2 existing ports already matched the core contracts and have been freshly built and checked. Private operations continue using connection UUID; public community reads explicitly select known members, and admin/trusted-server methods remain separate. Service-side fortune selection uses the caller transaction and archived/ownership/time filters, never receipt tokens.
+
+Fabric 26.1.2 and 26.2 were explicitly excluded. Fabric food-book integration currently has no verified source adapter and returns unsupported/unavailable; NeoForge food integration remains runtime-probed and needs the actual provider combination validated. Neither missing source nor failed acquisition becomes a fake zero ranking.
+
+Local builds, isolated SQL/protocol tests and artifact checks passed. Minecraft client/server startup, cross-loader gameplay and production deployment were not performed. No GitHub operations were performed in this round; the user delegated that work to a separate chat.
+
+## 问舟的服务端只读查询（Forge 1.20.1 本地候选）
+
+可信的服务端调用方使用 `WenzhouReadTools.query(server, mode, kind, id, page)` 获取异步 JSON 结果。只接受下表的操作与字段，不解析系统命令或任意 Minecraft 命令。游戏内管理员可用同名 Brigadier 命令验证。正式模型适配器应直接调用该方法，不能给模型 OP 或 RCON 权限。问舟 Web 预览仍使用本地示例。
+
+| 查询 | 读取范围 |
+| --- | --- |
+| `wenzhou mod recipe <配方ID>` | 将原版或所属模组 JAR 的配方与已选数据包资源、当前 RecipeManager 条目核对。确认差异只返回 `modified` 提示与下一条只读查询，不携带默认配方或生效配方。未生效、来源不明和含标签的未核实状态各有提示。 |
+| `wenzhou live recipe <配方ID>` | 读取当前配方。原版有序、无序、四类烹饪和切石配方返回受支持的材料、形状、数量、产物 NBT 与加工条件。其他工序仅确认注册状态和序列化器，返回 `partial`。 |
+| `wenzhou live tag <物品标签ID> [页码]` | 读取当前绑定的标签成员，每页 32 项并报告总数。 |
+
+ID 为完整资源标识，如 `minecraft:torch`。配方 ID 与产物 ID 不能通用。资源重载后重新查当前对象。检测结果只适用于本次所查配方字段，未覆盖的机器、脚本事件、配置和 class 注入不声明为已核实。
+
+
+数据包文件可能在上次加载后被编辑。仅发现文件定义不同返回 `resource_difference`；`modified` 表示已经与运行时配方核实的字段差异。
+
+### 本轮 Forge 候选（2026-11-21）
+
+Hub 0.5.5-dev 与问舟 0.1.21-dev 是本地候选。更新日志入口发布状态在登录时预取；入口已读和单篇已读是不同状态。进入列表确认入口已读，正文显示后才确认对应篇已读；普通预取正文不确认单篇已读。资料和旅程等嵌套视图按 Esc 逐层返回。问舟以 Manager 全局玩家字段 `intro_seen` 保存首次引导状态，协议回执仍单独校验。候选和源码检查不等于生产部署或玩家实际验收。
+
+问舟方块引用只先提供身份和坐标，字段和库存由 `list_block_fields` / `read_block_field` 按需、有界分页读取；每次重新检查实际玩家及目标的适用领地和锁。明确拒绝时停止本轮方块工具查询并告知原因，不将未读或不支持的数据当作空库存。支持范围以问舟 README 为准，不能推及其他加载器或任意容器。
+
+### 问舟单人 Forge 试用（历史记录）
+
+以下是早期试用的历史设计，不描述当前版本的持久化、模型配置或权限行为；当前用法以问舟 README 与 DEPLOYMENT 为准。
+
+仅显式设置 `-Dpixelmc.hub.wenzhouTrial=true` 的本机单人世界主人可使用 `/wenzhou ask <问题>`、`/wenzhou new` 与 `/wenzhou usage`。专用服务器和局域网访客没有试用入口。本模式独立于正式多人准入，没有注册 Hub 玩家网络操作或 Manager 管理操作。
+
+问舟统一开启思考，初次提问、工具续答与后续追问都显式传 `reasoning_effort: "medium"`。当前 DeepSeek Flash 将其映射到 `high`，即三个有效强度的中档。未来由 Manager「问舟AI → 服务管理」的服务端配置控制全服默认强度，玩家端不指定。
+
+真实模型固定连接 DeepSeek 官方 Chat Completions，测试凭据由本次进程的 `PIXELMC_WENZHOU_TRIAL_KEY` 提供。玩家发问才发送本对话的提问、必要的游戏查询结果和模型续答字段。会话仅在内存中保存，重置或退出后清空；Minecraft 本身可能记录游戏聊天。工具按完整配方 ID 读取，还可用 `live/recipes_for_item` 按产物 ID 分页查询当前已加载、声明固定产物的配方。动态产物、交互获取和未适配机器保留未知状态。
+
+复杂问题提供只读命令工具 `run_read_command`，与管理侧隔离测试命令 `/wenzhou read <命令>` 共用执行器。普通配方查询返回 `partial` 时，本次调用自动执行 `recipe-json <配方ID>`，同时报告可读取的当前实例材料、产物和枚举字段，以及最高优先级数据包定义。模型可以用 `classes <modid> <关键词> [页]` 和 `javap <modid> <类全名> [方法或 -] [页]` 查指定已安装模组 JAR 中任意包的类。类名按 Java 二进制名称验证，读取前核对该 `.class` 条目确实存在于所选 JAR；无需为每个模组或包登记放行词。命令执行器仅解析这三种语法，游戏数据与包内代码分别标明来源，JRE 缺少 javap 时明确返回不可用。
+
+每题最多 8 次模型请求，包括整理回答。若持续查阅，第 8 次携带已完成的工具结果并指定 `tool_choice: none`。单批超过 12 项时，仅执行前 12 项，其余明确标为未执行，下一次请求收尾。可提前回答。试用包按每次 API 回执累计估算成本，尚未设置人民币费用上限。
+
+工具仅由结构化 `tool_calls` 调度。正文混入 DeepSeek 的 DSML 工具标记时，整段正文作废。已配对的工具结果保留。尚有请求额度时，每题最多纠正一次这种格式错误；已有本轮查询记录时直接要求模型据此作答。收尾仍无有效回答时显示未完成提示。纠正请求计入同一上限与累计用量。
+
+用量按当前会话累计。每次模型返回用量即纳入统计，工具续答与追问保留累计值，`new` 清零。缓存命中率按总输入计算；思考属于输出。每次请求按开始时刻的 Flash 公示单价估算人民币费用，缺失回执或时段费率时标明。Hub 与 Manager 的 Web 预览共享按请求保存的演示用量，旧会话缺少用量的部分标为未记录。断线、失败或被重置的请求不会写入下一轮上下文。
+
+### 问舟邀请内测的早期接入约定（历史记录）
+
+以下为早期计划，不代表当前实现缺失；当前签署、查阅、清理和服务设置以问舟源码及其部署文档为准。
+
+- **准入。** 唯一管理员 zcpu 在 Manager 按服务器和玩家 UUID 授权或撤权。游戏服务端从已鉴权的当前连接取身份，只向 Hub 返回本人的准入状态。未授权、未确认或 Manager 不可用时均隐藏入口。直接访问、发送、继续生成与读取历史也须在服务端检查。协议回执独立按玩家和已发布的协议版本校验。Manager 的展示开关同时控制开屏协议和输入栏下方的协议链接；Web 模拟问答可在关闭时直接进入，隐藏不产生同意回执、第三方传输授权或研发授权。正式接入 DeepSeek 时，展示开关不能代替个人信息发送所需的有效授权。
+- **授权变化。** Manager 提交变更后通知对应会话。撤权后移除入口，关闭正在打开的问舟并终止后续工具调用、模型发送与结果推送，旧异步响应不得恢复内容。Manager 与 Hub 的同源 Web 预览共享授权状态。 获得授权时，打开中的手册在状态确认后播放问舟入口的入场动画。开启减少动态效果时立即显示。
+- **会话正文。** 每条输入和输出以自身的服务端创建时间为起点，最长保存 30 天。续聊、查阅、玩家从列表移除均不延长旧消息期限。到期数据应自动清理并退出历史、管理查询和模型上下文，关联的摘要、工具结果等也要避免留存或还原过期正文。依法应提前删除的按规定处理。正式接入前确认数据库备份是否含正文、备份轮换和恢复后排除已到期或已删除内容的办法。30 天指本服普通正文，第三方处理按实际 API 协议核对。
+- **模型请求。** 仅选取本题所需的问题、相关前文、游戏资料及工具描述和结果。发送前按允许字段取值，排除游戏身份关联字段（如玩家 UUID）、凭据、整段服务器日志、无关玩家或会话数据。管理查阅工具与记录不得提供给模型。
+- **管理查阅。** 将查阅权绑定到唯一经鉴权的运营者账号。zcpu 可主动发起防滥用抽查，也可为具体故障、玩家报错或申诉核查保留期内的会话，按需查看相关内容。玩家历史和全服会话均可直接打开。每次记录操作者、时间和对象，不收集打开事由，不复制正文。「已授权问答优化」仅筛选符合授权条件的会话。向其他玩家公开原文须另行征得同意。
+- **回顾原文改进问舟。** 玩家可自愿授权服主复盘错误回答、改进本服玩法查询。此选项默认关闭，独立于内测准入和基本协议。Manager 的研发列表和详情均由服务端筛选，只允许当前已授权、在本次授权生效后新产生且仍在普通保留期内的问答。引用的前文也应符合相同条件。撤回即停止研发查阅，再次授权从新的生效时间起算。服务端记录协议版本、授权或撤回及生效时间，研发授权不延长正文保留期。
+- **内测对象。** 邀请不替代监护人同意。如有不满十四周岁的玩家，在满足监护人同意及专门处理规则前不予开通。现阶段不为年龄确认新增身份证件采集。

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 175" fill="none" stroke="#26473e" stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <path id="stem" d="M0 0v-32m-8 8 8 8 8-8m-12-4 4 4 4-4"/>
+    <g id="crystal" stroke-width="1.8">
+      <use href="#stem"/><use href="#stem" transform="rotate(60)"/><use href="#stem" transform="rotate(120)"/>
+      <use href="#stem" transform="rotate(180)"/><use href="#stem" transform="rotate(240)"/><use href="#stem" transform="rotate(300)"/>
+      <path d="m0-8 7 4v8l-7 4-7-4v-8Z"/>
+    </g>
+  </defs>
+  <use href="#crystal" transform="translate(60 98) rotate(13) scale(1.42)"/>
+  <use href="#crystal" transform="translate(136 39) rotate(-6) scale(.75)"/>
+  <use href="#crystal" transform="translate(147 142) rotate(28) scale(.4)"/>
+  <g fill="#26473e" stroke="none"><circle cx="29" cy="42" r="2"/><circle cx="95" cy="25" r="1.5"/><circle cx="112" cy="103" r="1.6"/><circle cx="81" cy="161" r="1.2"/><circle cx="170" cy="79" r="1.4"/></g>
+</svg>

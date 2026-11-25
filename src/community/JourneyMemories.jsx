@@ -7,7 +7,7 @@ import MemoryCollections from './MemoryCollections.jsx';
 import './community.css';
 import MemoryCover from './MemoryCover.jsx';
 
-export function JourneyMemories({ player = SELF_PROFILE, initialArchiveId, onBack, onOpenProfile, reduceMotion = false, notify }) {
+export function JourneyMemories({ player = SELF_PROFILE, initialArchiveId, onBack, onOpenProfile, reduceMotion = false, notify, winter = false }) {
   const archives = MEMORY_ARCHIVES.filter(item => player.memoryIds?.includes(item.id));
   const [selectedId, setSelectedId] = useState(() => initialArchiveId || archives[0]?.id);
   const detailRef = useRef(null);
@@ -22,13 +22,14 @@ export function JourneyMemories({ player = SELF_PROFILE, initialArchiveId, onBac
       <div className="page-heading memories-heading">
         <div className="memories-heading-main">
           {onBack && <button type="button" className="community-back" aria-label="返回个人主页" onClick={onBack}><ArrowLeft size={20} /></button>}
-          <div><h1>整合包纪念</h1><p>{player.isSelf ? '我的旅途' : `${player.name} 的旅途`} · Web 演示</p></div>
+          <div><h1>{winter ? '旅程档案' : '整合包纪念'}</h1><p>{player.isSelf ? '我的旅途' : `${player.name} 的旅途`} · Web 演示</p></div>
         </div>
         {onOpenProfile && <button type="button" className="community-button subtle" onClick={() => onOpenProfile(player)}>查看资料<ArrowUpRight size={14} /></button>}
       </div>
 
       <div className="memories-layout">
         <nav className="memories-archive-list" aria-label="选择整合包纪念">
+          {winter && <div className="memory-shelf-heading"><strong>存档索引</strong><span>{archives.length} 本</span></div>}
           {archives.map(archive => (
             <button key={archive.id} type="button" className={`memory-archive-option ${selected?.id === archive.id ? 'is-selected' : ''}`}
               data-profile-theme={archive.theme} aria-current={selected?.id === archive.id ? 'true' : undefined}
@@ -51,7 +52,7 @@ export function JourneyMemories({ player = SELF_PROFILE, initialArchiveId, onBac
 
                 <MemoryNote key={`note:${player.playerId}/${selected.id}`} player={player} archive={selected} reduceMotion={reduceMotion} notify={notify} />
 
-                <MemoryCollections key={`collections:${player.playerId}/${selected.id}`} player={player} archive={selected} reduceMotion={reduceMotion} notify={notify} />
+                <MemoryCollections key={`collections:${player.playerId}/${selected.id}`} player={player} archive={selected} reduceMotion={reduceMotion} notify={notify} winter={winter} />
 
                 <div className="memory-milestone"><MapPin size={14} /><time>{selected.moment}</time><span>{selected.momentText}</span></div>
                 <p className="memory-demo-note">此页展示虚构整合包归档与回忆样例</p>

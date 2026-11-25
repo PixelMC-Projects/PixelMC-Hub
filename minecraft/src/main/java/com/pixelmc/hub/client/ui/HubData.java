@@ -351,6 +351,11 @@ final class HubData {
         return o.has(key) && o.get(key).isJsonObject() ? o.getAsJsonObject(key) : new JsonObject();
     }
 
+    static JsonObject communityProfile(JsonObject response) {
+        JsonObject profile = object(response, "profile");
+        return profile.size() == 0 && response.has("playerId") ? response : profile;
+    }
+
     void manager(JsonObject root) {
         JsonObject p = object(root, "player"), s = object(root, "scope");
         playerUuid = string(p, "uuid", "");

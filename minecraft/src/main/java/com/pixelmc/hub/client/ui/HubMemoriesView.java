@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.pixelmc.hub.client.render.HubDraw;
+import com.pixelmc.hub.client.render.WinterPaper;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -33,7 +34,7 @@ public final class HubMemoriesView {
 
         void request(String action, JsonObject payload);
 
-        void feedback(String message);
+        void feedback(String message, boolean error);
 
         void focus(String id);
 
@@ -42,9 +43,10 @@ public final class HubMemoriesView {
         void openProfile(String playerId);
     }
 
-    private static final float X = 236, WIDTH = 996, TOP = 166, HEIGHT = 658;
-    private static final float LIST_WIDTH = 249, GAP = 22, READER_X = X + LIST_WIDTH + GAP;
-    private static final float READER_WIDTH = WIDTH - LIST_WIDTH - GAP;
+    private float layoutLeft = 236, layoutWidth = 996, archiveColumnWidth = 249;
+    private float readerX = 507, readerWidth = 725, frameTop = 166, viewportHeight = 658;
+    private float shelfTop = 166, archiveStep = 153;
+
     private static final long DELETE_WINDOW = 86_400_000L;
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter TIME =
@@ -61,7 +63,7 @@ public final class HubMemoriesView {
     private final LinkedHashMap<ParagraphKey, Paragraph> paragraphs =
             new LinkedHashMap<>(64, .75f, true);
     private int paragraphWeight;
-    private float hitTop = TOP, hitBottom = TOP + HEIGHT, inputTop, inputBottom;
+    private float hitTop = frameTop, hitBottom = frameTop + viewportHeight, inputTop, inputBottom;
     private boolean editorHitEnabled = true;
     private long noteModeAt;
     private final HubMotion.Transition collectionOpacity = new HubMotion.Transition();
@@ -109,6 +111,7 @@ public final class HubMemoriesView {
     private Box inputBox;
     private boolean draggingInput;
     private HubDraw d, editorDraw;
+    private WinterPaper paper;
     private long now, receivedNanos, serverTime, selectedAt;
     private String pendingAnchor;
     private float pendingAnchorOffset;
@@ -359,7 +362,7 @@ public final class HubMemoriesView {
             receivedNanos = System.nanoTime();
         }
         if (action.equals("memories")) {
-            ListAnchor anchor = listAnchor(archives, archiveScroll, 153, "id");
+            ListAnchor anchor = listAnchor(archives, archiveScroll, archiveStep, "id");
             int page = integer(response, "page", Math.max(0, archiveLoadingPage));
             String revision = string(response, "revision", "");
             if (!archiveRevision.isEmpty() && !revision.equals(archiveRevision))
@@ -369,7 +372,7 @@ public final class HubMemoriesView {
             putPage(archivePages, page, objects(response, "archives"));
             archives = flatten(archivePages);
             archivesTotal = integer(response, "total", archives.size());
-            archiveScroll = restoreListAnchor(archives, anchor, archiveScroll, 153, "id");
+            archiveScroll = restoreListAnchor(archives, anchor, archiveScroll, archiveStep, "id");
             loaded = true;
             status = "";
             self = bool(response, "isSelf", self);
@@ -486,7 +489,8 @@ public final class HubMemoriesView {
                             ? "补记已删除"
                             : action.equals("appendSupplement")
                                     ? "补记已保存"
-                                    : action.equals("saveCollections") ? "纪念选择已保存" : "回忆已保存");
+                                    : action.equals("saveCollections") ? "纪念选择已保存" : "回忆已保存",
+                    false);
         } else if (archiveId.equals(editArchive)) {
             if (editingNote
                     && !archived()
@@ -510,6 +514,11 @@ public final class HubMemoriesView {
         if (!owner.equals(playerId)) return;
         String safeMessage = message == null || message.isBlank() ? "读取未完成，请稍后重试。" : message;
         boolean sessionEnded = safeMessage.contains("会话已失效");
+        boolean failedWrite =
+                saving
+                        && action.equals(pendingAction)
+                        && string(request, "archiveId", pendingArchive).equals(pendingArchive);
+        if (failedWrite) host.feedback(safeMessage, true);
         if (sessionEnded || safeMessage.equals("资料不存在或不可见")) {
             String id = string(request, "archiveId", selectedId);
             Detail target = details.get(id);
@@ -596,6 +605,16 @@ public final class HubMemoriesView {
         boolean previousColors = draw.literalColors(true);
         try {
             d = draw;
+            paper = draw.winter() ? draw.winterPaper() : null;
+            layoutLeft = paper == null ? 236 : 215;
+            layoutWidth = paper == null ? 996 : 1016;
+            archiveColumnWidth = paper == null ? 249 : 257;
+            frameTop = paper == null ? 166 : 175;
+            viewportHeight = paper == null ? 658 : 646;
+            shelfTop = frameTop + (paper == null ? 0 : 45.9f);
+            archiveStep = paper == null ? 153 : 103;
+            readerX = layoutLeft + archiveColumnWidth + (paper == null ? 22 : 0);
+            readerWidth = layoutLeft + layoutWidth - readerX - (paper == null ? 0 : 6);
             mx = mouseX;
             my = mouseY;
             focused = focus == null ? "" : focus;
@@ -606,8 +625,8 @@ public final class HubMemoriesView {
             rails.clear();
             candidateBoxes.clear();
             inputBox = null;
-            hitTop = TOP;
-            hitBottom = TOP + HEIGHT;
+            hitTop = frameTop;
+            hitBottom = frameTop + viewportHeight;
             editorHitEnabled = true;
             if (editorDraw != draw) {
                 editorDraw = draw;
@@ -617,12 +636,12 @@ public final class HubMemoriesView {
             }
             drawHeader();
             if (!loaded) {
-                empty(X, TOP, WIDTH, HEIGHT, status.isBlank() ? "旅途资料暂不可用" : status);
+                empty(layoutLeft, frameTop, layoutWidth, viewportHeight, status.isBlank() ? "旅途资料暂不可用" : status);
                 button(
                         "memories-retry",
                         "重新读取",
-                        X + WIDTH / 2 - 54,
-                        TOP + HEIGHT / 2 + 35,
+                        layoutLeft + layoutWidth / 2 - 54,
+                        frameTop + viewportHeight / 2 + 35,
                         108,
                         32,
                         this::refresh,
@@ -631,50 +650,72 @@ public final class HubMemoriesView {
                 d = null;
                 return;
             }
+            if (paper != null) {
+                d.roundRect(layoutLeft, frameTop - 3, layoutWidth, viewportHeight + 12, 19, paper.ruling());
+                d.roundRect(layoutLeft, frameTop - 6, layoutWidth, viewportHeight + 12, 19, paper.coverBase());
+                d.strokeRoundRect(
+                        layoutLeft, frameTop - 6, layoutWidth, viewportHeight + 12, 19, 1, paper.stitch());
+                d.line(
+                        readerX - .5f,
+                        frameTop,
+                        readerX - .5f,
+                        frameTop + viewportHeight,
+                        1,
+                        paper.stitch());
+                d.save();
+                d.clipRoundRect(layoutLeft + 5, frameTop, layoutWidth - 10, viewportHeight, 14);
+            }
             drawArchiveList();
             drawReader();
+            if (paper != null) d.restore();
             d = null;
         } finally {
             draw.literalColors(previousColors);
             d = null;
+            paper = null;
         }
     }
 
     private int ink() {
-        return dark ? 0xffe0e3f3 : 0xff34415f;
+        return paper == null ? dark ? 0xffe0e3f3 : 0xff34415f : paper.ink();
     }
 
     private int muted() {
-        return dark ? 0xff9ca6c1 : 0xff77819a;
+        return paper == null ? dark ? 0xff9ca6c1 : 0xff77819a : paper.muted();
     }
 
     private int accent() {
-        return dark ? 0xffb2a1e4 : 0xff7861b2;
+        return paper == null ? dark ? 0xffb2a1e4 : 0xff7861b2 : paper.pine();
     }
 
     private int border() {
-        return dark ? 0x288791b7 : 0xffdce1ee;
+        return paper == null ? dark ? 0x288791b7 : 0xffdce1ee : paper.ruling();
     }
 
     private int surface() {
-        return dark ? 0xcf282c40 : 0xb8ffffff;
+        return paper == null ? dark ? 0xcf282c40 : 0xb8ffffff : paper.sheet();
     }
 
     private int soft() {
-        return dark ? 0x8c38374e : 0xfff0eff8;
+        return paper == null ? dark ? 0x8c38374e : 0xfff0eff8 : paper.soft();
     }
 
     private void drawHeader() {
-        d.roundRect(X, 91, 35, 35, 11, surface());
-        d.strokeRoundRect(X, 91, 35, 35, 11, 1, border());
-        d.icon("arrow-left", X + 7.5f, 98.5f, 20, muted());
-        host.hit("memories-back", "返回个人主页", X, 91, 35, 35, host::back);
-        d.text("整合包纪念", X + 47, 110, 25, ink(), 700);
-        d.text(self ? "我的旅途" : playerName + " 的旅途", X + 47, 137, 12, muted(), 400);
+        float backY = paper == null ? 91 : 96;
+        d.roundRect(layoutLeft, backY, 35, 35, 11, surface());
+        d.strokeRoundRect(layoutLeft, backY, 35, 35, 11, 1, border());
+        d.icon("arrow-left", layoutLeft + 7.5f, backY + 7.5f, 20, muted());
+        host.hit("memories-back", paper != null ? "返回上一页" : "返回个人主页", layoutLeft, backY, 35, 35, host::back);
+        if (paper != null) {
+            d.textSerif("旅程档案", layoutLeft + 47, 110, 25, ink(), 700);
+            float artX = layoutLeft + layoutWidth - (loaded && !status.isBlank() ? 405 : 288);
+            HubWinterSheet.illustration(d, "travel-map", artX, 81, 170, 67, 1);
+        } else d.text("整合包纪念", layoutLeft + 47, 110, 25, ink(), 700);
+        d.text(self ? "我的旅途" : playerName + " 的旅途", layoutLeft + 47, 137, 12, muted(), 400);
         button(
                 "memories-profile",
                 "查看资料",
-                X + WIDTH - 94,
+                layoutLeft + layoutWidth - 94,
                 96,
                 94,
                 30,
@@ -683,11 +724,11 @@ public final class HubMemoriesView {
                 true,
                 "arrow-up-right");
         if (loaded && !status.isBlank()) {
-            d.text(fit(status, 270, 10, 400), X + 47, 155, 10, dark ? 0xffe4a0ac : 0xffad6372, 400);
+            d.text(fit(status, 270, 10, 400), layoutLeft + 47, 155, 10, dark ? 0xffe4a0ac : 0xffad6372, 400);
             button(
                     "memories-refresh-retry",
                     "重新读取",
-                    X + WIDTH - 200,
+                    layoutLeft + layoutWidth - 200,
                     96,
                     94,
                     30,
@@ -698,37 +739,57 @@ public final class HubMemoriesView {
     }
 
     private void drawArchiveList() {
-        float cardWidth = LIST_WIDTH - 8, cardHeight = 140, step = cardHeight + 13;
-        archiveContentHeight = Math.max(0, archives.size() * step - 13 + 9);
-        archiveScroll = clamp(archiveScroll, 0, Math.max(0, archiveContentHeight - HEIGHT));
+        boolean bound = paper != null;
+        float cardWidth = archiveColumnWidth - (bound ? 21 : 8);
+        float cardHeight = bound ? 95 : 140, coverHeight = bound ? 43 : 72;
+        float viewHeight = frameTop + viewportHeight - shelfTop;
+        archiveContentHeight = Math.max(0, archives.size() * archiveStep - (bound ? 8 : 13) + 9);
+        archiveScroll = clamp(archiveScroll, 0, Math.max(0, archiveContentHeight - viewHeight));
+        if (bound) {
+            d.textSerif("存档索引", layoutLeft + 12, frameTop + 23, 14, accent(), 650);
+            right(archivesTotal + " 本", layoutLeft + archiveColumnWidth - 8, frameTop + 22, 10, accent(), 400);
+            d.line(layoutLeft + 10, shelfTop - 8, layoutLeft + archiveColumnWidth - 10, shelfTop - 8, 1, paper.stitch());
+        }
         d.save();
-        d.clipRoundRect(X, TOP, LIST_WIDTH, HEIGHT, 0);
+        d.clipRoundRect(layoutLeft, shelfTop, archiveColumnWidth, viewHeight, 0);
         for (int index = 0; index < archives.size(); index++) {
             JsonObject archive = archives.get(index);
             String id = string(archive, "id", "");
-            float x = X + 4, y = TOP + 3 + index * step - archiveScroll;
-            if (y + cardHeight < TOP || y > TOP + HEIGHT) continue;
+            float x = layoutLeft + (bound ? 11 : 4), y = shelfTop + (bound ? 0 : 3) + index * archiveStep - archiveScroll;
+            if (y + cardHeight < shelfTop || y > frameTop + viewportHeight) continue;
             boolean selected = id.equals(selectedId);
-            d.boxShadow(
-                    x,
-                    y,
-                    cardWidth,
-                    cardHeight,
-                    17,
-                    0,
-                    5,
-                    selected ? 16 : 14,
-                    0,
-                    dark ? 0x2b090b18 : 0x12526184);
-            d.roundRect(x, y, cardWidth, cardHeight, 17, surface());
+            float radius = bound ? 11 : 17;
+            if (!bound)
+                d.boxShadow(
+                        x,
+                        y,
+                        cardWidth,
+                        cardHeight,
+                        radius,
+                        0,
+                        5,
+                        selected ? 16 : 14,
+                        0,
+                        paper == null ? dark ? 0x2b090b18 : 0x12526184 : 0x12172c25);
+            d.roundRect(x, y, cardWidth, cardHeight, radius, surface());
             d.save();
-            d.clipRoundRect(x, y, cardWidth, cardHeight, 17);
+            d.clipRoundRect(x, y, cardWidth, cardHeight, radius);
+            if (paper != null) {
+                if (selected)
+                    d.rect(x, y + coverHeight, cardWidth, cardHeight - coverHeight, soft());
+                d.rect(
+                        x,
+                        y + coverHeight,
+                        3,
+                        cardHeight - coverHeight,
+                        selected ? accent() : paper.stitch());
+            }
             artwork.draw(
                     d,
                     x,
                     y,
                     cardWidth,
-                    72,
+                    coverHeight,
                     string(archive, "coverPattern", "arcs"),
                     string(archive, "coverColor", string(archive, "theme", "mist")),
                     true,
@@ -740,8 +801,16 @@ public final class HubMemoriesView {
                     10,
                     dark ? 0xffb9c5d8 : 0xff50606d,
                     400);
-            if (selected) d.icon("check", x + 14, y + 48, 14, accent());
-            float labelY = y + 96;
+            if (selected && bound)
+                d.circle(x + cardWidth - 14, y + coverHeight - 13, 9, paper.sheet());
+            if (selected)
+                d.icon(
+                        "check",
+                        bound ? x + cardWidth - 21 : x + 14,
+                        bound ? y + coverHeight - 20 : y + 48,
+                        14,
+                        accent());
+            float labelY = y + coverHeight + (bound ? 19 : 24);
             String name = string(archive, "name", "整合包");
             String fitted = fit(name, cardWidth - 75, 14, 650);
             d.text(fitted, x + 14, labelY, 14, ink(), 650);
@@ -755,22 +824,31 @@ public final class HubMemoriesView {
             d.text(
                     fit(period(archive), cardWidth - 28, 10, 400),
                     x + 14,
-                    labelY + 23,
+                    labelY + (bound ? 18 : 23),
                     10,
                     muted(),
                     400);
             d.restore();
-            d.strokeRoundRect(
-                    x,
-                    y,
-                    cardWidth,
-                    cardHeight,
-                    17,
-                    1,
-                    selected ? alpha(accent(), .66f) : dark ? 0x28959cc0 : 0xd9ffffff);
-            if (selected)
+            if (!bound)
                 d.strokeRoundRect(
-                        x - 1, y - 1, cardWidth + 2, cardHeight + 2, 18, 2, alpha(accent(), .09f));
+                        x,
+                        y,
+                        cardWidth,
+                        cardHeight,
+                        radius,
+                        1,
+                        paper == null
+                                ? selected ? alpha(accent(), .66f) : dark ? 0x28959cc0 : 0xd9ffffff
+                                : selected ? accent() : border());
+            if (selected && !bound)
+                d.strokeRoundRect(
+                        x - 1,
+                        y - 1,
+                        cardWidth + 2,
+                        cardHeight + 2,
+                        radius + 1,
+                        2,
+                        alpha(accent(), .09f));
             clippedHit(
                     "memories-archive-" + id,
                     "选择" + name + string(archive, "version", ""),
@@ -778,50 +856,79 @@ public final class HubMemoriesView {
                     y,
                     cardWidth,
                     cardHeight,
-                    TOP,
-                    TOP + HEIGHT,
+                    shelfTop,
+                    frameTop + viewportHeight,
                     () -> select(id),
                     !saving);
         }
+        if (bound && !archives.isEmpty()) {
+            // The CSS flex spacer shrinks as the index fills. Clip the art to the free area.
+            float freeTop = shelfTop + archives.size() * archiveStep - archiveScroll;
+            float freeBottom = frameTop + viewportHeight - 9;
+            if (freeBottom > freeTop) {
+                float artW = Math.min(115, cardWidth * .4f);
+                String resource = "images/winter/pine-lantern.png";
+                var lantern = d.imageResource(resource);
+                float artH = artW * lantern.getHeight() / lantern.getWidth();
+                d.save();
+                d.clipRoundRect(layoutLeft, freeTop, archiveColumnWidth, freeBottom - freeTop, 0);
+                d.image(resource, layoutLeft + archiveColumnWidth - 19 - artW, freeBottom - 8 - artH, artW, artH, 1);
+                d.restore();
+            }
+        }
         d.restore();
         scrollbar(
-                1, X + LIST_WIDTH - 3, TOP + 12, HEIGHT - 24, archiveContentHeight, archiveScroll);
-        if (archives.isEmpty()) empty(X, TOP, LIST_WIDTH, HEIGHT, "暂无旅途档案");
+                1,
+                layoutLeft + archiveColumnWidth - 3,
+                shelfTop + (bound ? 0 : 12),
+                viewHeight - (bound ? 0 : 24),
+                archiveContentHeight,
+                archiveScroll);
+        if (archives.isEmpty()) empty(layoutLeft, shelfTop, archiveColumnWidth, viewHeight, "暂无旅途档案");
     }
 
     private void drawReader() {
-        d.boxShadow(
-                READER_X,
-                TOP,
-                READER_WIDTH,
-                HEIGHT,
-                22,
-                0,
-                7,
-                24,
-                0,
-                dark ? 0x2b090b18 : 0x12526184);
-        d.roundRect(READER_X, TOP, READER_WIDTH, HEIGHT, 22, surface());
-        d.strokeRoundRect(
-                READER_X, TOP, READER_WIDTH, HEIGHT, 22, 1, dark ? 0x28959cc0 : 0xd9ffffff);
+        float radius = paper == null ? 22 : 0;
+        if (paper == null)
+            d.boxShadow(
+                    readerX,
+                    frameTop,
+                    readerWidth,
+                    viewportHeight,
+                    radius,
+                    0,
+                    7,
+                    24,
+                    0,
+                    paper == null ? dark ? 0x2b090b18 : 0x12526184 : 0x12172c25);
+        d.roundRect(readerX, frameTop, readerWidth, viewportHeight, radius, surface());
+        if (paper == null)
+            d.strokeRoundRect(
+                    readerX,
+                    frameTop,
+                    readerWidth,
+                    viewportHeight,
+                    radius,
+                    1,
+                    paper == null ? dark ? 0x28959cc0 : 0xd9ffffff : border());
         Detail detail = detail();
         if (selectedId.isEmpty()) {
-            empty(READER_X, TOP, READER_WIDTH, HEIGHT, "这位旅人还没有公开的整合包纪念。");
+            empty(readerX, frameTop, readerWidth, viewportHeight, "这位旅人还没有公开的整合包纪念。");
             return;
         }
         if (detail == null || !detail.loaded) {
             empty(
-                    READER_X,
-                    TOP,
-                    READER_WIDTH,
-                    HEIGHT,
+                    readerX,
+                    frameTop,
+                    readerWidth,
+                    viewportHeight,
                     detail != null && !detail.error.isBlank() ? detail.error : "正在读取这段旅途…");
             if (detail != null && !detail.error.isBlank())
                 button(
                         "memories-detail-retry",
                         "重新读取",
-                        READER_X + READER_WIDTH / 2 - 54,
-                        TOP + HEIGHT / 2 + 32,
+                        readerX + readerWidth / 2 - 54,
+                        frameTop + viewportHeight / 2 + 32,
                         108,
                         32,
                         () -> requestMemory(firstSupplementPage()),
@@ -830,16 +937,17 @@ public final class HubMemoriesView {
             return;
         }
         if (selectedArchive == null) {
-            empty(READER_X, TOP, READER_WIDTH, HEIGHT, "这段旅途的封面资料暂不可用。");
+            empty(readerX, frameTop, readerWidth, viewportHeight, "这段旅途的封面资料暂不可用。");
             return;
         }
-        float innerWidth = READER_WIDTH - 59, coverHeight = 172;
+        float innerWidth = readerWidth - 59, coverHeight = 172;
         float paragraphWidth = innerWidth;
+        float noteInset = paper == null ? 0 : 15, notePadding = paper == null ? 0 : 9;
         JsonObject note = object(detail.record, "note");
         Paragraph original =
                 paragraph(
                         bool(note, "deleted", false) ? "这段回忆已移除。" : string(note, "text", ""),
-                        paragraphWidth,
+                        paragraphWidth - 2 * noteInset,
                         14,
                         28.7f,
                         true);
@@ -851,7 +959,8 @@ public final class HubMemoriesView {
                 paragraphWidth,
                 1200 * 28.7f,
                 28.7f);
-        float originalHeight = original.height + (number(note, "updatedAt", 0) > 0 ? 24 : 0);
+        float originalHeight =
+                original.height + (number(note, "updatedAt", 0) > 0 ? 24 : 0) + 2 * notePadding;
         float writerHeight = editor.contentHeight() + 44 + (noteConflict ? 28 : 0);
         float noteBodyTarget = editingNote && !archived() ? writerHeight : originalHeight;
         boxes.clear();
@@ -860,9 +969,10 @@ public final class HubMemoriesView {
             JsonObject supplement = detail.supplements.get(index);
             float h =
                     25
+                            + 2 * notePadding
                             + paragraph(
                                             string(supplement, "text", ""),
-                                            paragraphWidth - 17,
+                                            paragraphWidth - 17 - noteInset,
                                             14,
                                             28.7f,
                                             true)
@@ -893,16 +1003,21 @@ public final class HubMemoriesView {
             if (anchor != null) readerScroll = noteTop + 36 + anchor.y - pendingAnchorOffset;
             pendingAnchor = null;
         }
-        readerScroll = clamp(readerScroll, 0, Math.max(0, readerContentHeight - HEIGHT));
+        readerScroll = clamp(readerScroll, 0, Math.max(0, readerContentHeight - viewportHeight));
         detail.scroll = readerScroll;
         d.save();
-        d.clipRoundRect(READER_X + 1, TOP + 1, READER_WIDTH - 2, HEIGHT - 2, 21);
+        d.clipRoundRect(
+                readerX + 1,
+                frameTop + 1,
+                readerWidth - 2,
+                viewportHeight - 2,
+                Math.max(0, radius - 1));
         float entryProgress =
                 reduced ? 1 : HubMotion.easeOut(clamp((now - selectedAt) / 200_000_000f, 0, 1));
-        d.saveLayerAlpha(READER_X, TOP, READER_WIDTH, HEIGHT, entryProgress);
-        float base = TOP - readerScroll + 4 * (1 - entryProgress);
+        d.saveLayerAlpha(readerX, frameTop, readerWidth, viewportHeight, entryProgress);
+        float base = frameTop - readerScroll + 4 * (1 - entryProgress);
         drawCover(base, coverHeight);
-        float x = READER_X + 28;
+        float x = readerX + 28;
         drawStats(x, base + coverHeight, innerWidth);
         drawNote(detail, x, base + noteTop, innerWidth, original, originalHeight, noteBodyHeight);
         drawCollections(
@@ -911,6 +1026,7 @@ public final class HubMemoriesView {
         String moment = string(selectedArchive, "moment", "");
         String text = string(selectedArchive, "momentText", "");
         if (!moment.isBlank() || !text.isBlank()) {
+            if (paper != null) stitchedRule(x, milestoneY - 9, innerWidth);
             d.icon("map-pin", x, milestoneY, 14, muted());
             d.text(
                     fit(moment + "  " + text, innerWidth - 22, 10, 400),
@@ -944,9 +1060,9 @@ public final class HubMemoriesView {
         d.restore();
         scrollbar(
                 2,
-                READER_X + READER_WIDTH - 4,
-                TOP + 12,
-                HEIGHT - 24,
+                readerX + readerWidth - 4,
+                frameTop + 12,
+                viewportHeight - 24,
                 readerContentHeight,
                 readerScroll);
     }
@@ -954,22 +1070,27 @@ public final class HubMemoriesView {
     private void drawCover(float y, float height) {
         artwork.draw(
                 d,
-                READER_X,
+                readerX,
                 y,
-                READER_WIDTH - 3,
+                readerWidth - 3,
                 height,
                 string(selectedArchive, "coverPattern", "arcs"),
                 string(selectedArchive, "coverColor", "mist"),
                 false,
                 dark);
         int coverMuted = dark ? 0xffb9c5d8 : 0xff50606d;
-        float x = READER_X + 28;
+        float x = readerX + 28;
         d.text(archived() ? "已归档" : "旅程继续中", x, y + 34, 11, coverMuted, 400);
-        String name = fit(string(selectedArchive, "name", "整合包"), READER_WIDTH * .65f, 25, 650);
-        d.text(name, x, y + 73, 25, ink(), 650);
+        String name = fit(string(selectedArchive, "name", "整合包"), readerWidth * .65f, 25, 650);
+        if (paper == null) d.text(name, x, y + 73, 25, ink(), 650);
+        else d.textSerif(name, x, y + 73, 25, dark ? 0xffe0e3f3 : 0xff34415f, 650);
         d.text(
                 string(selectedArchive, "version", ""),
-                x + d.textWidth(name, 25, 650) + 10,
+                x
+                        + (paper == null
+                                ? d.textWidth(name, 25, 650)
+                                : d.textWidthSerif(name, 25, 650))
+                        + 10,
                 y + 73,
                 13,
                 coverMuted,
@@ -977,7 +1098,7 @@ public final class HubMemoriesView {
         Paragraph description =
                 paragraph(
                         string(selectedArchive, "description", ""),
-                        READER_WIDTH * .77f - 56,
+                        readerWidth * .77f - 56,
                         12,
                         21.6f,
                         false);
@@ -998,16 +1119,26 @@ public final class HubMemoriesView {
             float xx = x + index * col + (index == 0 ? 0 : 22);
             if (index > 0) d.line(x + index * col, y + 23, x + index * col, y + 78, 1, border());
             d.text(labels[index], xx, y + 34, 11, muted(), 400);
-            d.text(values[index], xx, y + 68, 24, ink(), 620);
+            if (paper == null) d.text(values[index], xx, y + 68, 24, ink(), 620);
+            else d.textSerif(values[index], xx, y + 68, 24, accent(), 650);
             d.text(
                     units[index],
-                    xx + d.textWidth(values[index], 24, 620) + 5,
+                    xx
+                            + (paper == null
+                                    ? d.textWidth(values[index], 24, 620)
+                                    : d.textWidthSerif(values[index], 24, 650))
+                            + 5,
                     y + 68,
                     10,
                     muted(),
                     400);
         }
         d.line(x, y + 100, x + width, y + 100, 1, border());
+    }
+
+    private void stitchedRule(float x, float y, float width) {
+        for (float at = x; at < x + width; at += 8)
+            d.line(at, y, Math.min(at + 3, x + width), y, 1, paper.stitch());
     }
 
     private void drawNote(
@@ -1018,8 +1149,13 @@ public final class HubMemoriesView {
             Paragraph original,
             float originalHeight,
             float bodyHeight) {
-        d.icon("feather", x, y, 15, muted());
-        d.text("写给这段旅途", x + 23, y + 12, 12, muted(), 600);
+        if (paper != null) {
+            d.roundRect(x - 12, y - 13, width + 24, bodyHeight + 60, 12, soft());
+            HubWinterSheet.grain(d, x - 12, y - 13, width + 24, bodyHeight + 60, 12, 1);
+        }
+        d.icon("feather", x, y, 15, paper == null ? muted() : accent());
+        if (paper == null) d.text("写给这段旅途", x + 23, y + 12, 12, muted(), 600);
+        else d.textSerif("写给这段旅途", x + 23, y + 13, 15, accent(), 650);
         if (self && !editingNote)
             buttonClipped(
                     "memories-edit-note",
@@ -1041,15 +1177,28 @@ public final class HubMemoriesView {
         float fade = reduced ? 1 : clamp((now - noteModeAt) / 140_000_000f, 0, 1);
         d.saveLayerAlpha(x - 1, bodyY, width + 2, bodyHeight, fade);
         float at = bodyY;
+        float inset = paper == null ? 0 : 15, padding = paper == null ? 0 : 9;
         if (!editingNote || archived()) {
-            drawParagraph(original, x, at, 14, 28.7f, ink(), true);
+            if (paper != null) {
+                float last = Math.min(at + padding + original.height, frameTop + viewportHeight);
+                for (float ruleY = at + padding + 28.7f; ruleY <= last + .1f; ruleY += 28.7f)
+                    if (ruleY >= frameTop)
+                        d.line(
+                                x + inset,
+                                ruleY,
+                                x + width - inset,
+                                ruleY,
+                                1,
+                                alpha(paper.stitch(), .44f));
+            }
+            drawParagraph(original, x + inset, at + padding, 14, 28.7f, ink(), true);
             long updated = number(object(detail.record, "note"), "updatedAt", 0);
             if (updated > 0)
                 d.text(
                         (bool(object(detail.record, "note"), "deleted", false) ? "移除于 " : "编辑于 ")
                                 + formatTime(updated),
-                        x,
-                        at + original.height + 19,
+                        x + inset,
+                        at + original.height + 19 + padding,
                         9,
                         muted(),
                         400);
@@ -1059,9 +1208,11 @@ public final class HubMemoriesView {
             JsonObject supplement = detail.supplements.get(index);
             at += index == 0 ? 22 : 21;
             String id = string(supplement, "id", "");
-            Paragraph text = paragraph(string(supplement, "text", ""), width - 17, 14, 28.7f, true);
-            float height = 25 + text.height;
+            Paragraph text =
+                    paragraph(string(supplement, "text", ""), width - 17 - inset, 14, 28.7f, true);
+            float height = 25 + text.height + 2 * padding;
             d.line(x, at, x, at + height, 2, alpha(accent(), .22f));
+            at += padding;
             d.text("补记", x + 17, at + 10, 11, accent(), 550);
             d.text(
                     formatTime(number(supplement, "createdAt", 0)),
@@ -1085,11 +1236,19 @@ public final class HubMemoriesView {
                         !editingNote && !saving,
                         true);
             drawParagraph(text, x + 17, at + 25, 14, 28.7f, ink(), true);
-            at += height;
+            at += height - padding;
             if (id.equals(deletingId)) {
                 float confirmY = at + 10;
-                d.roundRect(x + 17, confirmY, width - 17, 34, 9, dark ? 0x15e4a0ac : 0x12ad6372);
-                d.text("删除这条补记？", x + 27, confirmY + 21, 11, muted(), 400);
+                d.roundRect(
+                        x + 17,
+                        confirmY,
+                        width - 17,
+                        34,
+                        9,
+                        paper == null
+                                ? dark ? 0x15e4a0ac : 0x12ad6372
+                                : mix(paper.sheet(), paper.mail(), .09f));
+                d.text("删除这条补记？", x + 27, confirmY + 21, 11, paper == null ? muted() : ink(), 400);
                 buttonClipped(
                         "memories-delete-cancel",
                         "取消",
@@ -1115,7 +1274,8 @@ public final class HubMemoriesView {
         }
         if (editingNote && archived()) {
             at += 22;
-            d.line(x, at, x + width, at, 1, border());
+            if (paper != null) stitchedRule(x, at, width);
+            else d.line(x, at, x + width, at, 1, border());
             at += 18;
             d.text("新的补记", x, at + 11, 11, muted(), 400);
             at += 25;
@@ -1142,7 +1302,7 @@ public final class HubMemoriesView {
                         y + rect.y(),
                         rect.width(),
                         rect.height(),
-                        dark ? 0x557c6bb2 : 0x3d9d8bce);
+                        paper == null ? dark ? 0x557c6bb2 : 0x3d9d8bce : alpha(paper.pine(), .23f));
         if (editor.text().isEmpty())
             d.textSerif(
                     supplement ? "此刻再回想这段旅途，还有什么想记下来…" : "写下你想留住的回忆…",
@@ -1166,8 +1326,8 @@ public final class HubMemoriesView {
                 y,
                 width,
                 height,
-                TOP,
-                TOP + HEIGHT,
+                frameTop,
+                frameTop + viewportHeight,
                 () -> host.focus(INPUT_ID),
                 !saving);
         float footer = y + height + 10;
@@ -1218,7 +1378,8 @@ public final class HubMemoriesView {
         hitTop = Math.max(hitTop, y);
         hitBottom = Math.min(hitBottom, y + height);
         float innerX = x + 20, innerWidth = width - 40;
-        d.text("带走的纪念", innerX, y + 32, 12, muted(), 600);
+        if (paper == null) d.text("带走的纪念", innerX, y + 32, 12, muted(), 600);
+        else d.textSerif("带走的纪念", innerX, y + 32, 15, accent(), 650);
         if (editingCollections) d.text("选择预览", innerX + 98, y + 32, 11, muted(), 400);
         else if (self)
             buttonClipped(
@@ -1307,9 +1468,12 @@ public final class HubMemoriesView {
                 railId,
                 new Box(
                         x,
-                        Math.max(TOP, y),
+                        Math.max(frameTop, y),
                         width,
-                        Math.max(0, Math.min(y + height, TOP + HEIGHT) - Math.max(TOP, y))));
+                        Math.max(
+                                0,
+                                Math.min(y + height, frameTop + viewportHeight)
+                                        - Math.max(frameTop, y))));
         float content = candidates.size() * 80 + 39;
         float scroll =
                 clamp(
@@ -1333,7 +1497,8 @@ public final class HubMemoriesView {
             drawCollectionItem(candidate, x + 11, yy + 10, width - 42, true);
             d.strokeOval(x + width - 27, yy + 29, 15, 15, 1, selected ? accent() : border());
             if (selected) d.icon("check", x + width - 26, yy + 30, 13, accent());
-            float top = Math.max(y, TOP), bottom = Math.min(y + height, TOP + HEIGHT);
+            float top = Math.max(y, frameTop),
+                    bottom = Math.min(y + height, frameTop + viewportHeight);
             clippedHit(
                     "memories-choice-" + id,
                     "选择" + itemName(candidate),
@@ -1360,8 +1525,8 @@ public final class HubMemoriesView {
                 emptyY,
                 width - 6,
                 32,
-                Math.max(y, TOP),
-                Math.min(y + height, TOP + HEIGHT),
+                Math.max(y, frameTop),
+                Math.min(y + height, frameTop + viewportHeight),
                 () -> {
                     if (kind.equals("title")) titleSelection = null;
                     else fortuneSelection = null;
@@ -1377,7 +1542,21 @@ public final class HubMemoriesView {
         boolean title = string(event, "kind", "").equals("title");
         float artWidth = title ? compact ? 33 : 48 : compact ? 27 : 34;
         float artHeight = compact ? 39 : title ? 53 : 50;
-        if (title) {
+        if (title && paper != null) {
+            artWidth = compact ? 34 : 48;
+            HubCollectionArt.pin(
+                    d,
+                    string(
+                            item,
+                            "style",
+                            HubCollectionArt.styleForBadge(string(item, "badge", ""))),
+                    string(item, "icon", "tag"),
+                    x,
+                    y + (artHeight - artWidth) / 2,
+                    artWidth,
+                    false,
+                    1);
+        } else if (title) {
             int[] palette = titlePalette(string(item, "style", ""));
             d.boxShadow(
                     x,
@@ -1552,9 +1731,10 @@ public final class HubMemoriesView {
     }
 
     private void deleteSupplement(JsonObject supplement) {
-        if (!canDelete(supplement) || saving) {
+        if (saving) return;
+        if (!canDelete(supplement)) {
             deletingId = "";
-            host.feedback("这条补记已到删除期限。");
+            host.feedback("这条补记已到删除期限。", true);
             return;
         }
         JsonObject payload = new JsonObject();
@@ -1598,13 +1778,13 @@ public final class HubMemoriesView {
         float thumb = Math.max(28, height * height / content);
         float at = y + (height - thumb) * clamp(scroll / (content - height), 0, 1);
         rails.put(id, new Rail(x, y, height, content, scroll, at, thumb));
-        if (y + height < TOP || y > TOP + HEIGHT) return;
+        if (y + height < frameTop || y > frameTop + viewportHeight) return;
         d.save();
         d.clipRoundRect(
-                READER_X > x ? X : READER_X,
-                TOP + 1,
-                READER_X > x ? LIST_WIDTH : READER_WIDTH,
-                HEIGHT - 2,
+                readerX > x ? layoutLeft : readerX,
+                frameTop + 1,
+                readerX > x ? archiveColumnWidth : readerWidth,
+                viewportHeight - 2,
                 0);
         d.roundRect(
                 x,
@@ -1612,12 +1792,14 @@ public final class HubMemoriesView {
                 3,
                 thumb,
                 5,
-                inside(x - 7, y, 13, height) || dragRail == id ? 0x739aa7c2 : 0x3d9aa7c2);
+                paper == null
+                        ? inside(x - 7, y, 13, height) || dragRail == id ? 0x739aa7c2 : 0x3d9aa7c2
+                        : paper.stitch());
         d.restore();
     }
 
     public boolean scroll(float x, float y, double amount) {
-        if (!active || y < TOP || y > TOP + HEIGHT) return false;
+        if (!active || y < frameTop || y > frameTop + viewportHeight) return false;
         for (int id : List.of(3, 4)) {
             Box box = candidateBoxes.get(id);
             if (editingCollections && box != null && box.contains(x, y)) {
@@ -1632,21 +1814,23 @@ public final class HubMemoriesView {
                 return true;
             }
         }
-        if (x >= X && x < X + LIST_WIDTH) {
+        if (x >= layoutLeft && x < layoutLeft + archiveColumnWidth && y >= shelfTop) {
             archiveScroll =
                     clamp(
                             archiveScroll - (float) amount * 42,
                             0,
-                            Math.max(0, archiveContentHeight - HEIGHT));
+                            Math.max(
+                                    0,
+                                    archiveContentHeight - (frameTop + viewportHeight - shelfTop)));
             loadArchiveBoundary(amount);
             return true;
         }
-        if (x >= READER_X && x < READER_X + READER_WIDTH) {
+        if (x >= readerX && x < readerX + readerWidth) {
             readerScroll =
                     clamp(
                             readerScroll - (float) amount * 42,
                             0,
-                            Math.max(0, readerContentHeight - HEIGHT));
+                            Math.max(0, readerContentHeight - viewportHeight));
             loadReaderBoundary(amount);
             return true;
         }
@@ -1656,7 +1840,8 @@ public final class HubMemoriesView {
     private void loadArchiveBoundary(double direction) {
         if (archivePages.isEmpty() || archiveLoadingPage >= 0) return;
         if (direction < 0
-                && archiveScroll + HEIGHT >= archiveContentHeight - 180
+                && archiveScroll + frameTop + viewportHeight - shelfTop
+                        >= archiveContentHeight - 180
                 && (archivePages.lastKey() + 1) * 100 < archivesTotal)
             requestArchives(archivePages.lastKey() + 1);
         if (direction > 0 && archiveScroll < 180 && archivePages.firstKey() > 0)
@@ -1668,7 +1853,7 @@ public final class HubMemoriesView {
         if (detail == null || detail.supplementPages.isEmpty() || detail.supplementLoading >= 0)
             return;
         if (direction < 0
-                && readerScroll + HEIGHT >= readerContentHeight - 180
+                && readerScroll + viewportHeight >= readerContentHeight - 180
                 && (detail.supplementPages.lastKey() + 1) * 20 < detail.supplementsTotal)
             requestMemory(detail.supplementPages.lastKey() + 1);
         if (direction > 0 && readerScroll < 280 && detail.supplementPages.firstKey() > 0)
@@ -1693,8 +1878,8 @@ public final class HubMemoriesView {
         if (!active) return false;
         for (var entry : rails.entrySet()) {
             Rail rail = entry.getValue();
-            if (y >= TOP
-                    && y < TOP + HEIGHT
+            if (y >= frameTop
+                    && y < frameTop + viewportHeight
                     && x >= rail.x - 4
                     && x < rail.x + 7
                     && y >= rail.y
@@ -1744,8 +1929,8 @@ public final class HubMemoriesView {
     }
 
     public boolean pointerOnRail(float x, float y) {
-        return y >= TOP
-                && y < TOP + HEIGHT
+        return y >= frameTop
+                && y < frameTop + viewportHeight
                 && rails.values().stream()
                         .anyMatch(
                                 rail ->
@@ -1803,16 +1988,16 @@ public final class HubMemoriesView {
                         key == 268
                                 ? 0
                                 : key == 269
-                                        ? Math.max(0, readerContentHeight - HEIGHT)
+                                        ? Math.max(0, readerContentHeight - viewportHeight)
                                         : clamp(
                                                 readerScroll
                                                         + (key == 266
-                                                                ? -HEIGHT * .8f
+                                                                ? -viewportHeight * .8f
                                                                 : key == 267
-                                                                        ? HEIGHT * .8f
+                                                                        ? viewportHeight * .8f
                                                                         : key == 264 ? 38 : -38),
                                                 0,
-                                                Math.max(0, readerContentHeight - HEIGHT));
+                                                Math.max(0, readerContentHeight - viewportHeight));
                 loadReaderBoundary(key == 265 || key == 266 || key == 268 ? 1 : -1);
                 return true;
             }
@@ -1865,15 +2050,17 @@ public final class HubMemoriesView {
     private void ensureCaretVisible() {
         if (inputBox == null) return;
         float y = inputBox.y + editor.caretRect().y();
-        if (y < TOP + 5) readerScroll = Math.max(0, readerScroll - (TOP + 5 - y));
-        else if (y + 29 > TOP + HEIGHT - 5) readerScroll += y + 29 - TOP - HEIGHT + 5;
+        if (y < frameTop + 5) readerScroll = Math.max(0, readerScroll - (frameTop + 5 - y));
+        else if (y + 29 > frameTop + viewportHeight - 5)
+            readerScroll += y + 29 - frameTop - viewportHeight + 5;
     }
 
     private void rememberAnchor() {
         if (d == null && !boxes.isEmpty()) {
             for (var entry : boxes.entrySet()) {
                 float y = 172 + 101 + 24 + 36 + entry.getValue().y;
-                if (y + entry.getValue().height > readerScroll && y <= readerScroll + HEIGHT) {
+                if (y + entry.getValue().height > readerScroll
+                        && y <= readerScroll + viewportHeight) {
                     pendingAnchor = entry.getKey();
                     pendingAnchorOffset = y - readerScroll;
                     return;
@@ -1916,15 +2103,20 @@ public final class HubMemoriesView {
             boolean serif) {
         for (int index = 0; index < paragraph.lines.size(); index++) {
             float baseline = y + index * lineHeight + size * 1.5f;
-            if (baseline < TOP - lineHeight || baseline > TOP + HEIGHT + lineHeight) continue;
+            if (baseline < frameTop - lineHeight
+                    || baseline > frameTop + viewportHeight + lineHeight) continue;
             if (serif) d.textSerif(paragraph.lines.get(index), x, baseline, size, color, 400);
             else d.text(paragraph.lines.get(index), x, baseline, size, color, 400);
         }
     }
 
     private void empty(float x, float y, float width, float height, String message) {
+        if (paper != null && width == layoutWidth) {
+            d.roundRect(x, y, width, height, 13, surface());
+            d.strokeRoundRect(x, y, width, height, 13, 1, border());
+        }
         d.icon("book-open", x + width / 2 - 16, y + height / 2 - 47, 32, muted());
-        center(message, x + width / 2, y + height / 2 + 4, 13, muted(), 400);
+        center(fit(message, width - 36, 13, 400), x + width / 2, y + height / 2 + 4, 13, muted(), 400);
     }
 
     private void buttonClipped(
@@ -1952,7 +2144,17 @@ public final class HubMemoriesView {
             boolean subtle,
             String icon) {
         drawButton(id, label, x, y, width, height, enabled, subtle, icon);
-        clippedHit(id, label, x, y, width, height, TOP, TOP + HEIGHT, action, enabled);
+        clippedHit(
+                id,
+                label,
+                x,
+                y,
+                width,
+                height,
+                frameTop,
+                frameTop + viewportHeight,
+                action,
+                enabled);
     }
 
     private void button(
@@ -2000,20 +2202,22 @@ public final class HubMemoriesView {
                                 now,
                                 160_000_000L,
                                 reduced);
-        int foreground = subtle ? mix(muted(), ink(), hover) : 0xffffffff;
-        int background = subtle ? alpha(soft(), hover) : mix(0xff7965b6, 0xff6b58a8, hover);
+        int foreground =
+                paper == null
+                        ? subtle ? mix(muted(), ink(), hover) : 0xffffffff
+                        : subtle ? accent() : surface();
+        int background =
+                paper == null
+                        ? subtle ? alpha(soft(), hover) : mix(0xff7965b6, 0xff6b58a8, hover)
+                        : subtle ? mix(surface(), soft(), hover) : accent();
+        int outline = paper != null && subtle ? border() : background;
         float offset = enabled && id.equals(pressed) && !reduced ? 1 : 0;
         d.roundRect(
                 x, y + offset, width, height, 11, enabled ? background : alpha(background, .5f));
-        if (!subtle)
+        if (!subtle || paper != null)
             d.strokeRoundRect(
-                    x,
-                    y + offset,
-                    width,
-                    height,
-                    11,
-                    1,
-                    enabled ? background : alpha(background, .5f));
+                    x, y + offset, width, height, 11, 1, enabled ? outline : alpha(outline, .5f));
+        if (paper != null && id.equals("memories-delete-confirm")) foreground = paper.mailInk();
         int color = enabled ? foreground : alpha(foreground, .5f);
         float textWidth = d.textWidth(label, 11, 400),
                 contentWidth = textWidth + (icon == null ? 0 : 20);
@@ -2034,7 +2238,7 @@ public final class HubMemoriesView {
                 11,
                 color,
                 400);
-        if (id.equals(focused))
+        if (paper == null && id.equals(focused))
             d.strokeRoundRect(x - 2, y - 2, width + 4, height + 4, 12, 2, accent());
     }
 

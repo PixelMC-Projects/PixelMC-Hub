@@ -20,7 +20,7 @@ final class HubPreferences {
     private JsonObject legacyDemo;
     private String scope = "";
     private String fallbackScope = "";
-    private boolean seen, compact;
+    private boolean seen, compact, winter;
     private String welcomeMode = "login";
     private boolean reducedMotion, systemReducedMotion, dark;
 
@@ -50,6 +50,7 @@ final class HubPreferences {
         welcomeMode = "login";
         reducedMotion = false;
         dark = false;
+        winter = false;
         seen = false;
         compact = false;
         if (scopes.has(scope)) {
@@ -60,6 +61,10 @@ final class HubPreferences {
                     entry.has("theme")
                             && entry.get("theme").isJsonPrimitive()
                             && "dark".equals(entry.get("theme").getAsString());
+            winter =
+                    entry.has("homeStyle")
+                            && entry.get("homeStyle").isJsonPrimitive()
+                            && "winter".equals(entry.get("homeStyle").getAsString());
             seen = entry.has("seen") && entry.get("seen").getAsBoolean();
             compact = entry.has("compact") && entry.get("compact").getAsBoolean();
         }
@@ -97,6 +102,14 @@ final class HubPreferences {
 
     void fallbackScope(String value) {
         fallbackScope = value == null ? "" : value;
+    }
+
+    boolean winter() {
+        return winter;
+    }
+
+    void setWinter(boolean value) {
+        winter = value;
     }
 
     boolean dark() {
@@ -158,6 +171,7 @@ final class HubPreferences {
         entry.addProperty("reducedMotion", reducedMotion);
         entry.addProperty("seen", seen);
         entry.addProperty("compact", compact);
+        entry.addProperty("homeStyle", winter ? "winter" : "classic");
         entry.addProperty("theme", dark ? "dark" : "light");
         if (scopes.has(scope) && scopes.getAsJsonObject(scope).has("canonicalOrigin"))
             entry.add("canonicalOrigin", scopes.getAsJsonObject(scope).get("canonicalOrigin"));

@@ -5,8 +5,9 @@ import AnimatedList from '../vendor/react-bits/AnimatedList.jsx';
 import ClickSpark from '../vendor/react-bits/ClickSpark.jsx';
 import ChangelogArticle from './ChangelogArticle.jsx';
 import PlayerAvatar2D from './PlayerAvatar2D.jsx';
+import { GazetteCover, GazetteIndexItem } from './WinterGazette.jsx';
 import { useChangelog, dispatch } from './store.js';
-import { DEMO_PLAYER, visiblePacks, publishedEntries, playerEntry, formatTime, formatVersion } from './model.js';
+import { DEMO_PLAYER, visiblePacks, publishedEntries, playerEntry, formatTime, formatVersion, publicationWatermark, entryUnread } from './model.js';
 import './changelog.css';
 
 function PackPicker({ packs, selected, change }) {
@@ -33,7 +34,7 @@ function PrivateFeedback({ entry, settings, notify, reducedMotion }) {
   useEffect(() => { const input = inputRef.current; if (!input) return; let width = 0; const observer = new ResizeObserver(entries => { const next = entries[0].contentRect.width; if (next !== width) { width = next; sizeInput(); } }); observer.observe(input); return () => observer.disconnect(); }, [settings.commentsEnabled]);
   const run = (action, message) => {
     try { dispatch(action); if (message) notify(message); return true; }
-    catch (error) { notify(error.message); return false; }
+    catch (error) { notify(error.message, "error"); return false; }
   };
   const submit = e => { e.preventDefault(); if (run({ type: 'comment', entryId: entry.id, text: draft }, '留言已发送，仅你和管理员可见')) setDrafts(d => ({ ...d, [entry.id]: '' })); };
   return <>
@@ -59,30 +60,66 @@ function PrivateFeedback({ entry, settings, notify, reducedMotion }) {
   </>;
 }
 
-export default function ChangelogPage({ notify, reduceMotion = false }) {
+export default function ChangelogPage({ notify, reduceMotion = false, initialEntry = null, winter = false }) {
   const state = useChangelog(), packs = visiblePacks(state);
-  const [packId, setPackId] = useState(() => packs.find(p => p.current)?.id), [search, setSearch] = useState('');
-  const [selected, setSelected] = useState(null), scrollRef = useRef(null);
+  const [packId, setPackId] = useState(() => initialEntry?.packId ?? packs.find(p => p.current)?.id), [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(initialEntry?.id ?? null), scrollRef = useRef(null);
   const activePack = packs.find(p => p.id === packId) || packs.find(p => p.current) || packs[0];
   const all = publishedEntries(state, activePack?.id), rows = all.filter(e => `${e.title} ${formatVersion(e, activePack)} ${e.summary}`.toLowerCase().includes(search.trim().toLowerCase()));
   const chosen = rows.find(e => e.id === selected) || rows[0];
   const entry = playerEntry(state, chosen);
   useEffect(() => { scrollRef.current?.scrollTo({top:0}); }, [entry?.id]);
+  const [visit] = useState(() => {
+    const through = publicationWatermark(state);
+    return through > (state.updatesSeen || 0) ? through : 0;
+  });
+  useEffect(() => {
+    if (visit) dispatch({ type: 'visitUpdates', through: visit });
+  }, [visit]);
+  const displayedId = entry?.id, displayedEdition = entry?.publishedAt;
+  const unread = entry && entryUnread(state, entry);
+  const lastDisplayed = useRef(null);
+  useEffect(() => {
+    const editionKey = displayedId && displayedId + '/' + displayedEdition;
+    if (lastDisplayed.current === editionKey) return;
+    lastDisplayed.current = editionKey;
+    if (unread) dispatch({ type: 'readUpdate', entryId: displayedId, edition: displayedEdition });
+  }, [displayedId, displayedEdition, unread]);
   const choose = item => setSelected(item.id);
+  const latest = winter ? all.reduce((newest, item) =>
+    !newest || Date.parse(item.publishedAt) > Date.parse(newest.publishedAt) ? item : newest, null) : null;
+  const packPicker = <PackPicker packs={packs} selected={activePack?.id} change={id => {
+    setPackId(id);
+    setSearch('');
+    setSelected(null);
+  }} />;
   return <>
-    <div className="page-heading"><div><h1>更新日志<span className="heading-count">{all.length}</span></h1><p>每一点变化，都在这里与你分享。</p></div><div className="updates-heading-actions">{packs.length>1&&<PackPicker packs={packs} selected={activePack?.id} change={id=>{setPackId(id);setSearch('');setSelected(null);}}/>}<span className="module-label">PixelMC-Hub</span></div></div>
-
-    <div className="updates-layout">
+    {winter ? <header className="case-heading gazette-heading">
+      <h1>更新日志</h1>
+      <div className="updates-heading-actions">{activePack && packPicker}<span>已刊 <b>{all.length}</b> 篇</span></div>
+    </header> : <div className="page-heading"><div><h1>更新日志<span className="heading-count">{all.length}</span></h1><p>每一点变化，都在这里与你分享。</p></div><div className="updates-heading-actions">{packs.length>1&&packPicker}<span className="module-label">PixelMC-Hub</span></div></div>}
+    
+    <div className={winter ? "updates-layout winter-gazette" : "updates-layout"}>
       <aside className="updates-index">
+        {winter && <header className="gazette-index-head">
+          <img src="/assets/winter/gazette-press.webp" alt="" width="860" height="484" />
+          <h2>刊期目录</h2>
+        </header>}
         <label className="updates-search"><Search size={15}/><input aria-label="搜索更新日志" value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜索标题或版本…"/></label>
-        {rows.length ? <AnimatedList key={activePack?.id} className="updates-animated-list" items={rows} initialSelectedIndex={0} selectedIndex={Math.max(0,rows.findIndex(e=>e.id===entry?.id))} onItemSelect={choose} selectOnHover={false} animation={reduceMotion ? 'none' : 'slide'} animateOnce stagger={.045} frame={false} theme="light" accentColor="#9d8bcf" gap={10} width="100%" maxHeight="100%" showGradients={false} renderItem={(item) => <div className={`updates-index-item ${item.id === entry?.id ? 'is-active' : ''}`}><div className="updates-item-top"><span title={formatVersion(item, activePack)}>{formatVersion(item, activePack)}</span><time>{formatTime(item.publishedAt,true).slice(5)}</time></div><h3>{item.title}</h3><p>{item.summary}</p><div className="updates-item-foot"><span className={'update-category category-'+(item.category==='问题修复'?'fix':item.category==='体验优化'?'polish':'feature')}><i/>{item.category}</span>{item.pinned ? <span><Pin size={11}/>置顶</span> : item.id===all[0]?.id ? <span>最新</span> : <ArrowRight size={12}/>}</div></div>}/> : <div className="updates-list-empty"><FileText size={22}/><p>没有匹配的记录</p>{search && <button onClick={()=>setSearch('')}>清除搜索</button>}</div>}
-
+        {rows.length ? <AnimatedList key={activePack?.id} className="updates-animated-list" items={rows} initialSelectedIndex={0} selectedIndex={Math.max(0,rows.findIndex(e=>e.id===entry?.id))} onItemSelect={choose} selectOnHover={false} animation={reduceMotion ? 'none' : 'slide'} animateOnce stagger={.045} frame={false} theme="light" accentColor={winter ? undefined : "#9d8bcf"} gap={winter ? 0 : 10} width="100%" maxHeight="100%" showGradients={false}
+          renderItem={item => winter ? <GazetteIndexItem
+            item={item} pack={activePack} unread={entryUnread(state, item)}
+            current={entry?.id === item.id} latest={item.id === latest?.id} /> : <div className={`updates-index-item ${item.id === entry?.id ? 'is-active' : ''}`}><div className="updates-item-top"><span title={formatVersion(item, activePack)}>{formatVersion(item, activePack)}</span><time>{entryUnread(state, item) && <small className="updates-new">NEW</small>}{formatTime(item.publishedAt,true).slice(5)}</time></div><h3>{item.title}</h3><p>{item.summary}</p><div className="updates-item-foot"><span className={'update-category category-'+(item.category==='问题修复'?'fix':item.category==='体验优化'?'polish':'feature')}><i/>{item.category}</span>{item.pinned ? <span><Pin size={11}/>置顶</span> : item.id===all[0]?.id ? <span>最新</span> : <ArrowRight size={12}/>}</div></div>}/> : <div className="updates-list-empty"><FileText size={22}/><p>没有匹配的记录</p>{search && <button onClick={()=>setSearch('')}>清除搜索</button>}</div>}
+        
       </aside>
       <div className="updates-reader-frame"><div className="updates-reader" ref={scrollRef}>
         <AnimatePresence mode="wait" initial={false}>
           {entry ? <motion.div key={entry.id} initial={reduceMotion ? false : {opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:reduceMotion ? 0 : -5}} transition={{duration:reduceMotion ? 0 : .2}}>
-            <ChangelogArticle entry={entry} packName={activePack.name}><PrivateFeedback entry={entry} settings={state.settings} notify={notify} reducedMotion={reduceMotion}/></ChangelogArticle>
-          </motion.div> : <div className="updates-reader-empty"><FileText size={34}/><h2>{state.settings.updatesEnabled ? '这里还没有更新记录' : '更新日志暂未开放'}</h2><p>{search ? '换个关键词试试。' : '发布后的更新会出现在这里。'}</p></div>}
+            <ChangelogArticle entry={entry} packName={activePack.name} cover={winter ? <GazetteCover entry={entry} pack={activePack} /> : undefined}><PrivateFeedback entry={entry} settings={state.settings} notify={notify} reducedMotion={reduceMotion}/></ChangelogArticle>
+          </motion.div> : <div className="updates-reader-empty"><FileText size={34}/>
+            <h2>{!state.settings.updatesEnabled ? '更新日志暂未开放' : search.trim() ? '没有找到这篇更新' : '这里还没有更新记录'}</h2>
+            <p>{search.trim() ? '换个标题或版本号试试。' : '发布后的更新会出现在这里。'}</p>
+          </div>}
         </AnimatePresence>
       </div></div>
     </div>

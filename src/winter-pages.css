@@ -1,0 +1,523 @@
+/* The inner leaves of the winter handbook. Covers and index cards can carry
+   a print; reading surfaces keep a solid ground under their text. */
+.preview-stage.winter-theme {
+  --stitch: color-mix(in srgb, var(--pine) 32%, var(--sheet));
+  --soft-paper: color-mix(in srgb, var(--sheet) 66%, var(--cover));
+  --page-shadow: 0 3px 10px -7px #15261e48;
+  --letter-edge: repeating-linear-gradient(130deg, var(--wool) 0 6px, var(--sheet) 6px 12px, var(--mail) 12px 18px, var(--sheet) 18px 24px);
+}
+.winter-theme .page-content:not(.page-home) { color:var(--ink); background:var(--paper-grain),var(--paper); }
+/* Keep the embroidery above the next scrolling sheet, including while it animates in. */
+.winter-theme :is(.workspace,.wz-page,.wzs-panel) > .topbar { z-index:1; overflow:visible; }
+.winter-theme .wz-page[data-sharing] > .topbar { z-index:0; }
+.winter-theme .page-titles { --chapter-art:url("/assets/winter/station-titles.webp"); }
+.winter-theme .page-fortunes { --chapter-art:url("/assets/winter/station-fortunes.webp"); }
+.winter-theme .page-updates { --chapter-art:url("/assets/winter/station-updates.webp"); }
+.winter-theme .page-leaderboards { --chapter-art:url("/assets/winter/station-leaderboards.webp"); }
+.winter-theme .page-memories { --chapter-art:url("/assets/winter/station-home.webp"); }
+.winter-theme .page-content:not(.page-home) .page-heading h1 {
+  display:flex; align-items:center; gap:.32em; font-family:var(--poem); font-weight:700; letter-spacing:.04em;
+}
+.winter-theme .page-content:not(.page-home) .page-heading h1::before {
+  content:""; flex:none; width:1.12em; height:1.12em; background:var(--chapter-art) center / contain no-repeat;
+}
+.winter-theme .page-heading .heading-count { margin-left:0; font-family:system-ui,sans-serif; letter-spacing:0; }
+.winter-theme :is(.page-content:not(.page-home),.modal) :is(.icon-btn,.text-button,.quiet-label,.section-eyebrow,.field-label) { color:var(--muted); }
+.winter-theme :is(.page-content:not(.page-home),.modal) .btn.primary,
+.winter-theme .closed-state .btn.primary {
+  background:var(--pine); color:var(--sheet); border:1px solid var(--pine); border-radius:9px; box-shadow:var(--page-shadow);
+}
+.winter-theme :is(.page-content:not(.page-home),.modal) .btn.subtle {
+  background:var(--sheet); color:var(--pine); border:1px solid var(--ruling); border-radius:9px; box-shadow:none;
+}
+.winter-theme :is(.page-content:not(.page-home),.modal) .btn.subtle:enabled:hover { background:var(--soft-paper); }
+.winter-theme :is(.page-content,.modal) .btn:disabled { opacity:.6; box-shadow:none; }
+.winter-theme :is(.page-content,.modal) :is(.search,.updates-search,select) {
+  background:var(--sheet); color:var(--ink); border-color:var(--ruling); box-shadow:none;
+}
+.winter-theme .page-content :is(.search,.updates-search) input { color:var(--ink); }
+.winter-theme .page-content :is(.search,.updates-search) input::placeholder { color:var(--muted); }
+.winter-theme .page-content :is(.search,.updates-search,.updates-compose):focus-within { border-color:var(--ruling); box-shadow:none; }
+.winter-theme :is(.page-content,.modal) :is(.segmented,.lb-tabs,.calendar-controls) {
+  background:var(--soft-paper); border-color:var(--ruling); border-radius:11px;
+}
+.winter-theme :is(.page-content,.modal) :is(.segmented,.lb-tabs) button { color:var(--muted); }
+.winter-theme :is(.page-content,.modal) :is(.segmented,.lb-tabs) button:enabled:hover { color:var(--pine); background:var(--sheet); }
+.winter-theme :is(.page-content,.modal) :is(.segmented button.selected,.lb-tabs button.is-active) {
+  background:var(--pine); color:var(--sheet); border-radius:7px; box-shadow:none;
+}
+/* A short line marks keyboard focus on the winter paper. */
+:where(.preview-stage.winter-theme) :where(button,a,summary,[role="listbox"],.search,.updates-search,.updates-compose,.wz-compose,
+  .welcome-range-track,.wz-picker-search,.wz-agreement-checks label,.wz-item-choice label,
+  .profile-swatch,.profile-pattern-preview,.profile-title-choice-content,.profile-fortune-choice-content,.profile-memory-choice-content) {
+  position:relative;
+}
+html .preview-stage.winter-theme :focus-visible,
+.preview-stage.winter-theme :is(.search,.updates-search,.updates-compose,.wz-compose,.memory-collection-choice):focus-within,
+.preview-stage.winter-theme input:focus-visible + :is(.profile-swatch,.profile-pattern-preview,.profile-title-choice-content,.profile-fortune-choice-content,.profile-memory-choice-content) {
+  outline:none;
+}
+.preview-stage.winter-theme :is(button:not(.lb-profile-name),a,summary):focus-visible::after,
+.preview-stage.winter-theme [role="listbox"]:focus-visible:not(:has([data-selected]))::after,
+.preview-stage.winter-theme [role="listbox"]:focus-visible [data-selected]::after,
+.preview-stage.winter-theme :is(.search,.updates-search,.updates-compose,.wz-compose,.welcome-range-track,
+  .memory-collection-choice,.wz-picker-search,.wz-agreement-checks label,.wz-item-choice label):has(> :is(input,textarea,[contenteditable]):focus-visible)::after,
+.preview-stage.winter-theme input:focus-visible + :is(.profile-swatch,.profile-pattern-preview,.profile-title-choice-content,.profile-fortune-choice-content,.profile-memory-choice-content)::after {
+  content:""; position:absolute; z-index:2; pointer-events:none; width:min(22px,55%); height:3px;
+  left:50%; bottom:2px; transform:translateX(-50%); background:var(--winter-focus-ink,var(--pine));
+  border-bottom:1px solid var(--winter-focus-paper,var(--sheet)); forced-color-adjust:none; border-radius:2px;
+}
+.preview-stage.winter-theme .lb-profile-name:focus-visible {
+  text-decoration:underline 2px var(--pine); text-underline-offset:2px;
+}
+.preview-stage.winter-theme select:focus-visible { box-shadow:inset 0 -2px var(--pine); }
+@media (forced-colors: active) {
+  .preview-stage.winter-theme { --winter-focus-ink:CanvasText; --winter-focus-paper:Canvas; }
+}
+
+/* Titles are sewn award badges pinned to a collection card. */
+.winter-theme .page-titles .title-tile .tilted-card__front {
+  background:var(--paper-grain),linear-gradient(105deg,var(--sheet) 45%,color-mix(in srgb,var(--sheet) 86%,var(--tile)));
+  border:1px solid var(--ruling); box-shadow:var(--page-shadow); border-radius:12px;
+}
+.winter-theme .page-titles .title-tile.selected .tilted-card__front { border-color:var(--pine); box-shadow:inset 3px 0 var(--pine); }
+.winter-theme .page-titles .title-tile .tilted-card__glare { opacity:0; }
+.winter-theme .page-titles .title-emblem {
+  --metal:color-mix(in srgb,var(--tile) 47%,#7c6949);
+  --metal-light:color-mix(in srgb,var(--tile) 22%,#fff1c9);
+  --badge-shape:polygon(50% 0,62% 7%,75% 6%,82% 17%,94% 23%,94% 37%,100% 50%,94% 63%,94% 77%,82% 83%,75% 94%,62% 93%,50% 100%,38% 93%,25% 94%,18% 83%,6% 77%,6% 63%,0 50%,6% 37%,6% 23%,18% 17%,25% 6%,38% 7%);
+  width:54px; height:54px; right:20px; top:41px; transform:rotate(4deg);
+}
+.winter-theme .page-titles :is(.wood,.mountain,.cloud) .title-emblem {
+  --badge-shape:polygon(50% 0,94% 13%,96% 47%,87% 70%,68% 87%,50% 100%,32% 87%,13% 70%,4% 47%,6% 13%);
+}
+.winter-theme .page-titles :is(.star,.moon,.dawn) .title-emblem {
+  --badge-shape:polygon(50% 0,66% 10%,83% 12%,88% 29%,100% 50%,88% 71%,83% 88%,66% 90%,50% 100%,34% 90%,17% 88%,12% 71%,0 50%,12% 29%,17% 12%,34% 10%);
+}
+.winter-theme .page-titles .emblem-back {
+  inset:62% 13% -23%; border:0; border-radius:0; box-shadow:none; transform:none; background:none;
+}
+.winter-theme .page-titles .emblem-back::before,.winter-theme .page-titles .emblem-back::after {
+  content:""; position:absolute; top:0; bottom:0; left:2%; width:45%; transform:rotate(15deg);
+  background:linear-gradient(to right,transparent 15%,var(--metal-light) 15% 20%,transparent 20% 80%,var(--metal-light) 80% 85%,transparent 85%),
+    color-mix(in srgb,var(--tile) 61%,#38504a);
+  clip-path:polygon(0 0,100% 0,100% 100%,48% 80%,0 100%);
+}
+.winter-theme .page-titles .emblem-back::after { left:auto; right:2%; transform:rotate(-15deg); }
+.winter-theme .page-titles .emblem-front {
+  color:color-mix(in srgb,var(--tile) 20%,#263c35); border:0; border-radius:0; clip-path:var(--badge-shape);
+  background:linear-gradient(145deg,var(--metal-light),var(--metal) 45%,var(--metal-light) 73%,var(--metal)); backdrop-filter:none; box-shadow:none;
+}
+.winter-theme .page-titles .emblem-front::before {
+  content:""; position:absolute; inset:2px; clip-path:inherit;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--tile) 34%,#fff3dc),var(--tile));
+}
+.winter-theme .page-titles .emblem-front::after {
+  content:""; position:absolute; inset:14%; border:1px dashed var(--metal); border-radius:50%;
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--metal-light) 70%,transparent);
+}
+.winter-theme .page-titles .emblem-front svg { position:relative; z-index:1; width:46%; height:46%; fill:color-mix(in srgb,var(--metal-light) 65%,transparent); filter:none; stroke-width:1.6; }
+.winter-theme .page-titles .compact .title-emblem { width:33px; height:33px; inset:auto; }
+.winter-theme .page-titles .compact .emblem-back { bottom:-12%; }
+.winter-theme .page-titles .compact .emblem-front::after { border-style:solid; box-shadow:none; }
+.winter-theme .page-titles .locked .emblem-front { filter:saturate(.35); }
+.winter-theme .page-titles :is(.tile-category,.list-summary,.tile-footer,.acquired-date,.nameplate-preview>small,.title-description p,.visibility-control small) { color:var(--muted); }
+.winter-theme .page-titles .tile-footer { border-top:1px dashed var(--stitch); }
+.winter-theme .page-titles :is(.tile-rarity,.tile-quality,.title-description h3) { color:color-mix(in srgb,var(--ink) 77%,var(--tile)); }
+.winter-theme .page-titles :is(.equipped-tag,.preview-status.is-equipped,.btn.equipped-btn) { color:var(--pine); background:var(--cover); border-color:var(--stitch); }
+.winter-theme .page-titles .preview-status:not(.is-equipped) { color:var(--muted); background:var(--paper); border-color:var(--ruling); }
+.winter-theme .page-titles .title-detail { background:var(--sheet); border-color:var(--ruling); box-shadow:var(--page-shadow); }
+.winter-theme .page-titles :is(.card-title h2,.nameplate strong,.acquisition span,.visibility-control span) { color:var(--ink); }
+.winter-theme .page-titles :is(.acquisition,.equip-controls) { background:var(--soft-paper); border-color:var(--ruling); }
+.winter-theme .page-titles .acquisition small { color:var(--muted); }
+.winter-theme :is(.modal,.page-titles) .toggle { background:var(--stitch); border-color:var(--ruling); }
+.winter-theme :is(.modal,.page-titles) .toggle.on { background:var(--pine); border-color:var(--pine); }
+.winter-theme :is(.modal,.page-titles) .toggle > span { background:var(--sheet); }
+
+/* A bound monthly planner and a separate letter for the selected fortune. */
+.winter-theme .page-fortunes :is(.calendar-card,.calendar-selection) { background:var(--sheet); border:1px solid var(--ruling); box-shadow:var(--page-shadow); }
+.winter-theme .page-fortunes .calendar-toolbar { border-bottom:1px dashed var(--stitch); padding-bottom:11px; margin-bottom:12px; }
+.winter-theme .page-fortunes .month-numeral {
+  padding:.16em .21em .19em; font-family:Georgia,serif; font-weight:500; font-variant-numeric:lining-nums;
+  color:var(--sheet); background:var(--pine); border-radius:2px 2px 8px 8px;
+}
+.winter-theme .page-fortunes :is(.month-label h2,.day-number,.fortune-history strong,.display-card h3) { color:var(--ink); }
+.winter-theme .page-fortunes :is(.month-collection,.weekdays,.calendar-legend,.display-note,.display-card p,.fortune-history small,.card-title h2) { color:var(--muted); }
+.winter-theme .page-fortunes :is(.month-collection strong,.calendar-controls button,.today-mark) { color:var(--pine); }
+.winter-theme .page-fortunes .weekdays span:is(:first-child,:last-child) { color:var(--mail-ink); }
+.winter-theme .page-fortunes .calendar-controls button:disabled { opacity:.4; }
+.winter-theme .page-fortunes .calendar-day { background:var(--paper); border-color:var(--ruling); border-radius:7px; box-shadow:none; }
+.winter-theme .page-fortunes .calendar-day:not(.has-fortune) img { visibility:hidden; }
+.winter-theme .page-fortunes .calendar-day.future { background:transparent; border-color:color-mix(in srgb,var(--ruling) 60%,transparent); }
+.winter-theme .page-fortunes .future .day-number { color:var(--muted); opacity:.72; }
+.winter-theme .page-fortunes .calendar-day.has-fortune {
+  background:linear-gradient(to top,var(--grade) 0 3px,transparent 3px),color-mix(in srgb,var(--grade) 9%,var(--sheet));
+}
+.winter-theme .page-fortunes .calendar-day.selected { border-color:var(--pine); }
+.winter-theme .page-fortunes .calendar-day:enabled:hover:not(.selected) { border-color:var(--ruling); filter:brightness(.96); }
+.winter-theme .page-fortunes .calendar-day.selected { box-shadow:inset 0 0 0 1px var(--pine); }
+.winter-theme .page-fortunes .day-grade { color:var(--ink); background:var(--sheet); bottom:5px; }
+.winter-theme .page-fortunes .fortune-history>button { border-color:var(--ruling); }
+.winter-theme .page-fortunes .fortune-history>button:is(.selected,:hover) { background:var(--cover); }
+.winter-theme .page-fortunes .fortune-preview-paper,.winter-theme .modal .reading-paper {
+  background:var(--paper-grain),var(--soft-paper); border:1px solid var(--stitch);
+  border-radius:5px; box-shadow:2px 3px 0 var(--sheet),3px 4px 0 var(--ruling);
+}
+.winter-theme .page-fortunes .fortune-preview-paper::before { border:1px dashed var(--stitch); border-radius:2px; }
+.winter-theme .page-fortunes .fortune-seal { border-radius:50%; background:var(--sheet); border:1px dashed var(--mail); box-shadow:none; }
+.winter-theme .page-fortunes :is(.selected-fortune-title,.compact-poem),.winter-theme .modal .reading-paper :is(h3,.poem) { color:var(--ink); }
+.winter-theme .page-fortunes :is(.fortune-provenance,.collected-status) { color:var(--muted); }
+.winter-theme .page-fortunes .fortune-aside .display-card { background:var(--cover); border:1px solid var(--ruling); box-shadow:none; }
+.winter-theme .page-fortunes .display-object { background:var(--sheet); border-color:var(--ruling); }
+.winter-theme .modal .reading-interpretation>p { color:var(--ink); }
+
+/* A postal bulletin. The cancellation mark belongs to the cover, away from body copy. */
+.winter-theme .page-updates .hub-update-article { border-color:var(--ruling); }
+.winter-theme .page-updates .hub-update-cover { border-top:3px solid transparent; border-image:var(--letter-edge) 3 0 0; }
+.winter-theme .page-updates .hub-update-art {
+  top:15px; right:15px; width:38px; height:38px; border:3px double var(--stitch); border-radius:50%;
+  color:var(--pine); background:var(--soft-paper); box-shadow:none; transform:rotate(9deg);
+}
+.winter-theme .page-updates .hub-update-art>span { display:none; }
+.winter-theme .page-updates .hub-update-art svg { width:21px; height:21px; stroke-width:1.6; }
+.winter-theme .page-updates .updates-index-item.is-active { box-shadow:inset 3px 0 var(--pine); }
+.winter-theme .page-updates :is(.updates-feedback,.updates-reply,.updates-pack-menu) { background:var(--soft-paper); color:var(--ink); border-color:var(--ruling); }
+.winter-theme .page-updates :is(.updates-compose textarea,.updates-like,.updates-pack-picker>button) {
+  background:var(--sheet); border-color:var(--ruling); color:var(--ink);
+}
+.winter-theme .page-updates :is(.updates-feedback-heading h3,.updates-thread-meta strong,.updates-thread p,.updates-compose label) { color:var(--ink); }
+.winter-theme .page-updates :is(.updates-reaction-row>div>span,.updates-thread-meta time,.updates-no-comments,.updates-item-foot,.updates-feedback-heading>span,.updates-feedback-heading h3 small) { color:var(--muted); }
+.winter-theme .page-updates .hub-update-body li::marker { color:var(--pine); }
+.winter-theme .page-updates .updates-like[aria-pressed="true"] { background:var(--cover); color:var(--pine); border-color:var(--pine); }
+
+/* The place colors belong on the score plaques. A short contact shadow grounds each head. */
+.winter-theme .page-leaderboards .lb-podium-slot { --prize:var(--wool); --lb-ink:var(--pine); }
+.winter-theme .page-leaderboards .lb-podium-slot.rank-1 { --prize:#c5a45e; --lb-ink:color-mix(in srgb,var(--ink) 70%,#b58a43); }
+.winter-theme .page-leaderboards .lb-podium-slot.rank-3 { --prize:#b1806a; --lb-ink:var(--mail-ink); }
+.winter-theme .page-leaderboards .lb-podium-aura {
+  width:calc(var(--lb-head) * 1.55); height:10px; bottom:0; opacity:.8; border-radius:50%;
+  background:radial-gradient(ellipse at center,color-mix(in srgb,var(--wool) 36%,transparent),transparent 71%);
+}
+.winter-theme .page-leaderboards .lb-podium-glass.glass-surface {
+  background:var(--sheet); border:1px solid var(--ruling); border-top:3px solid var(--prize); border-radius:11px;
+  backdrop-filter:none; box-shadow:var(--page-shadow);
+}
+.winter-theme .page-leaderboards .lb-podium-glass :is(.glass-surface__sheen,.glass-surface__rim,.glass-surface__frame) { opacity:0; }
+.winter-theme .page-leaderboards :is(.lb-ranking-frame,.lb-state) { border-color:var(--ruling); background:var(--sheet); box-shadow:var(--page-shadow); }
+.winter-theme .page-leaderboards .lb-animated-list {
+  --al-tile:var(--sheet) !important; --al-tile-edge:var(--ruling) !important;
+  --al-ring:var(--pine) !important; --al-ring-fill:var(--soft-paper) !important;
+}
+.winter-theme .page-leaderboards .lb-row-meter { background:var(--ruling); }
+.winter-theme .page-leaderboards .lb-row-meter>span { background:linear-gradient(90deg,var(--stitch),var(--wool)); }
+.winter-theme .page-leaderboards :is(.lb-table-heading,.lb-self-position) { background:var(--soft-paper); border-color:var(--ruling); }
+.winter-theme .page-leaderboards :is(.lb-podium-copy>strong,.lb-row-player,.lb-score.is-small>strong,.lb-self-position strong,.lb-state h2) { color:var(--ink); }
+.winter-theme .page-leaderboards :is(.lb-scope,.lb-table-heading,.lb-board-caption>span,.lb-podium-copy em,.lb-score small,.lb-score>span,.lb-self-hint,.lb-rank-position-list,.lb-state p) { color:var(--muted); }
+.winter-theme .page-leaderboards :is(.lb-rank-position-self,.lb-self-position button,.lb-state-icon) { background:var(--soft-paper); color:var(--pine); border-color:var(--ruling); }
+.winter-theme .page-leaderboards .lb-scope>span { background:var(--wool); }
+.preview-stage.winter-theme .page-leaderboards .lb-tabs button.is-active { color:var(--sheet); }
+.winter-theme .page-leaderboards .lb-row-player>strong { color:var(--ink); }
+.winter-theme .page-leaderboards .lb-rank-row.is-self .lb-row-player>strong { color:var(--pine); }
+
+/* Archive bindings surround the original pack covers and player-chosen patterns. */
+.preview-stage.winter-theme .community {
+  --community-text:var(--ink); --community-muted:var(--muted); --community-accent:var(--pine);
+  --community-line:var(--ruling); --community-edge:var(--stitch); --community-surface:var(--sheet);
+  --community-paper:var(--sheet); --community-soft:var(--soft-paper); --community-shadow:#172c2512;
+}
+.winter-theme .community .community-button.primary { color:var(--sheet); background:var(--pine); border-color:var(--pine); }
+.winter-theme .community .memory-archive-option { background:var(--sheet); border:1px solid var(--ruling); border-radius:4px 12px 12px 4px; }
+.winter-theme .community .memory-archive-label { border-left:4px solid var(--stitch); }
+.winter-theme .community .memory-collection-choice:hover:not(.is-selected) { border-color:var(--ruling); background:var(--soft-paper); }
+.winter-theme .community .memory-archive-option.is-selected { box-shadow:0 0 0 1px var(--pine); border-color:var(--pine); }
+.winter-theme .community .memory-archive-option.is-selected .memory-archive-label { background:var(--soft-paper); border-left-color:var(--pine); }
+.winter-theme .community .memory-reader-frame { border-color:var(--ruling); background:var(--sheet); box-shadow:var(--page-shadow); }
+.winter-theme .community .memory-detail-body { background:var(--sheet); }
+.winter-theme .community .memory-stats { background:var(--soft-paper); border-color:var(--ruling); }
+.winter-theme .community .memory-milestone { border-top:1px dashed var(--stitch); }
+.winter-theme .community .memory-demo-note { padding-right:56px; position:relative; }
+.winter-theme .community .memory-demo-note::after {
+  content:""; position:absolute; right:4px; bottom:0; width:48px; height:24px;
+  mask:url("/assets/winter/winter-marks.svg#trail") center / contain no-repeat; background:var(--pine); opacity:.44; pointer-events:none;
+}
+.winter-theme .public-profile-modal .profile-body { background:var(--sheet); }
+.winter-theme .public-profile-modal :is(.profile-card-footer,.public-profile-account) { border-color:var(--ruling); background:var(--soft-paper); }
+.winter-theme .public-profile-modal .profile-curation { border-color:var(--ruling); }
+.winter-theme .public-profile-modal .profile-editor { border-top:1px dashed var(--stitch); }
+
+/* A winter post desk, with blank paper for long answers and the agreement. */
+.preview-stage.winter-theme .wz-page {
+  --wz-ink:var(--ink); --wz-muted:var(--muted); --wz-paper:var(--sheet); --wz-rule:var(--ruling); --wz-blue:var(--pine);
+  color:var(--ink); background:var(--paper);
+}
+.winter-theme .wz-page .wz-body.wz-empty,.winter-theme .wz-page .wz-first-guide.is-welcome {
+  isolation:isolate; background:var(--paper-grain),radial-gradient(ellipse at 60% 36%,var(--sheet),var(--paper) 72%);
+}
+.winter-theme .wz-page :is(.wz-body.wz-empty,.wz-first-guide.is-welcome)::before,
+.winter-theme .wz-page :is(.wz-body.wz-empty,.wz-first-guide.is-welcome)::after {
+  content:""; position:absolute; z-index:-1; pointer-events:none; background:var(--wool);
+}
+.winter-theme .wz-page :is(.wz-body.wz-empty,.wz-first-guide.is-welcome)::before {
+  left:2%; top:5%; width:clamp(64px,12%,145px); height:19%; opacity:.18;
+  mask:url("/assets/winter/frost-print.svg") top left / contain no-repeat;
+}
+.winter-theme .wz-page :is(.wz-body.wz-empty,.wz-first-guide.is-welcome)::after {
+  right:4%; bottom:8%; width:clamp(65px,11%,120px); height:9%; opacity:.33; transform:rotate(-8deg);
+  mask:url("/assets/winter/winter-marks.svg#mail") bottom right / contain no-repeat;
+}
+.winter-theme .wz-page :is(.wz-welcome-actions button,.wz-guide-card,.wz-agreement-footer,.wz-compose,.wz-usage-paper,.wz-picker,.wz-model-menu,.wz-reference-menu,.wz-reminder-panel,.wz-reminder-trigger) {
+  background:var(--sheet); border-color:var(--ruling); color:var(--ink);
+}
+.winter-theme .wz-page .wz-welcome-actions button.wz-guide-primary,.winter-theme .wz-page .wzs-primary { color:var(--sheet); background:var(--pine); }
+.winter-theme .wz-page :is(.wz-guide-welcome h1,.wz-landing h1,.wzs-content h1,.wz-history h1,.wz-agreement h1) {
+  font-family:var(--poem); letter-spacing:.035em; color:var(--ink);
+}
+.winter-theme .wz-page .wz-compose { border-radius:14px; box-shadow:0 3px 0 var(--soft-paper),0 4px 0 var(--ruling); }
+.winter-theme .wz-page .wz-compose:focus-within { border-color:var(--ruling); }
+.winter-theme .wz-page .wz-tool-trigger {
+  color:var(--pine); background:var(--soft-paper); border-radius:10px;
+}
+.winter-theme .wz-page .wz-tool-trigger:enabled:is(:hover,[aria-expanded="true"]) {
+  color:var(--ink); background:var(--cover);
+}
+.winter-theme .wz-compose button[type="submit"] {
+  border-radius:50%; background:var(--pine); color:var(--sheet);
+}
+.winter-theme .wz-compose button[type="submit"]:enabled:hover {
+  background:color-mix(in srgb,var(--pine) 86%,var(--ink));
+}
+.winter-theme .wz-compose button[type="submit"]:disabled {
+  color:var(--muted); background:var(--soft-paper); opacity:.74;
+}
+.winter-theme .wz-page .wz-reminder-trigger {
+  color:var(--pine); background:var(--soft-paper);
+  box-shadow:inset 0 1px 0 var(--sheet),0 2px 4px color-mix(in srgb,var(--ink) 9%,transparent);
+}
+.winter-theme .wz-page .wz-reminder-trigger:is(:hover,[aria-expanded="true"]) {
+  color:var(--ink); background:var(--cover);
+}
+.winter-theme .wz-page :is(.wz-quota-button,.wz-topic-choice button):is(:hover,:focus-visible),
+.winter-theme .wz-page .wz-agreement-footer button[type="submit"]:enabled:hover {
+  border-color:var(--ruling);
+}
+.winter-theme .wz-page .wz-agreement-footer button[type="submit"]:enabled:hover { filter:brightness(1.07); }
+.winter-theme .wz-page .wz-question { border:1px solid var(--ruling); background:var(--soft-paper); border-radius:13px 13px 3px 13px; }
+.winter-theme .wz-page .wz-agreement-reader { background:var(--sheet); }
+.winter-theme .wz-page .wz-agreement-copy header { padding-bottom:15px; border-bottom:1px dashed var(--stitch); }
+.winter-theme .wz-page .wz-agreement-footer { border-top:1px dashed var(--stitch); padding-top:15px; }
+.winter-theme .wz-page .wzs-panel { background:var(--paper); }
+.winter-theme .wzs-panel > .topbar { position:relative; background:var(--paper); border:0; }
+.winter-theme .wz-page :is(.wz-history-row,.wzs-row) { border-bottom:1px dashed var(--stitch); }
+.winter-theme .wz-page .wzs-cover {
+  width:34px; flex-basis:34px; border-radius:3px 7px 7px 3px; border:1px solid var(--stitch); border-left:3px solid var(--pine);
+  background:var(--cover); color:var(--pine);
+}
+.winter-theme .wz-page .wzs-summary { border-bottom:1px solid var(--stitch); border-top:3px solid transparent; border-image:var(--letter-edge) 3 0 0; padding-top:14px; }
+.winter-theme .wz-page .wzs-type { color:var(--pine); }
+.winter-theme .wz-page .wz-unread-dot { background:var(--mail-ink); }
+
+/* The cover animation, shared dialogs, and return-to-handbook screen. */
+.preview-stage.winter-theme .modal {
+  background:var(--sheet); color:var(--ink); border:1px solid var(--ruling); border-radius:17px; box-shadow:0 18px 65px -25px #15261e89;
+}
+.winter-theme .modal .modal-head { position:relative; background:var(--paper-grain),var(--soft-paper); border-color:var(--ruling); }
+.winter-theme .modal .modal-head h2,.winter-theme .modal .profile-modal h3 { color:var(--ink); font-family:var(--poem); }
+.winter-theme .modal :is(.modal-head p,.setting-row p,.settings-note,.preview-note,.profile-modal dt,.welcome-range-labels button,.lb-preview-field label,.lb-preview-field p) { color:var(--muted); }
+.winter-theme .modal :is(.setting-row,.profile-modal dl>div) { border-color:var(--ruling); }
+.winter-theme .modal :is(.setting-row strong,.profile-modal dd) { color:var(--ink); }
+.winter-theme .modal .settings-content .theme-choices { background:var(--soft-paper); border-color:var(--ruling); }
+.winter-theme .modal .settings-content .theme-choices::before { background:var(--sheet); }
+.winter-theme .modal .settings-content .theme-choices button[aria-pressed="true"] { color:var(--pine); }
+.winter-theme .modal .welcome-range-line { background:linear-gradient(var(--pine),var(--pine)) 0 / var(--welcome-progress) 100% no-repeat,var(--ruling); }
+.winter-theme .modal .welcome-range-track input::-webkit-slider-thumb { background:var(--pine); border-color:var(--sheet); }
+.winter-theme .modal .welcome-range-track input::-moz-range-thumb { background:var(--pine); border-color:var(--sheet); }
+.winter-theme .modal .welcome-range-labels button.selected { color:var(--pine); background:var(--cover); }
+.winter-theme .modal :is(.settings-note,.preview-note) { background:var(--soft-paper); border-color:var(--ruling); }
+.winter-theme .modal .sync-revoke-btn {
+  color: var(--mail-ink);
+  background: color-mix(in srgb, var(--mail) 11%, transparent);
+  border-color: color-mix(in srgb, var(--mail) 36%, var(--ruling));
+}
+.winter-theme .modal .sync-revoke-btn:hover {
+  background: color-mix(in srgb, var(--mail) 19%, transparent);
+}
+.preview-stage.winter-theme .winter-arrival {
+  --arrival-matte:color-mix(in srgb,var(--sheet) 78%,var(--cover));
+  --arrival-rim:color-mix(in srgb,var(--pine) 46%,var(--sheet));
+  background:var(--paper-grain),radial-gradient(ellipse at 50% 41%,var(--sheet) 24%,var(--arrival-matte) 84%);
+  container-type:size;
+}
+/* The actual page is already painted when the illustrated frontispiece dissolves. */
+.winter-theme .app-shell.is-opening .page-content { visibility:visible; }
+.arrival-bookplate {
+  width:min(66cqw,70cqh,570px); text-align:center;
+  transform:translateY(-1cqh); color:var(--ink);
+}
+.arrival-frame {
+  --arch:50% 50% 6px 6px / 27% 27% 6px 6px;
+  padding:4px; border:1px solid var(--arrival-rim); border-radius:var(--arch);
+  background:var(--arrival-matte); box-shadow:0 2px 0 var(--ruling);
+  animation:arrival-print 760ms cubic-bezier(.18,.72,.19,1) both;
+}
+.arrival-landscape { position:relative; isolation:isolate; overflow:hidden; aspect-ratio:3; border-radius:var(--arch); }
+.arrival-illustration,.arrival-windows,.arrival-unlit,.arrival-flurries,.arrival-tracks { position:absolute; inset:0; }
+.arrival-illustration { background:var(--scene) center / 100% 100% no-repeat; }
+.arrival-windows,.arrival-unlit {
+  mask:radial-gradient(ellipse 2.8% 5.5% at 71.1% 44.8%,#000 59%,transparent 100%),
+       radial-gradient(ellipse 1.2% 6.2% at 69.2% 66%,#000 56%,transparent 100%),
+       radial-gradient(ellipse 2.6% 4.5% at 65.2% 72%,#000 52%,transparent 100%),
+       radial-gradient(ellipse 3% 3% at 74% 73.7%,#000 58%,transparent 100%);
+}
+.arrival-unlit { background:#594b38; animation:arrival-ignite 730ms 570ms ease-out both reverse; }
+.arrival-windows { background:url("/assets/winter/inn-night.jpg") center / 100% 100%; animation:arrival-ignite 730ms 570ms ease-out both; }
+.arrival-tracks i {
+  position:absolute; width:1.1%; height:1.75%; border-radius:60% 45%; background:#62757b;
+  transform:rotate(-15deg); animation:arrival-step 170ms ease-out both;
+}
+.arrival-tracks i:nth-child(1) { left:61%; bottom:2%; animation-delay:360ms; }
+.arrival-tracks i:nth-child(2) { left:63.5%; bottom:3.3%; animation-delay:490ms; }
+.arrival-tracks i:nth-child(3) { left:65.5%; bottom:5.4%; animation-delay:620ms; }
+.arrival-tracks i:nth-child(4) { left:68%; bottom:7%; animation-delay:750ms; }
+.arrival-flurries i {
+  position:absolute; width:var(--flake-size); height:var(--flake-size); border-radius:50%; background:#fff8e9;
+  animation:arrival-flurry 1720ms var(--flake-delay) ease-out both;
+}
+.arrival-inscription {
+  margin-top:clamp(12px,2.9cqh,25px); padding-left:.16em; color:var(--ink); font-family:var(--poem);
+  font-size:clamp(25px,5.4cqh,46px); font-weight:600; line-height:1.34; letter-spacing:.16em;
+  animation:arrival-title 680ms 920ms cubic-bezier(.2,.7,.22,1) both;
+}
+.arrival-embroidery {
+  margin:clamp(7px,1.5cqh,12px) auto 0; width:clamp(76px,12cqw,128px); height:13px;
+  background:var(--wool); mask:url("/assets/winter/knit-rose.svg") center / contain no-repeat;
+  animation:arrival-rule 590ms 1170ms ease-out both;
+}
+@keyframes arrival-print {
+  from { opacity:0; clip-path:inset(47% 0 47% 0 round 12px); transform:translateY(5px); }
+  to { opacity:1; clip-path:inset(0 -2px -3px round 0); transform:none; }
+}
+@keyframes arrival-ignite { from { opacity:0; } to { opacity:1; } }
+@keyframes arrival-step { from { opacity:0; } to { opacity:.55; } }
+@keyframes arrival-flurry {
+  0% { opacity:0; transform:translate(8px,-11px); }
+  25% { opacity:.75; } 80% { opacity:.55; }
+  100% { opacity:0; transform:translate(-9px,13px); }
+}
+@keyframes arrival-title { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:none; } }
+@keyframes arrival-rule { from { opacity:0; clip-path:inset(0 49%); } to { opacity:.8; clip-path:inset(0); } }
+.winter-theme.preview-stage .closed-state { color:var(--ink); }
+.winter-theme .closed-state :is(h1,p),.winter-theme .preview-footer,.winter-theme .preview-footer button { color:var(--muted); }
+.winter-theme .closed-state h1 { color:var(--ink); font-family:var(--poem); }
+.winter-theme .closed-state>.brand-mark { background:transparent url("/assets/winter/station-home.webp") center / contain no-repeat; box-shadow:none; }
+.winter-theme .closed-state>.brand-mark span { display:none; }
+.winter-theme .closed-state>.brand-mark::before,.winter-theme .closed-state>.brand-mark::after { content:none; }
+.winter-theme .preview-footer :is(kbd,.updates-manager-link) { color:var(--pine); }
+
+/* Small illustrations sit in the margins of the corresponding chapter.
+   Their boxes never intercept a click or grow the scrolling page. */
+.winter-theme .page-titles .title-grid:not(.compact) .tilted-card__front::before {
+  content:""; position:absolute; inset:1px 4px auto auto; width:36%; height:63%; pointer-events:none;
+  background:color-mix(in srgb,var(--wool) 70%,var(--tile)); opacity:.25;
+  mask:url("/assets/winter/frost-print.svg") right top / contain no-repeat;
+}
+/* Wind and tracks occupy the unprinted strip between a chapter title and its controls. */
+@media(min-width:901px) {
+  .winter-theme .page-content:not(.page-home) .page-heading::after {
+    content:""; order:1; align-self:stretch; width:clamp(62px,17%,160px); min-width:0; margin-left:auto; pointer-events:none;
+    background:var(--wool); opacity:.30;
+    mask:url("/assets/winter/winter-marks.svg#trail") 24% 62% / 41% 48% no-repeat,
+      url("/assets/winter/frost-print.svg") 96% 38% / 41% 91% no-repeat;
+  }
+  .winter-theme .page-content:not(.page-home) .page-heading > :nth-child(2) { order:2; }
+  .winter-theme .page-updates .page-heading::after,.winter-theme .page-fortunes .page-heading::after {
+    mask:url("/assets/winter/winter-marks.svg#mail") 95% center / 71% 79% no-repeat;
+  }
+}
+.winter-theme .page-titles .nameplate-preview::after {
+  inset:auto 6px 8px auto; width:27%; height:32%; border:0;
+  background:url("/assets/winter/grove.webp") bottom right / contain no-repeat;
+}
+.winter-theme .page-fortunes .calendar-toolbar::after {
+  content:""; order:1; align-self:stretch; flex:1; min-width:0; margin-inline:8px; pointer-events:none;
+  background:url("/assets/winter/winter-post.webp") center / auto 96% no-repeat;
+}
+.winter-theme .page-fortunes .calendar-controls { order:2; }
+.winter-theme .page-fortunes .calendar-grid .calendar-blank:last-child {
+  background:url("/assets/winter/sleeping-fox.webp") center / 90% auto no-repeat;
+}
+.winter-theme .modal .reading-paper { position:relative; }
+.winter-theme .modal .reading-paper::after {
+  content:""; display:block; width:100%; height:31px; margin:8px auto 0; pointer-events:none;
+  background:url("/assets/winter/sleeping-fox.webp") center / contain no-repeat;
+}
+.winter-theme .page-updates .hub-update-article { container-type:inline-size; }
+@container (min-width:390px) {
+  .winter-theme .page-updates .hub-update-cover { padding-right:clamp(110px,24cqw,152px); }
+  .winter-theme .page-updates .hub-update-cover h2,.winter-theme .page-updates .hub-update-kicker { padding-right:0; }
+  .winter-theme .page-updates .hub-update-cover::after {
+    content:""; position:absolute; right:9px; bottom:7px; width:clamp(94px,21cqw,136px); height:59%;
+    background:url("/assets/winter/winter-post.webp") right bottom / contain no-repeat; pointer-events:none;
+  }
+}
+.winter-theme .page-leaderboards .lb-podium-scene { container-type:inline-size; }
+.winter-theme .page-leaderboards .lb-podium-slot:first-child .lb-podium-scene::before,
+.winter-theme .page-leaderboards .lb-podium-slot:is(.rank-1,:last-child) .lb-podium-scene::after {
+  content:""; position:absolute; bottom:2px; width:min(28%,calc(50% - var(--lb-head) * .8)); height:65%;
+  pointer-events:none; background-repeat:no-repeat; background-size:contain;
+}
+.winter-theme .page-leaderboards .lb-podium-slot:first-child .lb-podium-scene::before { left:4px; background-image:url("/assets/winter/grove.webp"); background-position:left bottom; }
+.winter-theme .page-leaderboards .lb-podium-slot:last-child:not(.rank-1) .lb-podium-scene::after { right:4px; background-image:url("/assets/winter/sleeping-fox.webp"); background-position:right bottom; }
+.winter-theme .page-leaderboards .lb-podium-slot.rank-1 .lb-podium-scene::after {
+  right:4px; width:min(82px,28%,calc(50% - var(--lb-head) * .8));
+  background-image:url("/assets/winter/winner-bells.png"); background-position:right bottom;
+}
+.winter-theme .community .memories-archive-list::after {
+  content:""; flex:1 1 0; min-height:0; pointer-events:none;
+  background:url("/assets/winter/pine-lantern.webp") right 9px bottom 8px / min(40%,115px) auto no-repeat;
+}
+.winter-theme .community .memory-archive-option { position:relative; }
+.winter-theme .community .memory-note {
+  background:var(--paper-grain),var(--soft-paper); border-inline-start:3px solid var(--stitch);
+  padding:10px 14px; border-radius:3px 10px 10px 3px;
+}
+.winter-theme .community .memory-detail-body .memory-stats { border-bottom:1px dashed var(--stitch); }
+.winter-theme .public-profile-modal .profile-card-footer {
+  background:var(--soft-paper) url("/assets/winter/winter-marks.svg#trail") right 10px center / 40px auto no-repeat;
+  padding-right:58px;
+}
+.winter-theme .wz-page :is(.wz-body.wz-empty,.wz-first-guide.is-welcome)::after {
+  width:clamp(84px,17%,170px); height:23%; right:4%; bottom:6%; transform:none; mask:none; opacity:.86;
+  background:transparent url("/assets/winter/sleeping-fox.webp") bottom right / contain no-repeat;
+}
+html[data-theme="dark"] .winter-theme .wz-page :is(.wz-body.wz-empty,.wz-first-guide.is-welcome)::after { background-image:url("/assets/winter/pine-lantern.webp"); }
+.winter-theme .wz-page .wzs-list-heading::after,.winter-theme .wz-page .wz-history h1::after {
+  content:""; display:block; width:min(22%,90px); height:38px; flex:none; margin-left:auto;
+  background:url("/assets/winter/winter-post.webp") right center / contain no-repeat; pointer-events:none;
+}
+.winter-theme .wz-page .wzs-scroll:has(.wzs-list-heading) { display:flex; flex-direction:column; }
+.winter-theme .wz-page .wzs-scroll:has(.wzs-list-heading)::after {
+  content:""; flex:1 1 0; min-height:0; margin:0 5% 3% auto; width:clamp(92px,17%,180px); pointer-events:none;
+  background:url("/assets/winter/pine-lantern.webp") bottom right / contain no-repeat; opacity:.66;
+}
+.winter-theme .wz-page .wz-history h1 { display:flex; align-items:center; }
+.winter-theme .wz-page .wzs-summary {
+  background:url("/assets/winter/winter-post.webp") right 0 top 15px / auto 27px no-repeat;
+}
+.winter-theme .wz-page .wzs-summary .wzs-type { min-height:26px; }
+.winter-theme .wz-page .wz-agreement-copy header {
+  background:url("/assets/winter/pine-lantern.webp") right center / auto 70% no-repeat; padding-right:14%;
+}
+@media(max-width:760px) {
+  .winter-theme .page-memories .memories-archive-list::after { display:none; }
+}
+@media(max-width:500px) {
+  .winter-theme .page-fortunes .calendar-toolbar::after { display:none; }
+  .winter-theme .page-leaderboards .lb-podium-slot .lb-podium-scene:is(:first-child,:last-child)::before,
+  .winter-theme .page-leaderboards .lb-podium-slot .lb-podium-scene:is(:first-child,:last-child)::after { display:none; }
+}
+
+@media (max-width:600px), (max-height:670px) {
+  .winter-theme .page-content:not(.page-home) .page-heading h1::before { width:.94em; height:.94em; }
+  .winter-theme .page-fortunes .calendar-toolbar { padding-bottom:6px; margin-bottom:7px; }
+  .winter-theme .page-fortunes .month-numeral { padding:.08em .2em .12em; }
+}

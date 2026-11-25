@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="42" viewBox="0 0 176 42" fill="none">
+  <view id="mail" viewBox="0 0 84 42"/><view id="trail" viewBox="92 0 84 42"/>
+  <g stroke="#28463a" stroke-width="1.45" stroke-linecap="round">
+    <circle cx="19" cy="21" r="13"/><circle cx="19" cy="21" r="10"/>
+    <path d="m13 25 6-10 6 10Zm6 0v3M28 15q8-5 16-1t16 1 16-1M29 20q8-5 16-1t16 1 16-1M29 25q8-5 16-1t16 1 16-1"/>
+  </g>
+  <defs><g id="boot" fill="#28463a"><path d="M-3.5 1q-2-4 .2-8 1-2 3.2-2t3 3q1 3-.4 7Z"/><path d="M-3 3h5.6v2q-.3 3-2.8 3t-2.8-3Z"/></g></defs>
+  <use href="#boot" transform="translate(110 30) rotate(49)"/>
+  <use href="#boot" transform="translate(122 17) rotate(34) scale(.91)"/>
+  <use href="#boot" transform="translate(140 20) rotate(58) scale(.77)"/>
+  <use href="#boot" transform="translate(153 9) rotate(43) scale(.64)"/>
+</svg>

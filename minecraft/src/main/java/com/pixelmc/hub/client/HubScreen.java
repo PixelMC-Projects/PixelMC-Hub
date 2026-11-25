@@ -23,6 +23,7 @@ public final class HubScreen extends Screen {
     private boolean firstFrame = true;
     private boolean failed;
     private boolean disposed;
+    private boolean escapeHeld;
     private float panelX, panelY, panelScale = 1;
 
     private long firstFrameAt;
@@ -49,6 +50,7 @@ public final class HubScreen extends Screen {
     protected void init() {
         super.init();
         view.beforeThemeChange(this::captureThemeTransition);
+        view.onCopyToClipboard(minecraft.keyboardHandler::setClipboard);
     }
 
     @Override
@@ -95,7 +97,7 @@ public final class HubScreen extends Screen {
                 renderer = rendererLease.renderer();
                 disposed = false;
             }
-            HubClientGraphics.requestRankingSkins(view.rankingPlayerNames());
+            HubClientGraphics.requestPlayerSkins(view.visiblePlayerNames());
             double acquireMs = (System.nanoTime() - acquiredAt) / 1_000_000.0;
             renderer.render(
                     framebufferWidth,
@@ -271,7 +273,9 @@ public final class HubScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            if (failed || !view.dismissOverlay()) onClose();
+            if (escapeHeld) return true;
+            escapeHeld = true;
+            if (failed || !view.escape()) onClose();
             return true;
         }
         if (!failed && view.textInputFocused() && Screen.isCopy(keyCode)) {
@@ -298,6 +302,10 @@ public final class HubScreen extends Screen {
 
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            escapeHeld = false;
+            return true;
+        }
         return !failed && view.keyReleased(keyCode, scanCode, modifiers)
                 || super.keyReleased(keyCode, scanCode, modifiers);
     }

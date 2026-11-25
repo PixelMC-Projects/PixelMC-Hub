@@ -3,6 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Feather, Pencil, CalendarDays, Leaf } from 'lucide-react';
 import PlayerHead from '../PlayerHead.jsx';
+import { WinterTitlePin } from '../WinterTitleCase.jsx';
 import GlassSurface from '../vendor/react-bits/GlassSurface.jsx';
 import { titleIcons } from '../title-icons.js';
 import { getProfileMemories, PROFILE_BACKGROUNDS, PROFILE_TITLES, SELF_PROFILE, readProfilePreferences, saveProfilePreferences, readCommunityProfile, subscribeCommunity, profileStorageKey, HUB_PREVIEW_STORAGE_KEY } from './demo.js';
@@ -51,7 +52,7 @@ function ProfileModeRegion({ editing, reduced, readContent, children, className 
   </motion.div>;
 }
 
-export function PlayerProfileCard({ player = SELF_PROFILE, onOpenMemories, fortuneOptions = [], onSaveFortune, onSave, reduceMotion = false, notify }) {
+export function PlayerProfileCard({ player = SELF_PROFILE, onOpenMemories, fortuneOptions = [], onSaveFortune, onSave, reduceMotion = false, notify, winter = false }) {
   const [profile, setProfile] = useState(() => readProfilePreferences(player));
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -318,7 +319,8 @@ export function PlayerProfileCard({ player = SELF_PROFILE, onOpenMemories, fortu
               <ProfileModeRegion editing={editing && canEdit} reduced={reduced} className="profile-title-mode" readContent={
             <div className="profile-featured-title">
               {featuredTitle ? <>
-                <span className={`profile-collection-emblem ${featuredTitle.style || ''}`}><Badge size={27} strokeWidth={1.55} /></span>
+                {winter ? <WinterTitlePin title={featuredTitle}/> :
+                  <span className={`profile-collection-emblem ${featuredTitle.style || ''}`}><Badge size={27} strokeWidth={1.55} /></span>}
                 <div><span className="community-caption">称号 · {featuredTitle.rarity}</span><strong className={`title-text ${featuredTitle.style || ''}`}>{featuredTitle.name}</strong><span className="community-caption profile-acquired-date">{collectionDate(featuredTitle.date)}</span></div>
               </> : <div className="profile-curation-empty">
                 <span className="community-caption">精选称号</span>

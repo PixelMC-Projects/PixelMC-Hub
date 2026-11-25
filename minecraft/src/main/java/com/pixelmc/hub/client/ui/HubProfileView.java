@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.pixelmc.hub.client.render.HubDraw;
+import com.pixelmc.hub.client.render.WinterPaper;
 import io.github.humbleui.skija.Matrix33;
 import io.github.humbleui.skija.Paint;
 import io.github.humbleui.skija.SamplingMode;
@@ -219,6 +220,7 @@ public final class HubProfileView implements AutoCloseable {
     private float currentBioHeight, currentCollectionHeight, currentMemoryHeight, naturalBodyHeight;
     private Box contentClip, bioBox, titleBox, fortuneBox, memoryBox;
     private HubDraw draw;
+    private WinterPaper paper;
     private Typeface quoteFace;
     private Font quoteFont;
     private TextLine quoteLine;
@@ -310,6 +312,11 @@ public final class HubProfileView implements AutoCloseable {
         host.request("profile", request);
     }
 
+    public void escape() {
+        if (editing) cancelEditing();
+        else requestClose();
+    }
+
     public void requestClose() {
         if (!open || closing) return;
         closing = true;
@@ -353,8 +360,7 @@ public final class HubProfileView implements AutoCloseable {
             return;
         }
         if (!action.equals("profile") && !action.equals("saveProfile")) return;
-        JsonObject next = object(response, "profile");
-        if (next.size() == 0 && response.has("playerId")) next = response;
+        JsonObject next = HubData.communityProfile(response);
         if (!playerId.equals(string(next, "playerId", ""))) return;
         if (action.equals("saveProfile")
                 && (!saving
@@ -500,6 +506,7 @@ public final class HubProfileView implements AutoCloseable {
             String pressedId) {
         if (!open) return;
         draw = graphics;
+        paper = graphics.winter() ? graphics.winterPaper() : null;
         now = time;
         reduced = reduceMotion;
         dark = darkTheme;
@@ -539,16 +546,31 @@ public final class HubProfileView implements AutoCloseable {
         rails.clear();
         bioBox = titleBox = fortuneBox = memoryBox = null;
 
+        boolean previousColors = paper != null && draw.literalColors(true);
+        try {
+            drawModal(viewportX, viewportY, viewportWidth, viewportHeight, leaving);
+        } finally {
+            if (paper != null) draw.literalColors(previousColors);
+        }
+    }
+
+    private void drawModal(
+            float viewportX,
+            float viewportY,
+            float viewportWidth,
+            float viewportHeight,
+            float leaving) {
         draw.captureGlassBackdrop(viewportX, viewportY, viewportWidth, viewportHeight);
         float veil = reduced ? 1 : curve(progress(now - openedAt, 180_000_000L)) * (1 - leaving);
         draw.saveLayerAlpha(viewportX, viewportY, viewportWidth, viewportHeight, veil);
-        draw.blurBackdrop(viewportX, viewportY, viewportWidth, viewportHeight, 0, 9, 1);
+        draw.blurBackdrop(
+                viewportX, viewportY, viewportWidth, viewportHeight, 0, paper == null ? 9 : 5, 1);
         draw.rect(
                 viewportX,
                 viewportY,
                 viewportWidth,
                 viewportHeight,
-                dark ? 0x590a1029 : 0x3634405c);
+                paper == null ? dark ? 0x590a1029 : 0x3634405c : 0x4a192c29);
         draw.restore();
         draw.saveLayerAlpha(x - 100, y - 100, width + 200, height + 200, opacity);
         draw.save();
@@ -558,20 +580,38 @@ public final class HubProfileView implements AutoCloseable {
                                 .makeConcat(Matrix33.makeScale(scale))
                                 .makeConcat(
                                         Matrix33.makeTranslate(-x - width / 2, -y - height / 2)));
-        draw.boxShadow(x, y, width, height, 25, 0, 28, 76, -18, dark ? 0x99030920 : 0x4035416c);
-        draw.boxShadow(x, y, width, height, 25, 0, 5, 16, -8, dark ? 0x59060e27 : 0x2453658e);
-        draw.linearGradientRoundRect(
-                x,
-                y,
-                width,
-                height,
-                25,
-                135,
-                dark ? new int[] {0xf52b364d, 0xf5322e46} : new int[] {0xf5fcfdff, 0xeff5f3ff},
-                new float[] {0, 1});
+        float radius = paper == null ? 25 : 23;
+        if (paper != null) {
+            draw.boxShadow(x, y, width, height, radius, 0, 18, 65, -10, 0x8915261e);
+            draw.roundRect(x, y, width, height, radius, surface());
+        } else {
+            draw.boxShadow(x, y, width, height, 25, 0, 28, 76, -18, dark ? 0x99030920 : 0x4035416c);
+            draw.boxShadow(x, y, width, height, 25, 0, 5, 16, -8, dark ? 0x59060e27 : 0x2453658e);
+            draw.linearGradientRoundRect(
+                    x,
+                    y,
+                    width,
+                    height,
+                    25,
+                    135,
+                    dark ? new int[] {0xf52b364d, 0xf5322e46} : new int[] {0xf5fcfdff, 0xeff5f3ff},
+                    new float[] {0, 1});
+        }
         draw.save();
-        draw.clipRoundRect(x, y, width, height, 25);
-        draw.text("玩家资料", x + 26, y + 38, 15, ink(), 600);
+        draw.clipRoundRect(x, y, width, height, radius);
+        if (paper != null) {
+            draw.linearGradientRoundRect(
+                    x,
+                    y,
+                    width,
+                    HEADER_HEIGHT,
+                    0,
+                    105,
+                    new int[] {soft(), surface()},
+                    new float[] {0, 1});
+            HubWinterSheet.grain(draw, x, y, width, HEADER_HEIGHT, 0, 1);
+            draw.textSerif("玩家资料", x + 24, y + 39, 20, ink(), 700);
+        } else draw.text("玩家资料", x + 26, y + 38, 15, ink(), 600);
         button(
                 "profile-close",
                 "关闭弹窗",
@@ -597,7 +637,14 @@ public final class HubProfileView implements AutoCloseable {
                 mainScroll,
                 false);
         draw.restore();
-        draw.strokeRoundRect(x, y, width, height, 25, 1, dark ? 0x38d4e1ff : 0xe6ffffff);
+        draw.strokeRoundRect(
+                x,
+                y,
+                width,
+                height,
+                radius,
+                1,
+                paper == null ? dark ? 0x38d4e1ff : 0xe6ffffff : line());
         draw.restore();
         draw.restore();
     }
@@ -628,6 +675,7 @@ public final class HubProfileView implements AutoCloseable {
                                 == null
                         ? 76
                         : 99;
+        if (paper != null) readingCollection = Math.max(86, readingCollection + 20);
         currentCollectionHeight = readingCollection + (212 - readingCollection) * modeAmount;
         boolean hasMemory =
                 selected("featuredMemory", "memories", "id", "featuredMemoryId", false) != null;
@@ -637,7 +685,7 @@ public final class HubProfileView implements AutoCloseable {
         naturalBodyHeight =
                 23
                         + currentBioHeight
-                        + 194 * modeAmount
+                        + appearanceHeight(width - 62) * modeAmount
                         + 19
                         + 32
                         + currentCollectionHeight
@@ -652,7 +700,12 @@ public final class HubProfileView implements AutoCloseable {
 
     private void drawLoading() {
         float baseline = bodyTop + 99 - mainScroll;
-        draw.icon("user-round", x + width / 2 - 16, baseline - 50, 32, muted());
+        draw.icon(
+                "user-round",
+                x + width / 2 - 16,
+                baseline - 50,
+                32,
+                paper == null ? muted() : accent());
         center(status, x + width / 2, baseline + 10, 12, muted(), 400);
         if (!status.equals("正在读取玩家资料…"))
             button(
@@ -681,34 +734,43 @@ public final class HubProfileView implements AutoCloseable {
         float coverY = bodyTop - mainScroll;
         art.cover(draw, x + 1, coverY, width - 2, COVER_HEIGHT, background, pattern, false, dark);
         float left = x + 31;
-        draw.text(self ? "我的公开资料" : "玩家公开资料", left, coverY + 45, 10, muted(), 400);
-        if (preview) draw.text("Web 演示", left + 77, coverY + 45, 10, muted(), 400);
+        int coverMuted = dark ? 0xff9ca6c1 : 0xff77819a;
+        int coverInk = dark ? 0xffe0e3f3 : 0xff34415f;
+        draw.text(self ? "我的公开资料" : "玩家公开资料", left, coverY + 45, 10, coverMuted, 400);
+        if (preview) draw.text("Web 演示", left + 77, coverY + 45, 10, coverMuted, 400);
         draw.text(
                 fit(string(profile, "name", "玩家"), width - 230, 31, 680),
                 left,
                 coverY + 92,
                 31,
-                ink(),
+                coverInk,
                 680);
         JsonObject equipped = object(profile, "title");
         if (equipped.size() > 0) titleText(equipped, left, coverY + 121, 14, width - 230);
-        draw.icon("calendar-days", left, coverY + 148, 13, muted());
+        draw.icon("calendar-days", left, coverY + 148, 13, coverMuted);
         draw.text(
                 date(profile, "joinedAt", "joined") + " 加入旅程",
                 left + 20,
                 coverY + 159,
                 10,
-                muted(),
+                coverMuted,
                 400);
         HubHead.drawPlayer(
                 draw, playerId, self, x + width - 38 - 128 + 25.5f, coverY + 58.5f, 77, -25, -12);
         float bodyY = coverY + COVER_HEIGHT;
+        if (paper != null) {
+            draw.rect(x + 1, bodyY, width - 2, naturalBodyHeight + (self ? 40 : 0), surface());
+        }
         float cursor = bodyY + 23;
         drawBiography(left, cursor, width - 62, visible, background);
         cursor += currentBioHeight;
         drawAppearance(left, cursor, width - 62, background, pattern);
-        cursor += 194 * modeAmount + 19;
-        draw.text("精选收藏", left, cursor + 12, 12, muted(), 600);
+        cursor += appearanceHeight(width - 62) * modeAmount + 19;
+        if (paper == null) draw.text("精选收藏", left, cursor + 12, 12, muted(), 600);
+        else {
+            draw.line(left, cursor - 12, left + width - 62, cursor - 12, 1, line());
+            draw.textSerif("精选收藏", left, cursor + 13, 15, ink(), 650);
+        }
         cursor += 32;
         drawCollections(left, cursor, width - 62);
         cursor += currentCollectionHeight - 8 + 25;
@@ -718,11 +780,20 @@ public final class HubProfileView implements AutoCloseable {
         drawFooter(left, cursor, width - 62);
         cursor += 57 * modeAmount;
         if (preview) {
+            if (paper != null) {
+                draw.roundRect(left - 4, cursor + 15, width - 54, 29, 5, soft());
+                trail(x + width - 78, cursor + 20);
+            }
             art.icon(draw, "feather", left, cursor + 24, 12, muted());
             draw.text("公开展示的资料与收藏均为演示样例", left + 18, cursor + 35, 10, muted(), 400);
         }
         if (self) {
             float accountY = bodyY + naturalBodyHeight;
+            if (paper != null) {
+                draw.rect(x + 1, accountY - 7, width - 2, 47, soft());
+                draw.line(x + 1, accountY - 7, x + width - 1, accountY - 7, 1, line());
+                trail(left, accountY + 2);
+            }
             button(
                     "profile-account",
                     "账户信息",
@@ -738,6 +809,10 @@ public final class HubProfileView implements AutoCloseable {
         }
     }
 
+    private void trail(float x, float y) {
+        draw.image("images/winter/trail-" + (dark ? "dark" : "light") + ".png", x, y, 43, 19, .55f);
+    }
+
     private void drawBiography(
             float left, float top, float available, JsonObject visible, String background) {
         float statementWidth = Math.min(510, available - 114);
@@ -745,15 +820,20 @@ public final class HubProfileView implements AutoCloseable {
         int[] colors = HubProfileArt.palette(background, dark);
         float statementHeight = currentBioHeight - 15;
         if (!empty || editing || modeAmount > 0) {
-            draw.linearGradientRoundRect(
-                    left,
-                    top,
-                    statementWidth,
-                    statementHeight,
-                    11,
-                    100,
-                    new int[] {alpha(colors[0], .24f), 0, 0},
-                    new float[] {0, .84f, 1});
+            if (paper != null) {
+                draw.roundRect(left, top, statementWidth, statementHeight, 8, soft());
+                if (editing)
+                    draw.strokeRoundRect(left, top, statementWidth, statementHeight, 8, 1, line());
+            } else
+                draw.linearGradientRoundRect(
+                        left,
+                        top,
+                        statementWidth,
+                        statementHeight,
+                        11,
+                        100,
+                        new int[] {alpha(colors[0], .24f), 0, 0},
+                        new float[] {0, .84f, 1});
             if (quoteLine == null) {
                 quoteFace = FontMgr.getDefault().matchFamilyStyle("Georgia", FontStyle.NORMAL);
                 if (quoteFace == null)
@@ -876,20 +956,42 @@ public final class HubProfileView implements AutoCloseable {
             hit("profile-bio", "个人简介", bioBox, () -> host.focus("profile-bio"), contentClip);
     }
 
+    private int colorColumns(float available) {
+        return Math.max(1, Math.min(HubProfileArt.COLORS.length, (int) ((available - 8) / 68)));
+    }
+
+    private int patternColumns(float available) {
+        return Math.max(2, Math.min(6, (int) ((available - 5) / 85)));
+    }
+
+    private float appearanceHeight(float available) {
+        if (paper == null) return 194;
+        int colors = colorColumns(available), patterns = patternColumns(available);
+        return 194
+                + 38 * ((HubProfileArt.COLORS.length - 1) / colors)
+                + 76 * ((HubProfileArt.PATTERNS.length - 1) / patterns);
+    }
+
     private void drawAppearance(
             float left, float top, float available, String background, String pattern) {
         if (modeAmount <= 0 || !self) return;
-        Box region = new Box(left, top, available, 194 * modeAmount);
+        Box region = new Box(left, top, available, appearanceHeight(width - 62) * modeAmount);
         draw.save();
         draw.clipRoundRect(region.x, region.y, region.width, region.height, 0);
         beginLocalAlpha(region, modeAlpha(true));
         float gx = left + 7, legendY = top + 30;
-        draw.text("资料背景", gx, legendY, 11, muted(), 400);
+        if (paper == null) draw.text("资料背景", gx, legendY, 11, muted(), 400);
+        else draw.textSerif("资料背景", gx, legendY, 15, ink(), 650);
         float gap = 9, offset = 0;
         for (int index = 0; index < HubProfileArt.COLORS.length; index++) {
             String id = HubProfileArt.COLORS[index], name = HubProfileArt.COLOR_NAMES[index];
             int[] colors = HubProfileArt.palette(id, dark);
             float bx = gx + offset, by = legendY + 10;
+            if (paper != null) {
+                int columns = colorColumns(available);
+                bx = gx + (index % columns) * ((available - 12) / columns);
+                by += 38 * (index / columns);
+            }
             draw.linearGradientRoundRect(
                     bx, by, 30, 25, 7, 120, new int[] {colors[1], colors[0]}, new float[] {0, 1});
             draw.radialGradientRoundRect(
@@ -920,18 +1022,23 @@ public final class HubProfileView implements AutoCloseable {
             offset += controlWidth + gap;
         }
         float py = top + 104;
-        draw.text("背景图案", gx, py - 10, 11, muted(), 400);
-        float cellWidth = (available - 14 - 40) / 6;
+        int columns = paper == null ? 6 : patternColumns(available);
+        if (paper == null) draw.text("背景图案", gx, py - 10, 11, muted(), 400);
+        else {
+            py += 38 * ((HubProfileArt.COLORS.length - 1) / colorColumns(available));
+            draw.textSerif("背景图案", gx, py - 10, 15, ink(), 650);
+        }
+        float cellWidth = (available - 14 - 8 * (columns - 1)) / columns;
         for (int index = 0; index < HubProfileArt.PATTERNS.length; index++) {
             String id = HubProfileArt.PATTERNS[index];
-            float bx = gx + index * (cellWidth + 8);
+            float bx = gx + index % columns * (cellWidth + 8), rowY = py + 76 * (index / columns);
             draw.save();
-            draw.clipRoundRect(bx, py, cellWidth, 49, 9);
-            art.cover(draw, bx, py, cellWidth, 49, background, id, true, dark);
+            draw.clipRoundRect(bx, rowY, cellWidth, 49, 9);
+            art.cover(draw, bx, rowY, cellWidth, 49, background, id, true, dark);
             draw.restore();
             draw.strokeRoundRect(
                     bx,
-                    py,
+                    rowY,
                     cellWidth,
                     49,
                     9,
@@ -940,7 +1047,7 @@ public final class HubProfileView implements AutoCloseable {
             center(
                     HubProfileArt.PATTERN_NAMES[index],
                     bx + cellWidth / 2,
-                    py + 66,
+                    rowY + 66,
                     10,
                     id.equals(pattern) ? ink() : muted(),
                     400);
@@ -948,50 +1055,78 @@ public final class HubProfileView implements AutoCloseable {
             hit(
                     "profile-pattern-" + id,
                     HubProfileArt.PATTERN_NAMES[index],
-                    new Box(bx, py, cellWidth, 70),
+                    new Box(bx, rowY, cellWidth, 70),
                     () -> change("profilePattern", HubProfileArt.PATTERNS[selection]),
                     intersect(region, contentClip));
-            focusRing("profile-pattern-" + id, bx - 3, py - 3, cellWidth + 6, 55, 11);
+            focusRing("profile-pattern-" + id, bx - 3, rowY - 3, cellWidth + 6, 55, 11);
         }
         draw.canvas().restore();
         draw.restore();
     }
 
     private void drawCollections(float left, float top, float available) {
-        float cell = (available - 20) / 2;
+        float cell = (available - 20) / 2, originalLeft = left, originalTop = top;
         Box region = new Box(left - 4, top - 4, available + 8, currentCollectionHeight);
         draw.save();
         draw.clipRoundRect(region.x, region.y, region.width, region.height, 0);
         if (modeAlpha(false) > 0) {
             beginLocalAlpha(region, modeAlpha(false));
+            if (paper != null) {
+                float cardHeight = currentCollectionHeight - 7;
+                for (int i = 0; i < 2; i++) {
+                    float cardX = left + i * (cell + 20);
+                    draw.roundRect(cardX, top, cell, cardHeight, 13, soft());
+                    HubWinterSheet.grain(draw, cardX, top, cell, cardHeight, 13, 1);
+                }
+                left += 12;
+                top += 10;
+                cell -= 12;
+            }
             JsonObject title = selected("featuredTitle", "titles", "id", "featuredTitleId", false);
             if (title == null) emptyCollection("精选称号", "尚未展示称号", left, top);
             else {
-                int[] colors = titlePalette(title);
-                draw.boxShadow(left, top + 2, 60, 65, 18, 0, 6, 14, 0, 0x1a8878a5);
-                draw.linearGradientRoundRect(
-                        left,
-                        top + 2,
-                        60,
-                        65,
-                        18,
-                        145,
-                        new int[] {colors[0], colors[1]},
-                        new float[] {0, 1});
-                draw.strokeRoundRect(left, top + 2, 60, 65, 18, 1, dark ? 0x28959cc0 : 0xbfffffff);
-                draw.icon(titleIcon(title), left + 16.5f, top + 21, 27, colors[2]);
+                if (paper != null) {
+                    HubCollectionArt.pin(
+                            draw,
+                            string(
+                                    title,
+                                    "style",
+                                    HubCollectionArt.styleForBadge(string(title, "badge", ""))),
+                            titleIcon(title),
+                            left,
+                            top + 6,
+                            48,
+                            false,
+                            1);
+                } else {
+                    int[] colors = titlePalette(title);
+                    draw.boxShadow(left, top + 2, 60, 65, 18, 0, 6, 14, 0, 0x1a8878a5);
+                    draw.linearGradientRoundRect(
+                            left,
+                            top + 2,
+                            60,
+                            65,
+                            18,
+                            145,
+                            new int[] {colors[0], colors[1]},
+                            new float[] {0, 1});
+                    draw.strokeRoundRect(
+                            left, top + 2, 60, 65, 18, 1, dark ? 0x28959cc0 : 0xbfffffff);
+                    draw.icon(titleIcon(title), left + 16.5f, top + 21, 27, colors[2]);
+                }
+                float titleX = left + (paper == null ? 76 : 60);
                 String rarity = rarityLabel(title);
                 draw.text(
                         "称号" + (rarity.isEmpty() ? "" : " · " + rarity),
-                        left + 76,
+                        titleX,
                         top + 14,
                         11,
                         muted(),
                         400);
-                titleText(title, left + 76, top + 39, 17, cell - 76);
-                draw.text(acquired(title), left + 76, top + 62, 11, muted(), 400);
+                titleText(title, titleX, top + 39, 17, cell - (titleX - left));
+                draw.text(acquired(title), titleX, top + 62, 11, muted(), 400);
             }
-            float fx = left + cell + 20;
+            float fx = left + cell + 20 + (paper == null ? 0 : 12);
             JsonObject fortune =
                     selected("featuredFortune", "fortunes", "date", "featuredFortuneDate", false);
             if (fortune == null) emptyCollection("精选签笺", "尚未展示签笺", fx, top);
@@ -1041,6 +1176,9 @@ public final class HubProfileView implements AutoCloseable {
             draw.canvas().restore();
         }
         if (self && modeAlpha(true) > 0) {
+            left = originalLeft;
+            top = originalTop;
+            cell = (available - 20) / 2;
             beginLocalAlpha(region, modeAlpha(true));
             drawOptions(titleOptions, left, top, cell, true);
             drawOptions(fortuneOptions, left + cell + 20, top, cell, false);
@@ -1057,7 +1195,8 @@ public final class HubProfileView implements AutoCloseable {
 
     private void drawOptions(
             Options options, float left, float top, float available, boolean titles) {
-        draw.text(titles ? "精选称号" : "精选签笺", left, top + 12, 11, muted(), 400);
+        if (paper == null) draw.text(titles ? "精选称号" : "精选签笺", left, top + 12, 11, muted(), 400);
+        else draw.textSerif(titles ? "精选称号" : "精选签笺", left, top + 13, 15, ink(), 650);
         if (!options.available) {
             draw.text(titles ? "称号收藏暂不可用" : "签笺收藏暂不可用", left + 4, top + 49, 12, muted(), 400);
             draw.text("已选收藏与当前草稿已保留。", left + 4, top + 73, 10, muted(), 400);
@@ -1170,8 +1309,28 @@ public final class HubProfileView implements AutoCloseable {
             JsonObject memory =
                     selected("featuredMemory", "memories", "id", "featuredMemoryId", false);
             if (memory != null) {
+                if (paper != null) {
+                    draw.linearGradientRoundRect(
+                            left,
+                            top + 3,
+                            available,
+                            currentMemoryHeight - 5,
+                            0,
+                            90,
+                            new int[] {surface(), soft(), surface()},
+                            new float[] {0, .5f, 1});
+                    draw.line(left, top + 3, left + available, top + 3, 1, paper.stitch());
+                    draw.line(
+                            left,
+                            top + currentMemoryHeight - 2,
+                            left + available,
+                            top + currentMemoryHeight - 2,
+                            1,
+                            paper.stitch());
+                }
                 float ry = top + 26;
-                draw.text("精选纪念", left, ry + 11, 11, muted(), 400);
+                if (paper == null) draw.text("精选纪念", left, ry + 11, 11, muted(), 400);
+                else draw.textSerif("精选纪念", left, ry + 11, 15, ink(), 650);
                 String name = string(memory, "name", "");
                 draw.text(fit(name, available * .46f, 16, 600), left, ry + 35, 16, ink(), 600);
                 draw.text(
@@ -1324,6 +1483,9 @@ public final class HubProfileView implements AutoCloseable {
         draw.save();
         draw.clipRoundRect(region.x, region.y, region.width, region.height, 0);
         beginLocalAlpha(region, modeAlpha(true));
+        if (paper != null) {
+            draw.line(left, top + 8, left + available, top + 8, 1, line());
+        }
         if (preview) draw.text("仅保存到此浏览器的 Web 演示", left + 4, top + 42, 10, muted(), 400);
         else if (staleDraft) draw.text("资料已有更新，当前草稿已保留", left + 4, top + 42, 10, muted(), 400);
         button(
@@ -1574,7 +1736,7 @@ public final class HubProfileView implements AutoCloseable {
     public boolean key(int key, int modifiers, String id) {
         if (!open || closing) return false;
         if (key == 256) {
-            requestClose();
+            escape();
             return true;
         }
         if (!textFocused(id)) {
@@ -1771,18 +1933,31 @@ public final class HubProfileView implements AutoCloseable {
                         || id.equals("profile-cancel")
                         || id.equals("profile-account")
                         || id.equals("profile-close");
-        if (primary)
-            draw.roundRect(bx, by + down, w, h, 11, hover > .01f ? 0xff6b58a8 : 0xff7965b6);
-        else if (!subtle) {
+        if (paper != null && id.equals("profile-close")) {
+            draw.circle(
+                    bx + w / 2,
+                    by + down + h / 2,
+                    w / 2,
+                    HubWinterSheet.mix(paper.cover(), paper.ruling(), hover));
+        } else if (primary) {
+            draw.roundRect(
+                    bx,
+                    by + down,
+                    w,
+                    h,
+                    paper == null ? 11 : 9,
+                    paper == null ? hover > .01f ? 0xff6b58a8 : 0xff7965b6 : accent());
+        } else if (!subtle) {
             draw.roundRect(bx, by + down, w, h, 11, hover > .01f ? soft() : surface());
             draw.strokeRoundRect(bx, by + down, w, h, 11, 1, line());
         } else if (hover > 0) draw.roundRect(bx, by + down, w, h, 11, alpha(soft(), hover));
         int color =
                 primary
-                        ? 0xffffffff
+                        ? paper == null ? 0xffffffff : surface()
                         : id.equals("profile-open-memory")
                                 ? accent()
                                 : !subtle || hover > .5f ? ink() : muted();
+        if (paper != null && id.equals("profile-close")) color = paper.pine();
         boolean iconOnly =
                 id.equals("profile-close")
                         || id.equals("profile-memory-prev")
@@ -1829,7 +2004,7 @@ public final class HubProfileView implements AutoCloseable {
     }
 
     private void focusRing(String id, float x, float y, float width, float height, float radius) {
-        if (id.equals(focus))
+        if (paper == null && id.equals(focus))
             draw.strokeRoundRect(x - 2, y - 2, width + 4, height + 4, radius + 2, 2, accent());
     }
 
@@ -1843,7 +2018,7 @@ public final class HubProfileView implements AutoCloseable {
                 start
                         + clamp(offset / Math.max(1, content - length), 0, 1)
                                 * (length - thumbLength);
-        int color = dark ? 0x4daaa6d3 : 0x459290ad;
+        int color = paper == null ? dark ? 0x4daaa6d3 : 0x459290ad : paper.stitch();
         if (horizontal) draw.roundRect(thumb, track.y, thumbLength, 3, 2, color);
         else draw.roundRect(track.x, thumb, 3, thumbLength, 2, color);
         rails.put(kind, new Rail(kind, track, thumb, thumbLength, content, horizontal));
@@ -1881,31 +2056,31 @@ public final class HubProfileView implements AutoCloseable {
     }
 
     private int ink() {
-        return dark ? 0xffe0e3f3 : 0xff34415f;
+        return paper == null ? dark ? 0xffe0e3f3 : 0xff34415f : paper.ink();
     }
 
     private int muted() {
-        return dark ? 0xff9ca6c1 : 0xff77819a;
+        return paper == null ? dark ? 0xff9ca6c1 : 0xff77819a : paper.muted();
     }
 
     private int accent() {
-        return dark ? 0xffb2a1e4 : 0xff7861b2;
+        return paper == null ? dark ? 0xffb2a1e4 : 0xff7861b2 : paper.pine();
     }
 
     private int line() {
-        return dark ? 0x288791b7 : 0xffdce1ee;
+        return paper == null ? dark ? 0x288791b7 : 0xffdce1ee : paper.ruling();
     }
 
     private int edge() {
-        return dark ? 0x28959cc0 : 0xd9ffffff;
+        return paper == null ? dark ? 0x28959cc0 : 0xd9ffffff : paper.ruling();
     }
 
     private int surface() {
-        return dark ? 0xcf282c40 : 0xb8ffffff;
+        return paper == null ? dark ? 0xcf282c40 : 0xb8ffffff : paper.sheet();
     }
 
     private int soft() {
-        return dark ? 0x8c38374e : 0xfff0eff8;
+        return paper == null ? dark ? 0x8c38374e : 0xfff0eff8 : paper.soft();
     }
 
     private void center(String text, float cx, float baseline, float size, int color, int weight) {

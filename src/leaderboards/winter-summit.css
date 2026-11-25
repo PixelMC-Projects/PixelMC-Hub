@@ -1,0 +1,160 @@
+.winter-theme .page-leaderboards:has(.summit-heading) {
+  container:summit-page / size;
+  --summit-landscape:url("/assets/winter/summit-day.webp");
+  --summit-sheet:#f8f4e8; --summit-stripe:#eeeedd; --summit-ink:#2e433a;
+  --summit-muted:#596c5f; --summit-rule:#bdc4b0;
+  --summit-bookmark:#944e36; --summit-mark-ink:#fff3d5;
+}
+html[data-theme="dark"] .winter-theme .page-leaderboards:has(.summit-heading) {
+  --summit-landscape:url("/assets/winter/summit-night.webp");
+  --summit-sheet:#303c37; --summit-stripe:#37443c; --summit-ink:#f2e8d2;
+  --summit-muted:#b9c6b5; --summit-rule:#626f61;
+  --summit-bookmark:#86503d; --summit-mark-ink:#fff0d2;
+}
+.summit-heading,.summit-title { display:flex; align-items:center; }
+.summit-heading { flex:none; justify-content:space-between; gap:12px; margin:0 1px 12px; }
+.summit-title { gap:14px; }
+.summit-title h1 { margin:0; font:700 25px/1.25 var(--poem); color:var(--summit-ink); letter-spacing:.06em; }
+.summit-heading p { margin:4px 0 0; color:var(--summit-muted); font-size:11px; }
+.summit-heading .lb-scope { font-size:11px; }
+.summit-heading .lb-scope small { padding-left:7px; border-left:1px solid var(--summit-rule); font:inherit; }
+.winter-theme .page-leaderboards .summit-heading .lb-tabs {
+  align-self:center; align-items:stretch; gap:4px; padding:0; border:0; border-radius:0; background:none; box-shadow:none;
+}
+.winter-theme .page-leaderboards .summit-heading .lb-tabs button {
+  position:relative; padding:8px 11px; gap:6px; color:var(--summit-muted);
+  background:transparent; box-shadow:none; border:0; border-radius:0; font-size:12px;
+}
+.winter-theme .page-leaderboards .summit-heading .lb-tabs button:hover,
+.preview-stage.winter-theme .page-leaderboards .summit-heading .lb-tabs button.is-active { color:var(--summit-ink); background:transparent; }
+.summit-heading .lb-tabs button::before {
+  content:""; position:absolute; bottom:0; inset-inline:9px; height:2px; background:var(--mail);
+  transform:scaleX(0); transition:transform .2s ease-out;
+}
+.summit-heading .lb-tabs button.is-active::before { transform:scaleX(1); }
+.summit-board.lb-board {
+  gap:0; overflow:hidden; isolation:isolate; border-radius:21px; corner-shape:superellipse(1.35);
+  margin-bottom:clamp(0px,calc((100cqh - 560px)/7),26px);
+}
+.summit-stage {
+  position:relative; isolation:isolate; display:flex; align-items:flex-end; justify-content:center;
+  flex:none; height:clamp(162px,33cqh,249px); padding:0 12% 10px;
+}
+/* Fade the ink of the landscape into the page. The players and lettering stay crisp. */
+.summit-stage::before {
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:var(--summit-landscape) center 38% / cover no-repeat;
+  mask-image:
+    linear-gradient(90deg,transparent,#000a 3%,#000 8%,#000 92%,#000a 97%,transparent),
+    linear-gradient(180deg,transparent,#000a 5%,#000 12%,#000 47%,#000c 63%,#0004 77%,transparent 87%);
+  mask-composite:intersect;
+}
+.summit-slot {
+  --unit:clamp(2.17px,.43cqh,3.25px); --lift:2px;
+  --place-ink:var(--summit-muted);
+  position:relative; flex:0 1 33.333%; min-width:0; outline:0;
+}
+.summit-slot.rank-1 { --unit:clamp(2.55px,.50cqh,3.8px); --lift:8px; --place-ink:var(--mail-ink); }
+.summit-slot.rank-3 { --lift:0px; }
+.summit-figure {
+  position:relative; height:calc(35 * var(--unit) + var(--lift));
+  display:flex; align-items:flex-end; justify-content:center; padding-bottom:var(--lift);
+}
+.summit-figure::before {
+  content:""; position:absolute; pointer-events:none; width:calc(23 * var(--unit)); height:calc(3 * var(--unit));
+  left:50%; bottom:var(--lift); transform:translate(-50%,45%);
+  border-radius:50%; background:radial-gradient(ellipse at center,#243d54a3,transparent 72%);
+}
+.summit-person {
+  position:relative; width:calc(31 * var(--unit)); height:calc(35 * var(--unit));
+  display:grid; place-items:end center; border:0; background:none;
+}
+.summit-caption {
+  display:flex; align-items:center; justify-content:center; gap:10px; padding:5px 6px 1px;
+  min-width:0; color:var(--summit-ink);
+}
+.summit-caption .lb-rank-position-podium {
+  width:auto; color:var(--place-ink); padding-right:9px;
+  border-right:1px solid color-mix(in srgb,var(--place-ink) 38%,transparent);
+}
+.summit-caption .lb-rank-value { gap:2px; }
+.summit-caption .lb-rank-value strong { font:600 clamp(19px,3.4cqh,27px)/1 Georgia,serif; }
+.summit-caption .lb-rank-value small { font-size:9px; color:inherit; }
+.summit-winner-copy { min-width:0; }
+.summit-winner-copy>div { display:flex; align-items:baseline; gap:5px; }
+.summit-winner-copy .lb-profile-name {
+  color:var(--summit-ink); font:650 clamp(13px,1.85cqw,18px)/1.3 var(--poem);
+  text-decoration-color:currentColor; text-underline-offset:3px;
+}
+.summit-winner-copy small { flex:none; font-size:9px; color:var(--summit-muted); }
+.summit-winner-copy .lb-score { justify-content:flex-start; gap:4px; margin-top:2px; }
+.summit-winner-copy .lb-score strong { color:var(--place-ink); font:600 15px/1.15 Georgia,serif; }
+.winter-theme .page-leaderboards .summit-winner-copy .lb-score :is(span,small) { color:var(--summit-muted); font-size:10px; }
+.summit-slot.lb-podium-located .lb-profile-name { animation:summit-locate 1.4s ease-out; }
+@keyframes summit-locate { 0%,45% { text-decoration:underline 2px var(--mail); text-underline-offset:3px; } }
+
+.winter-theme .page-leaderboards .summit-board .lb-ranking-frame {
+  background:var(--paper-grain),var(--summit-sheet); border:0; border-radius:0; clip-path:none; box-shadow:none;
+}
+.winter-theme .page-leaderboards .summit-board .lb-table-heading {
+  padding-block:8px; font-size:11px; color:var(--summit-muted); background:var(--summit-stripe);
+  border:0; border-block:1px solid var(--summit-rule);
+}
+.summit-board .lb-animated-list .animated-list__viewport { padding:0 9px!important; }
+.summit-board .lb-animated-list .animated-list__track { gap:0; }
+.summit-board .lb-animated-list .animated-list__item { border-radius:0; background:none; }
+.summit-board .lb-animated-list .animated-list__item:hover { background:var(--summit-stripe); }
+.summit-board .lb-animated-list .animated-list__indicator,.summit-board .lb-animated-list .animated-list__rim { display:none; }
+.summit-board .lb-rank-row {
+  position:relative; padding-block:clamp(6px,1.25cqh,11px); border-radius:0;
+  border-bottom:1px solid color-mix(in srgb,var(--summit-rule) 62%,transparent);
+}
+.summit-board .lb-rank-row.is-self { background:var(--summit-stripe); }
+.summit-board .lb-rank-position-list .lb-rank-value strong { color:var(--summit-muted); font:600 15px Georgia,serif; }
+.winter-theme .page-leaderboards .summit-board .lb-row-player>strong { color:var(--summit-ink); font-size:13px; }
+.summit-board .lb-row-player .updates-avatar-2d { width:25px; height:25px; border-radius:5px; }
+.winter-theme .page-leaderboards .summit-board .lb-row-meter {
+  position:relative; height:4px; border-radius:1px; background:var(--summit-rule); box-shadow:none;
+}
+.winter-theme .page-leaderboards .summit-board .lb-row-meter>span { border-radius:inherit; background:var(--summit-muted); box-shadow:none; }
+.summit-board .lb-row-meter::after { content:""; position:absolute; inset:0; background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),var(--summit-sheet) calc(25% - 1px) 25%); }
+.winter-theme .page-leaderboards .summit-board .lb-self-position {
+  gap:12px; padding:9px 18px; border:0; border-radius:0; border-top:1px solid var(--summit-rule);
+  background:var(--paper-grain),var(--summit-stripe); box-shadow:none;
+}
+.summit-board .lb-self-label {
+  align-self:stretch; display:grid; place-items:center; margin:-9px 0 -9px -3px; padding:5px 8px 9px;
+  background:var(--summit-bookmark); color:var(--summit-mark-ink); font:650 12px var(--poem);
+  clip-path:polygon(0 0,100% 0,100% 100%,50% calc(100% - 5px),0 100%);
+}
+.winter-theme .page-leaderboards .summit-board .lb-rank-position-self,
+.winter-theme .page-leaderboards .summit-board .lb-self-player { background:none; border:0; color:var(--summit-ink); }
+.winter-theme .page-leaderboards .summit-board .lb-self-position button:not(.lb-self-player) {
+  background:transparent; border:0; color:var(--summit-ink); text-decoration:underline; text-underline-offset:3px;
+}
+.winter-theme .page-leaderboards .summit-board .lb-state {
+  position:relative; isolation:isolate; border:0; border-radius:0; box-shadow:none; background:var(--summit-sheet);
+}
+.summit-board .lb-state::before {
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:var(--summit-landscape) center bottom / 100% auto no-repeat; opacity:.24;
+  mask-image:linear-gradient(to top,#000,transparent 52%);
+}
+@container summit-page (max-width:760px) {
+  .summit-title { gap:8px; }
+  .summit-stage { padding-inline:5%; }
+  .summit-heading .lb-tabs button { padding-inline:6px; }
+}
+@container summit-page (max-height:510px) {
+  .summit-heading { margin-bottom:8px; }
+  .summit-stage { height:143px; }
+  .summit-slot { --unit:2.13px; }
+  .summit-slot.rank-1 { --unit:2.45px; }
+  .summit-board .lb-rank-row { padding-block:5px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .summit-heading .lb-tabs button::before { transition:none; }
+  .summit-slot.lb-podium-located .lb-profile-name { animation:none; }
+}
+[data-motion="reduced"] .summit-heading .lb-tabs button::before { transition:none; }
+[data-motion="reduced"] .summit-slot.lb-podium-located .lb-profile-name { animation:none; }

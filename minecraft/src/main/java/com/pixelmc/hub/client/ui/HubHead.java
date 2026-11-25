@@ -78,7 +78,7 @@ public final class HubHead {
         return players.containsKey(player);
     }
 
-    private static Image playerSkin(String player, boolean self) {
+    static Image playerSkin(String player, boolean self) {
         if (self) return skin;
         PeerSkin cached = players.get(player);
         return cached == null ? null : cached.image;
@@ -165,6 +165,7 @@ public final class HubHead {
 
     /** Release cached skin when the player/session changes or the renderer closes. */
     public static void clearSkin() {
+        SummitPlayer.clear();
         if (facePaint != null) {
             facePaint.close();
             facePaint = null;

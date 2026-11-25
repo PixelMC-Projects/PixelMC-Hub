@@ -1,7 +1,38 @@
 import { useState } from "react";
 import "./welcome-splash.css";
 
-export default function WelcomeSplash() {
+const snowfall = [
+  [9,22], [17,55], [25,14], [32,36], [14,79], [43,20], [50,55],
+  [57,10], [62,35], [69,18], [77,62], [84,29], [91,52], [54,76],
+];
+
+function WinterArrival() {
+  return <div className="welcome-splash winter-arrival" aria-hidden="true">
+    <div className="arrival-bookplate">
+      <div className="arrival-frame">
+        <div className="arrival-landscape">
+          <div className="arrival-illustration" />
+          <div className="arrival-unlit" />
+          <div className="arrival-windows" />
+          <div className="arrival-flurries">
+            {snowfall.map(([x,y], i) => <i key={x} style={{
+              left:x+"%", top:y+"%", "--flake-size":(i%3+2)+"px", "--flake-delay":(i%5)*95+"ms",
+            }}/>)}
+          </div>
+          <div className="arrival-tracks"><i/><i/><i/><i/></div>
+        </div>
+      </div>
+      <div className="arrival-inscription"><span>旅人手册</span></div>
+      <div className="arrival-embroidery" />
+    </div>
+  </div>;
+}
+
+export default function WelcomeSplash({ winter }) {
+  return winter ? <WinterArrival/> : <ClassicWelcome/>;
+}
+
+function ClassicWelcome() {
   const [phase, setPhase] = useState("writing");
   return (
     <div className="welcome-splash" data-phase={phase} aria-hidden="true">

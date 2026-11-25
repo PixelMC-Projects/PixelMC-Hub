@@ -6,8 +6,10 @@ import TiltedCard from '../vendor/react-bits/TiltedCard.jsx';
 import AnimatedList from '../vendor/react-bits/AnimatedList.jsx';
 import PlayerHead from '../PlayerHead.jsx';
 import PlayerAvatar2D from '../changelog/PlayerAvatar2D.jsx';
+import SummitPlayer from './SummitPlayer.jsx';
 import { useLeaderboards, boardDefinitions } from './store.js';
 import './leaderboards.css';
+import './winter-summit.css';
 
 const icons = { food: Utensils, fortunes: BookOpen, online: Clock3 };
 const number = new Intl.NumberFormat('zh-CN');
@@ -66,12 +68,32 @@ function RankPosition({ row, tied, comparisonRevision, variant, reduceMotion }) 
   </span>;
 }
 
-function Podium({ rows, boardId, comparisonRevision, tieRanks, reduceMotion, revision, onOpenProfile }) {
+function WinterWinner({ row, boardId, tied, reduceMotion, onOpenProfile }) {
+  return <>
+    <div className="summit-figure">
+      <button className="summit-person lb-profile-link" aria-label={`查看${row.name}的公开资料`} onClick={() => onOpenProfile?.(row)}>
+        <SummitPlayer name={row.name} skin={skinFor(row)} rank={row.rank}/>
+      </button>
+    </div>
+    <div className="summit-caption">
+      <RankPosition row={row} tied={tied} variant="podium" reduceMotion={reduceMotion}/>
+      <div className="summit-winner-copy">
+        <div><button className="lb-profile-name" title={row.name} onClick={() => onOpenProfile?.(row)}>{row.name}</button>
+          {row.isSelf && <small>我</small>}
+        </div>
+        <Score boardId={boardId} score={row.score} reduceMotion={reduceMotion}/>
+      </div>
+    </div>
+  </>;
+}
+
+function Podium({ rows, boardId, comparisonRevision, tieRanks, reduceMotion, revision, onOpenProfile, winter }) {
   const arranged = rows.length === 3 ? [1, 0, 2] : rows.map((_, i) => i);
-  return <section className="lb-podium" aria-label="榜单前三位">
+  return <section className={winter ? 'summit-stage' : 'lb-podium'} aria-label="榜单前三位">
     <AnimatePresence initial={false} mode="popLayout">{arranged.map(index => {
       const row = rows[index], first = index === 0, tied = tieRanks.has(row.rank), rankLabel = `${tied ? '并列第' : '第'}${row.rank}名`;
-      return <motion.article layout={reduceMotion ? false : "position"} layoutDependency={revision} initial={{opacity:0,y:reduceMotion ? 0 : 8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:reduceMotion ? 0 : -8}} transition={{duration:reduceMotion ? 0 : .32,layout:{duration:reduceMotion ? 0 : .42,ease:[.22,1,.36,1]}}} key={row.playerId} data-player-id={row.playerId} tabIndex={-1} aria-label={`${row.name}，${rankLabel}`} className={`lb-podium-slot rank-${row.rank} ${first ? 'is-leading' : ''}`}>
+      return <motion.article layout={reduceMotion ? false : "position"} layoutDependency={revision} initial={{opacity:0,y:reduceMotion ? 0 : 8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:reduceMotion ? 0 : -8}} transition={{duration:reduceMotion ? 0 : .32,layout:{duration:reduceMotion ? 0 : .42,ease:[.22,1,.36,1]}}} key={row.playerId} data-player-id={row.playerId} tabIndex={-1} aria-label={`${row.name}，${rankLabel}`} className={`${winter ? 'summit-slot' : 'lb-podium-slot'} rank-${row.rank} ${first ? 'is-leading' : ''}`}>
+        {winter ? <WinterWinner row={row} boardId={boardId} tied={tied} reduceMotion={reduceMotion} onOpenProfile={onOpenProfile}/> :
         <TiltedCard containerHeight="100%" imageHeight="100%" containerWidth="100%" imageWidth="100%"
           rotateAmplitude={reduceMotion ? 0 : 3} scaleOnHover={reduceMotion ? 1 : 1.015} glare={.42} shadow={0}
           showTooltip={false} gyroscope={false} intro={false} radius={19} reducedMotion={reduceMotion} className="lb-podium-tilt">
@@ -86,7 +108,7 @@ function Podium({ rows, boardId, comparisonRevision, tieRanks, reduceMotion, rev
               <div className="lb-podium-copy"><strong title={row.name}><button className="lb-profile-name" onClick={() => onOpenProfile?.(row)}>{row.name}</button>{row.isSelf && <em>我</em>}</strong><div className="lb-podium-scoreline"><Score boardId={boardId} score={row.score} reduceMotion={reduceMotion}/></div></div>
             </GlassSurface>
           </div>
-        </TiltedCard>
+        </TiltedCard>}
       </motion.article>;
     })}</AnimatePresence>
   </section>;
@@ -140,7 +162,7 @@ function BoardState({ status, reason, retry }) {
   return <div className={`lb-state lb-state-${status}`} role="status"><span className="lb-state-icon"><Icon size={29}/></span><h2>{content[0]}</h2><p>{content[1]}</p>{status === 'unavailable' && <button className="btn subtle" onClick={retry}><RefreshCw size={13}/>重新读取</button>}</div>;
 }
 
-export default function LeaderboardPage({ notify, reduceMotion: reduceMotionSetting = false, onOpenProfile }) {
+export default function LeaderboardPage({ notify, reduceMotion: reduceMotionSetting = false, onOpenProfile, winter = false }) {
   const systemReducedMotion = useReducedMotion(), reduceMotion = reduceMotionSetting || systemReducedMotion;
   const [boardId, setBoardId] = useState('food'), [pendingLocate, setPendingLocate] = useState(false), listRef = useRef(null), tabRefs = useRef([]);
   const { snapshot, refreshing, refreshFailed, retry, loadMore, revealSelf } = useLeaderboards(boardId);
@@ -164,7 +186,7 @@ export default function LeaderboardPage({ notify, reduceMotion: reduceMotionSett
       const target = [...(listRef.current?.previousElementSibling?.querySelectorAll('[data-player-id]') || [])].find(row => row.dataset.playerId === snapshot.self?.playerId);
       target?.scrollIntoView({block:'nearest', behavior:reduceMotion ? 'instant' : 'smooth'}); target?.focus({preventScroll:true});
       if (target) { target.classList.remove('lb-podium-located'); void target.offsetWidth; target.classList.add('lb-podium-located'); }
-      notify(snapshot.self?.rank === 1 ? '你位于榜首' : `你位于第 ${snapshot.self?.rank} 名`); return;
+      notify(snapshot.self?.rank === 1 ? '你位于榜首' : `你位于第 ${snapshot.self?.rank} 名`, "info"); return;
     }
     const target = [...(listRef.current?.querySelectorAll('[data-player-id]') || [])].find(row => row.dataset.playerId === snapshot.self?.playerId);
     target?.scrollIntoView({ block:'center', behavior:reduceMotion ? 'instant' : 'smooth' });
@@ -172,16 +194,29 @@ export default function LeaderboardPage({ notify, reduceMotion: reduceMotionSett
   };
   useEffect(() => { if (pendingLocate && snapshot.rows.some(row => row.playerId === snapshot.self?.playerId)) { setPendingLocate(false); requestAnimationFrame(locate); } }, [pendingLocate, snapshot.rows]);
   const ready = snapshot.status === 'ready';
-  return <>
-    <div className="page-heading lb-heading"><div><h1>玩家排行</h1><p>{board.description}</p></div></div>
-    <div className="lb-toolbar"><div className="lb-tabs" role="tablist" aria-label="选择排行榜">{boardDefinitions.map((item, index) => {
+  const tabs = <div className="lb-tabs" role="tablist" aria-label="选择排行榜">{boardDefinitions.map((item, index) => {
       const TabIcon = icons[item.id];
       return <button ref={node => {tabRefs.current[index] = node;}} id={`lb-tab-${item.id}`} aria-controls={`lb-panel-${item.id}`} role="tab" aria-selected={boardId === item.id} tabIndex={boardId === item.id ? 0 : -1} key={item.id} onClick={() => changeBoard(item.id)} onKeyDown={event => tabKey(event,index)} className={boardId === item.id ? 'is-active' : ''}><TabIcon size={15}/>{item.label}</button>;
-    })}</div><div className="lb-toolbar-meta">{refreshFailed && <button className="lb-refresh-error" onClick={retry}>读取失败，重试</button>}{refreshing && <LoaderCircle size={12} className="lb-refreshing" aria-label="正在更新"/>}<div className="lb-scope"><span/>{board.scope === 'global' ? '全局收藏' : '当前存档'}</div></div></div>
+    })}</div>;
+  const scope = <div className="lb-toolbar-meta">
+    {refreshFailed && <button className="lb-refresh-error" onClick={retry}>读取失败，重试</button>}
+    {refreshing && <LoaderCircle size={12} className="lb-refreshing" aria-label="正在更新"/>}
+    <div className="lb-scope"><span/>{board.scope === 'global' ? '全局收藏' : '当前存档'}
+      {winter && Number.isSafeInteger(snapshot.totalPlayers) && <small>{snapshot.totalPlayers} 人上榜</small>}
+    </div>
+  </div>;
+  return <>
+    {winter ? <header className="summit-heading">
+      <div><div className="summit-title"><h1>玩家排行</h1>{scope}</div><p>{board.description}</p></div>
+      {tabs}
+    </header> : <>
+      <div className="page-heading lb-heading"><div><h1>玩家排行</h1><p>{board.description}</p></div></div>
+      <div className="lb-toolbar">{tabs}{scope}</div>
+    </>}
     <AnimatePresence mode="wait" initial={false}>
-      <motion.div className={`lb-board board-${boardId}`} id={`lb-panel-${boardId}`} role="tabpanel" aria-labelledby={`lb-tab-${boardId}`} key={boardId}
+      <motion.div className={`lb-board board-${boardId}${winter ? ' summit-board' : ''}`} id={`lb-panel-${boardId}`} role="tabpanel" aria-labelledby={`lb-tab-${boardId}`} key={boardId}
         initial={reduceMotion ? false : {opacity:0,y:9}} animate={{opacity:1,y:0}} exit={{opacity:0,y:reduceMotion ? 0 : -6}} transition={{duration:reduceMotion ? 0 : .18}}>
-        {ready ? <><Podium onOpenProfile={onOpenProfile} rows={snapshot.rows.slice(0,3)} revision={snapshot.revision} boardId={boardId} comparisonRevision={snapshot.comparisonRevision} tieRanks={tieRanks} reduceMotion={reduceMotion}/>
+        {ready ? <><Podium winter={winter} onOpenProfile={onOpenProfile} rows={snapshot.rows.slice(0,3)} revision={snapshot.revision} boardId={boardId} comparisonRevision={snapshot.comparisonRevision} tieRanks={tieRanks} reduceMotion={reduceMotion}/>
           <RankingList onOpenProfile={onOpenProfile} snapshot={snapshot} boardId={boardId} tieRanks={tieRanks} reduceMotion={reduceMotion} listRef={listRef} loadMore={loadMore}/>
           <SelfPosition onOpenProfile={onOpenProfile} snapshot={snapshot} boardId={boardId} tieRanks={tieRanks} locate={locate} reduceMotion={reduceMotion}/>
         </> : <BoardState status={snapshot.status} reason={snapshot.reason} retry={retry}/>}

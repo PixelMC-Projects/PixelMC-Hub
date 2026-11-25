@@ -5,6 +5,7 @@ package com.pixelmc.hub.client.ui;
 import com.google.gson.*;
 import com.pixelmc.hub.client.render.GlassStyle;
 import com.pixelmc.hub.client.render.HubDraw;
+import com.pixelmc.hub.client.render.WinterPaper;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
@@ -89,7 +90,8 @@ final class HubLeaderboardsView {
 
     private static final class Pose {
         HubRankingData.Row row;
-        final Scalar y, score, ratio;
+        final Scalar y, summitY, score, ratio;
+        float summitHeight;
         final Scalar opacity = new Scalar(0);
         boolean revealed, leaving;
 
@@ -99,9 +101,10 @@ final class HubLeaderboardsView {
             opacity.to(1, now + delay, 300, reduced);
         }
 
-        Pose(HubRankingData.Row row, float y, double ratio) {
+        Pose(HubRankingData.Row row, float y, float winterY, double ratio) {
             this.row = row;
             this.y = new Scalar(y);
+            this.summitY = new Scalar(winterY);
             score = new Scalar(row.value() == null ? 0 : row.value());
             this.ratio = new Scalar(ratio);
         }
@@ -121,7 +124,7 @@ final class HubLeaderboardsView {
 
     private static final class PodiumPose {
         HubRankingData.Row row;
-        final Scalar x, width, leading, opacity, offset;
+        final Scalar x, width, leading, opacity, offset, summitCenter;
         int fromInk, fromWash, fromGlow, fromInkDark, fromWashDark, fromGlowDark;
         long colorAt;
         boolean leaving;
@@ -130,6 +133,7 @@ final class HubLeaderboardsView {
                 HubRankingData.Row row,
                 float x,
                 float width,
+                float center,
                 boolean leading,
                 boolean initial,
                 long now,
@@ -137,6 +141,7 @@ final class HubLeaderboardsView {
             this.row = row;
             this.x = new Scalar(x);
             this.width = new Scalar(width);
+            this.summitCenter = new Scalar(center);
             this.leading = new Scalar(leading ? 1 : 0);
             opacity = new Scalar(initial ? 1 : 0);
             offset = new Scalar(initial ? 0 : 8);
@@ -158,6 +163,7 @@ final class HubLeaderboardsView {
                 HubRankingData.Row next,
                 float x,
                 float width,
+                float center,
                 boolean leading,
                 long now,
                 boolean reduced) {
@@ -174,6 +180,7 @@ final class HubLeaderboardsView {
             row = next;
             this.x.to(x, now, 420, reduced);
             this.width.to(width, now, 420, reduced);
+            summitCenter.to(center, now, 420, reduced);
             this.leading.to(leading ? 1 : 0, now, 420, reduced);
             opacity.to(1, now, 320, reduced);
             offset.to(0, now, 320, reduced);
@@ -197,6 +204,8 @@ final class HubLeaderboardsView {
         float scroll;
         int loadingPage = -1;
         boolean loading, around;
+        float[] summitOffsets = {0};
+        final Set<Long> tiedRanks = new HashSet<>();
 
         List<HubRankingData.Row> rows() {
             List<HubRankingData.Row> rows = new ArrayList<>();
@@ -225,6 +234,21 @@ final class HubLeaderboardsView {
         boolean hasData() {
             return header != null && header.confirmed();
         }
+
+        void clearRows() {
+            pages.clear();
+            summitOffsets = new float[] {0};
+            tiedRanks.clear();
+            poses.clear();
+            podium.clear();
+            scores.clear();
+            ranks.clear();
+            tilts.clear();
+            podiumInitialized = false;
+            scroll = 0;
+            scrollMotion = null;
+            selected = locate = "";
+        }
     }
 
     private static final class RankGlyph {
@@ -246,8 +270,20 @@ final class HubLeaderboardsView {
     private final Host host;
     private final Map<String, State> states = new LinkedHashMap<>();
     private HubDraw draw;
-    private String selectedBoard = "food", displayedBoard = "food", focus;
-    private boolean live, active, reduced, dragging;
+    private WinterPaper paper;
+    private String selectedBoard = "food", displayedBoard = "food", focus, pressed;
+    private boolean live, active, reduced, dragging, winterLayout;
+    // Winter uses the 1260 x 850 shell's 187px sidebar and the page's 28px horizontal inset.
+    private static final float SUMMIT_LEFT = 215,
+            SUMMIT_WIDTH = 1016,
+            SUMMIT_CENTER = 723,
+            SUMMIT_TOP = 142.25f,
+            SUMMIT_LIST = 388.75f,
+            SUMMIT_ROWS = 421.75f,
+            SUMMIT_ROW_HEIGHT = 44.65625f,
+            SUMMIT_SELF = 753.40625f,
+            SUMMIT_BOTTOM = 801;
+    private final Scalar[] tabUnderlines = {new Scalar(1), new Scalar(0), new Scalar(0)};
     private float mouseX, mouseY, dt = 1f / 60, bodyOffset, dragGrab;
     private long now, lastFrame, switchAt, enterAt, locateAt;
     private JsonArray previews = new JsonArray();
@@ -410,11 +446,11 @@ final class HubLeaderboardsView {
             if (locate) state.pages.clear();
             state.pages.put(snapshot.page(), snapshot.rows());
             if (!locate && snapshot.page() < first)
-                state.scroll += snapshot.rows().size() * ROW_HEIGHT;
+                state.scroll += snapshot.rows().size() * rowHeight();
             while (state.pages.size() > MAX_PAGES) {
                 if (snapshot.page() >= state.pages.lastKey()) {
                     var removed = state.pages.pollFirstEntry();
-                    state.scroll -= removed.getValue().size() * ROW_HEIGHT;
+                    state.scroll -= removed.getValue().size() * rowHeight();
                 } else state.pages.pollLastEntry();
             }
             state.around = false;
@@ -471,7 +507,7 @@ final class HubLeaderboardsView {
         state.loading = false;
         state.loadingPage = -1;
         state.error = "";
-        state.scroll += (first - pages.firstKey()) * 20 * ROW_HEIGHT;
+        state.scroll += (first - pages.firstKey()) * 20 * rowHeight();
         retarget(state, at);
     }
 
@@ -490,11 +526,16 @@ final class HubLeaderboardsView {
             state.pending = null;
             state.refreshed.clear();
             state.refreshPages.clear();
-            state.error = snapshot.status().equals("unsupported") ? "这个存档还未开启此排行" : "排行暂不可用";
+            state.loading = snapshot.status().equals("loading");
+            state.error =
+                    switch (snapshot.status()) {
+                        case "loading" -> "";
+                        case "unsupported" -> "这个存档还未开启此排行";
+                        default -> "排行暂不可用";
+                    };
             if (snapshot.status().equals("unsupported") || !state.hasData()) {
                 state.header = snapshot;
-                state.pages.clear();
-                state.poses.clear();
+                state.clearRows();
             }
             return;
         }
@@ -502,16 +543,14 @@ final class HubLeaderboardsView {
         if (snapshot.status().equals("empty")) {
             state.header = snapshot;
             state.pending = null;
-            state.pages.clear();
+            state.clearRows();
             state.refreshed.clear();
             state.refreshPages.clear();
-            state.poses.clear();
-            state.scores.clear();
-            state.ranks.clear();
-            state.scroll = 0;
             return;
         }
-        if (state.header != null && state.header.revision().equals(snapshot.revision())) return;
+        if (state.header != null
+                && state.header.status().equals("ready")
+                && state.header.revision().equals(snapshot.revision())) return;
         List<Integer> pages = state.pages.keySet().stream().filter(page -> page != 0).toList();
         state.refreshPages.clear();
         state.refreshed.clear();
@@ -576,6 +615,16 @@ final class HubLeaderboardsView {
                 .values()
                 .removeIf(pose -> pose.leaving && pose.opacity.value(at, reduced) <= 0);
         List<HubRankingData.Row> rows = state.rows();
+        state.summitOffsets = new float[rows.size() + 1];
+        state.tiedRanks.clear();
+        Set<String> knownPlayers = new HashSet<>();
+        Set<Long> knownRanks = new HashSet<>();
+        for (var group : List.of(state.header.rows(), rows)) {
+            for (var entry : group) {
+                if (knownPlayers.add(entry.playerId()) && !knownRanks.add(entry.rank()))
+                    state.tiedRanks.add(entry.rank());
+            }
+        }
         Set<String> keep = new HashSet<>();
         double leader = state.leader();
         for (int index = 0; index < rows.size(); index++) {
@@ -586,15 +635,21 @@ final class HubLeaderboardsView {
                     .computeIfAbsent(row.playerId(), id -> new RankGlyph(row.rank()))
                     .update(row.rank(), at);
             Pose pose = state.poses.get(row.playerId());
-            if (pose == null)
-                state.poses.put(row.playerId(), new Pose(row, index * ROW_HEIGHT, ratio));
-            else {
+            float winterY = state.summitOffsets[index];
+            if (pose == null) {
+                pose = new Pose(row, index * ROW_HEIGHT, winterY, ratio);
+                state.poses.put(row.playerId(), pose);
+            } else {
                 pose.update(row, index * ROW_HEIGHT, ratio, at, reduced);
+                pose.summitY.to(winterY, at, 420, reduced);
                 if (pose.leaving) {
                     pose.leaving = false;
                     pose.opacity.to(1, at, 300, reduced);
                 }
             }
+            // An 8px tie label under the 17px digit makes this row slightly taller than its avatar.
+            pose.summitHeight = tied(state, row) ? 45.453125f : SUMMIT_ROW_HEIGHT;
+            state.summitOffsets[index + 1] = winterY + pose.summitHeight;
             state.scores
                     .computeIfAbsent(row.playerId(), id -> new Scalar(row.value()))
                     .to(row.value(), at, 460, reduced);
@@ -610,6 +665,8 @@ final class HubLeaderboardsView {
         float[] widths = {304.5f, 341, 304.5f}, xs = {242, 563.5f, 921.5f};
         for (int slot = 0; slot < leaders.size(); slot++) {
             int index = positions[slot];
+            float slotWidth = SUMMIT_WIDTH * .76f / 3;
+            float center = SUMMIT_CENTER + (slot - (leaders.size() - 1) * .5f) * slotWidth;
             var row = leaders.get(index);
             podiumIds.add(row.playerId());
             PodiumPose pose = state.podium.get(row.playerId());
@@ -620,11 +677,12 @@ final class HubLeaderboardsView {
                                 row,
                                 xs[slot],
                                 widths[slot],
+                                center,
                                 index == 0,
                                 !state.podiumInitialized,
                                 at,
                                 reduced));
-            else pose.update(row, xs[slot], widths[slot], index == 0, at, reduced);
+            else pose.update(row, xs[slot], widths[slot], center, index == 0, at, reduced);
         }
         for (var entry : state.podium.entrySet())
             if (!podiumIds.contains(entry.getKey())) {
@@ -674,15 +732,49 @@ final class HubLeaderboardsView {
     }
 
     void render(HubDraw draw, float mouseX, float mouseY, String focus, boolean reduced, long now) {
+        render(draw, mouseX, mouseY, focus, null, reduced, now);
+    }
+
+    void render(
+            HubDraw draw,
+            float mouseX,
+            float mouseY,
+            String focus,
+            String pressed,
+            boolean reduced,
+            long now) {
         this.draw = draw;
+        paper = draw.winter() ? draw.winterPaper() : null;
+        if (winterLayout != draw.winter()) {
+            float previousHeight = rowHeight();
+            winterLayout = draw.winter();
+            for (State state : states.values()) {
+                state.scroll *= rowHeight() / previousHeight;
+                state.scrollMotion = null;
+                clampScroll(state);
+            }
+        }
         this.mouseX = mouseX;
         this.mouseY = mouseY;
         this.focus = focus;
+        this.pressed = pressed;
         this.reduced = reduced;
         this.now = now;
         dt = lastFrame == 0 ? 1f / 60 : Math.min(.05f, (now - lastFrame) / 1_000_000_000f);
         lastFrame = now;
-        tabs();
+        boolean previousColors = paper != null && draw.literalColors(true);
+        try {
+            drawBoard();
+        } finally {
+            if (paper != null) draw.literalColors(previousColors);
+            this.draw = null;
+            paper = null;
+        }
+    }
+
+    private void drawBoard() {
+        if (winterLayout) summitHeading();
+        else tabs();
         float alpha = 1;
         bodyOffset = 0;
         if (!selectedBoard.equals(displayedBoard)) {
@@ -701,7 +793,12 @@ final class HubLeaderboardsView {
             bodyOffset = 9 * (1 - alpha);
             if (progress >= 1) enterAt = 0;
         }
-        draw.saveLayerAlpha(LEFT - 8, 205, WIDTH + 16, 629, alpha);
+        draw.saveLayerAlpha(
+                (winterLayout ? SUMMIT_LEFT : LEFT) - 8,
+                winterLayout ? SUMMIT_TOP - 8 : 205,
+                (winterLayout ? SUMMIT_WIDTH : WIDTH) + 16,
+                winterLayout ? SUMMIT_BOTTOM - SUMMIT_TOP + 20 : 629,
+                alpha);
         State state = states.get(displayedBoard);
         state.poses
                 .values()
@@ -715,18 +812,392 @@ final class HubLeaderboardsView {
             if (reduced || now - state.scrollMotion.at >= state.scrollMotion.duration)
                 state.scrollMotion = null;
         }
-        if (state.hasData() && state.header.status().equals("ready")) {
+        if (winterLayout) {
+            draw.save();
+            draw.clipRoundRect(
+                    SUMMIT_LEFT,
+                    SUMMIT_TOP + bodyOffset,
+                    SUMMIT_WIDTH,
+                    SUMMIT_BOTTOM - SUMMIT_TOP,
+                    21);
+            if (state.hasData() && state.header.status().equals("ready")) {
+                summitPodium(state);
+                summitList(state);
+                summitSelf(state);
+            } else empty(state);
+            draw.restore();
+        } else if (state.hasData() && state.header.status().equals("ready")) {
             podium(state);
             list(state);
             self(state);
         } else empty(state);
         draw.restore();
-        this.draw = null;
+    }
+
+    private int summitInk() {
+        return c(0xff2e433a, 0xfff2e8d2);
+    }
+
+    private int summitMuted() {
+        return c(0xff596c5f, 0xffb9c6b5);
+    }
+
+    private int summitSheet() {
+        return c(0xfff8f4e8, 0xff303c37);
+    }
+
+    private int summitStripe() {
+        return c(0xffeeeedd, 0xff37443c);
+    }
+
+    private int summitRule() {
+        return c(0xffbdc4b0, 0xff626f61);
+    }
+
+    private void summitHeading() {
+        float titleX = SUMMIT_LEFT + 1;
+        draw.textTracked("玩家排行", titleX, 106, 25, summitInk(), 700, 1.5f, true);
+        text(description(), titleX, 127, 11, summitMuted(), 400);
+        float x = titleX + draw.textWidthTracked("玩家排行", 25, 700, 1.5f, true) + 15.5f;
+        State state = states.get(selectedBoard);
+        if (!state.error.isEmpty() && state.hasData()) {
+            text("读取失败，重试", x, 101, 10, paper.mailInk(), 400);
+            float width = draw.textWidth("读取失败，重试", 10, 400);
+            host.hit(
+                    "rankings-retry",
+                    "重新读取排行",
+                    x,
+                    84,
+                    width,
+                    26,
+                    () -> host.request("snapshot", new JsonObject()));
+            x += width + 10;
+        } else if (state.loading && state.hasData()) {
+            draw.save();
+            draw.translate(x + 6, 96);
+            if (!reduced) draw.canvas().rotate((now % 1_400_000_000L) / 1_400_000_000f * 360);
+            draw.icon("loader-circle", -6, -6, 12, summitMuted());
+            draw.restore();
+            x += 18;
+        }
+        draw.circle(x + 2.5f, 96, 2.5f, paper.wool());
+        String scope = selectedBoard.equals("fortunes") ? "全局收藏" : "当前存档";
+        text(scope, x + 11, 100, 11, summitMuted(), 400);
+        if (state.header != null && state.header.total() >= 0) {
+            x += 11 + draw.textWidth(scope, 11, 400) + 6;
+            draw.rect(x, 90, 1, 13, summitRule());
+            text(state.header.total() + " 人上榜", x + 8, 100, 11, summitMuted(), 400);
+        }
+        x = SUMMIT_LEFT + SUMMIT_WIDTH - 1;
+        for (int index = 2; index >= 0; index--) {
+            String board = HubRankingData.BOARDS.get(index);
+            float width = 22 + 15 + 6 + draw.textWidth(LABELS[index], 12, 400);
+            x -= width;
+            boolean selected = board.equals(selectedBoard);
+            int ink = selected || inside(x, 89.125f, width, 32) ? summitInk() : summitMuted();
+            draw.icon(ICONS[index], x + 11, 97.625f, 15, ink);
+            text(LABELS[index], x + 32, 110, 12, ink, 400);
+            Scalar underline = tabUnderlines[index];
+            underline.to(selected ? 1 : 0, now, 200, reduced);
+            float line = (width - 18) * (float) underline.value(now, reduced);
+            if (line > 0) draw.rect(x + (width - line) / 2, 119.125f, line, 2, paper.mail());
+            host.hit(
+                    "rankings-tab-" + board,
+                    LABELS[index],
+                    x,
+                    89.125f,
+                    width,
+                    32,
+                    () -> choose(board));
+            x -= 4;
+        }
+    }
+
+    private void summitPodium(State state) {
+        float top = SUMMIT_TOP + bodyOffset;
+        SummitStage.landscape(
+                draw, SUMMIT_LEFT, top, SUMMIT_WIDTH, SUMMIT_LIST - SUMMIT_TOP, false);
+        float slotWidth = SUMMIT_WIDTH * .76f / 3;
+        for (PodiumPose pose : state.podium.values()) {
+            HubRankingData.Row row = pose.row;
+            int rank = row.rank().intValue();
+            float center = (float) pose.summitCenter.value(now, reduced);
+            float captionBottom =
+                    SUMMIT_LIST + bodyOffset - 10 + (float) pose.offset.value(now, reduced);
+            float figureBottom = captionBottom - 48.64f - (rank == 1 ? 8 : rank == 3 ? 0 : 2);
+            float unit = rank == 1 ? 3.735f : 3.2121f;
+            float x = center - slotWidth / 2;
+            draw.saveLayerAlpha(
+                    x,
+                    top,
+                    slotWidth,
+                    SUMMIT_LIST - SUMMIT_TOP,
+                    (float) pose.opacity.value(now, reduced));
+            SummitStage.shadow(draw, center, figureBottom, unit);
+            boolean own = row.playerId().equals(state.header.viewerId());
+            // The 36em canvas overflows the 31em x 35em CSS grid button at the right and bottom.
+            SummitPlayer.draw(
+                    draw,
+                    row.playerId(),
+                    own,
+                    rank,
+                    center + 2.5f * unit,
+                    figureBottom + 2 * unit,
+                    unit);
+            int placeInk = rank == 1 ? paper.mailInk() : summitMuted();
+            boolean tie = tied(state, row);
+            String prefix = tie ? "并列第" : "第";
+            float numSize = 25.4f;
+            float rankWidth =
+                    draw.textWidth(prefix, 9, 400)
+                            + 4
+                            + digitWidth(true, String.valueOf(rank), numSize, 600)
+                            + draw.textWidth("名", 9, 400);
+            float copyLimit = slotWidth - rankWidth - 31;
+            String name = fitSerif(row.name(), copyLimit - (own ? 14 : 0), 18, 650);
+            float nameWidth = draw.textWidthSerif(name, 18, 650);
+            float copyWidth =
+                    Math.max(nameWidth + (own ? 14 : 0), scoreWidth(state, row, 15, true));
+            float start = center - (rankWidth + 20 + copyWidth) / 2;
+            float baseline = captionBottom - 13.5f;
+            text(prefix, start, baseline, 9, placeInk, 400);
+            float digits = start + draw.textWidth(prefix, 9, 400) + 2;
+            rankDigits(state, row, digits, baseline, numSize, placeInk, 600, false, true);
+            text(
+                    "名",
+                    digits + digitWidth(true, String.valueOf(rank), numSize, 600) + 2,
+                    baseline,
+                    9,
+                    placeInk,
+                    400);
+            draw.rect(start + rankWidth + 9, captionBottom - 35, 1, 25, alpha(placeInk, .38f));
+            float copyX = start + rankWidth + 20;
+            draw.textSerif(name, copyX, captionBottom - 25, 18, summitInk(), 650);
+            if (own) text("我", copyX + nameWidth + 5, captionBottom - 25, 9, summitMuted(), 400);
+            float highlight = reduced ? 0 : locateOpacity(state, row, 1_400_000_000L);
+            boolean nameHover =
+                    !pose.leaving && inside(copyX, captionBottom - 43.64f, nameWidth, 23);
+            if (nameHover || highlight > 0)
+                draw.rect(
+                        copyX,
+                        captionBottom - 22,
+                        nameWidth,
+                        nameHover ? 1 : 2,
+                        nameHover ? summitInk() : alpha(paper.mail(), highlight));
+            score(state, row, copyX, captionBottom - 4, 15, placeInk, false);
+            draw.restore();
+            if (!pose.leaving && selectedBoard.equals(displayedBoard)) {
+                profileHit(
+                        "head",
+                        row,
+                        center - 15.5f * unit,
+                        figureBottom - 35 * unit,
+                        31 * unit,
+                        35 * unit);
+                profileHit("name", row, copyX, captionBottom - 43.64f, nameWidth, 23);
+            }
+        }
+    }
+
+    private void profileHit(
+            String kind, HubRankingData.Row row, float x, float y, float w, float h) {
+        host.hit(
+                "rankings-profile-" + kind + "-" + row.playerId(),
+                "查看" + row.name() + "的公开资料",
+                x,
+                y,
+                w,
+                h,
+                () -> host.openProfile(row.playerId()));
+    }
+
+    private String fitSerif(String value, float width, float size, int weight) {
+        if (draw.textWidthSerif(value, size, weight) <= width) return value;
+        int end = value.length();
+        while (end > 0 && draw.textWidthSerif(value.substring(0, end) + "…", size, weight) > width)
+            end = value.offsetByCodePoints(end, -1);
+        return value.substring(0, end) + "…";
+    }
+
+    private void summitList(State state) {
+        float top = SUMMIT_LIST + bodyOffset,
+                first = SUMMIT_ROWS + bodyOffset,
+                bottom = SUMMIT_SELF + bodyOffset;
+        draw.rect(SUMMIT_LEFT, top, SUMMIT_WIDTH, bottom - top, summitSheet());
+        HubWinterSheet.grain(draw, SUMMIT_LEFT, top, SUMMIT_WIDTH, bottom - top, 0, 1);
+        draw.rect(SUMMIT_LEFT, top, SUMMIT_WIDTH, first - top, summitStripe());
+        draw.rect(SUMMIT_LEFT, top, SUMMIT_WIDTH, 1, summitRule());
+        draw.rect(SUMMIT_LEFT, first - 1, SUMMIT_WIDTH, 1, summitRule());
+        center("排名", 255, top + 21, 11, summitMuted(), 400);
+        text("玩家", 291, top + 21, 11, summitMuted(), 400);
+        right(
+                METRICS[HubRankingData.BOARDS.indexOf(displayedBoard)],
+                SUMMIT_LEFT + SUMMIT_WIDTH - 22,
+                top + 21,
+                11,
+                summitMuted(),
+                400);
+        draw.save();
+        draw.clipRoundRect(SUMMIT_LEFT, first, SUMMIT_WIDTH, bottom - first, 0);
+        int entrance = 0;
+        if (state.rows().isEmpty())
+            center(
+                    "本榜已有 " + state.header.total() + " 位旅人留下记录",
+                    SUMMIT_LEFT + SUMMIT_WIDTH / 2,
+                    (bottom + first) / 2 + 4,
+                    11,
+                    summitMuted(),
+                    400);
+        for (Pose pose : state.poses.values()) {
+            HubRankingData.Row row = pose.row;
+            float y = first + (float) pose.summitY.value(now, reduced) - state.scroll;
+            float hitY = Math.max(first, y), end = Math.min(bottom, y + pose.summitHeight);
+            if (end <= hitY) continue;
+            if (!pose.leaving && (end - hitY) >= pose.summitHeight / 2)
+                pose.reveal(now, entrance++ * 25_000_000L, reduced);
+            float cy = y + (pose.summitHeight - 1) / 2;
+            draw.saveLayerAlpha(
+                    224, y, 995, pose.summitHeight, (float) pose.opacity.value(now, reduced));
+            boolean own = row.playerId().equals(state.header.viewerId());
+            boolean hover = !pose.leaving && inside(224, hitY, 995, end - hitY);
+            if (own || hover) draw.rect(224, y, 995, pose.summitHeight, summitStripe());
+            if (hover
+                    && (Objects.equals(pressed, "rankings-row-" + row.playerId())
+                            || Objects.equals(pressed, "rankings-profile-row-" + row.playerId())))
+                draw.rect(224, y, 995, pose.summitHeight, c(0x80e7e4f1, 0x1ab69cdb));
+            float located = reduced ? 0 : locateOpacity(state, row, 1_600_000_000L);
+            if (located > 0) {
+                draw.rect(
+                        224, y, 995, pose.summitHeight, alpha(c(0xffebe1ff, 0x338e70c7), located));
+                draw.strokeRoundRect(
+                        224.5f,
+                        y + .5f,
+                        994,
+                        pose.summitHeight - 1,
+                        0,
+                        1,
+                        alpha(c(0xffac94d2, 0xffc1a0e6), located));
+            }
+            draw.rect(224, y + pose.summitHeight - 1, 995, 1, alpha(summitRule(), .62f));
+            rank(row, state, 230, cy, 48, false, summitMuted());
+            draw.save();
+            draw.clipRoundRect(290, cy - 12.5f, 25, 25, 5);
+            HubHead.drawPlayer2D(draw, row.playerId(), own, 290, cy - 12.5f, 25);
+            draw.restore();
+            String name = fit(row.name(), own ? 231 : 247, 13, 500);
+            text(name, 325, cy + 4.5f, 13, summitInk(), 500);
+            if (own) text("我", 335 + draw.textWidth(name, 13, 500), cy + 4, 9, summitMuted(), 400);
+            float meterX = 589.3f, meterW = 498.69f;
+            draw.roundRect(meterX, cy - 2, meterW, 4, 1, summitRule());
+            float ratio = (float) Math.max(0, Math.min(1, pose.ratio.value(now, reduced)));
+            if (ratio > 0) draw.roundRect(meterX, cy - 2, meterW * ratio, 4, 1, summitMuted());
+            for (int quarter = 1; quarter <= 4; quarter++)
+                draw.rect(meterX + meterW * quarter / 4 - 1, cy - 2, 1, 4, summitSheet());
+            score(state, row, 1207, cy + 5, 14, summitInk(), true);
+            draw.restore();
+            if (!pose.leaving && selectedBoard.equals(displayedBoard)) {
+                host.hit(
+                        "rankings-row-" + row.playerId(),
+                        row.name(),
+                        224,
+                        hitY,
+                        995,
+                        end - hitY,
+                        () -> {
+                            state.selected = row.playerId();
+                            host.focus("rankings-list");
+                        });
+                float avatarTop = Math.max(hitY, cy - 12.5f), avatarEnd = Math.min(end, cy + 12.5f);
+                if (avatarEnd > avatarTop)
+                    profileHit("row", row, 290, avatarTop, 279.3f, avatarEnd - avatarTop);
+            }
+        }
+        draw.restore();
+        scrollbar(state);
+    }
+
+    private void summitSelf(State state) {
+        float y = SUMMIT_SELF + bodyOffset,
+                bottom = SUMMIT_BOTTOM + bodyOffset,
+                cy = (y + 1 + bottom) / 2;
+        draw.rect(SUMMIT_LEFT, y, SUMMIT_WIDTH, bottom - y, summitStripe());
+        HubWinterSheet.grain(draw, SUMMIT_LEFT, y, SUMMIT_WIDTH, bottom - y, 0, 1);
+        draw.rect(SUMMIT_LEFT, y, SUMMIT_WIDTH, 1, summitRule());
+        float bookmarkWidth = draw.textWidthSerif("我的位置", 12, 650) + 16;
+        SummitStage.bookmark(
+                draw,
+                SUMMIT_LEFT + 15,
+                y + 1,
+                bookmarkWidth,
+                bottom - y - 1,
+                c(0xff944e36, 0xff86503d));
+        draw.textSerif("我的位置", SUMMIT_LEFT + 23, cy + 2, 12, c(0xfffff3d5, 0xfffff0d2), 650);
+        HubRankingData.Row row = state.header.self();
+        if (row == null)
+            row =
+                    new HubRankingData.Row(
+                            state.header.viewerId(), state.header.viewerName(), null, null, null);
+        float x = SUMMIT_LEFT + 15 + bookmarkWidth + 12;
+        rank(row, state, x, cy, 56, true, summitInk());
+        float rankW =
+                row.rank() == null
+                        ? 56
+                        : Math.max(
+                                56,
+                                draw.textWidth(tied(state, row) ? "并列第" : "第", 10, 400)
+                                        + draw.textWidth(String.valueOf(row.rank()), 26, 600)
+                                        + 16);
+        x += rankW + 12;
+        draw.save();
+        draw.clipRoundRect(x, cy - 13.5f, 27, 27, 7);
+        HubHead.drawPlayer2D(draw, row.playerId(), true, x, cy - 13.5f, 27);
+        draw.restore();
+        text(fit(row.name(), 300, 12, 600), x + 36, cy + 4, 12, summitInk(), 600);
+        String id = row.playerId();
+        float selfEnd =
+                (row.rank() == null ? 997 : 1145)
+                        - (row.value() == null ? 0 : scoreWidth(state, row, 14, false))
+                        - 12;
+        if (selectedBoard.equals(displayedBoard))
+            host.hit(
+                    "rankings-profile-self",
+                    "查看我的公开资料",
+                    x,
+                    cy - 13.5f,
+                    selfEnd - x,
+                    27,
+                    () -> host.openProfile(id));
+        if (row.value() != null)
+            score(state, row, row.rank() == null ? 997 : 1145, cy + 5, 14, summitInk(), true);
+        if (row.rank() != null) {
+            text("定位", 1166, cy + 4, 10, summitInk(), 400);
+            draw.rect(1166, cy + 7, draw.textWidth("定位", 10, 400), 1, summitInk());
+            draw.icon("arrow-down", 1191, cy - 6.5f, 13, summitInk());
+            if (selectedBoard.equals(displayedBoard))
+                host.hit(
+                        "rankings-locate",
+                        "定位我的排名",
+                        1157,
+                        cy - 14,
+                        56,
+                        28,
+                        () -> locateSelf(state));
+        } else
+            right(
+                    displayedBoard.equals("food")
+                            ? "品尝食物后，留下你的记录"
+                            : displayedBoard.equals("fortunes") ? "收藏签笺后，留下你的记录" : "下次更新后再来看看",
+                    1213,
+                    cy + 4,
+                    10,
+                    summitMuted(),
+                    400);
     }
 
     private void tabs() {
-        draw.roundRect(LEFT, 158, 330, 42, 13, c(0x80e7e8f4, 0x38141e32));
-        draw.strokeRoundRect(LEFT + .5f, 158.5f, 329, 41, 13, 1, c(0xe6ffffff, 0x1fadc1e3));
+        float radius = 13;
+        draw.roundRect(LEFT, 158, 330, 42, radius, c(0x80e7e8f4, 0x38141e32));
+        draw.strokeRoundRect(LEFT + .5f, 158.5f, 329, 41, radius, 1, c(0xe6ffffff, 0x1fadc1e3));
         float x = LEFT + 4;
         for (int index = 0; index < 3; index++) {
             String board = HubRankingData.BOARDS.get(index);
@@ -827,19 +1298,21 @@ final class HubLeaderboardsView {
                             c(rankGlow(row.rank()), rankGlowDark(row.rank())),
                             colorProgress);
             boolean previousColors = draw.literalColors(true);
-            float auraWidth = 204 + 26 * leading, auraHeight = 104 + 23 * leading;
-            draw.radialGradientRoundRect(
-                    cx - auraWidth / 2,
-                    cardY - 8 - auraHeight,
-                    auraWidth,
-                    auraHeight,
-                    auraHeight / 2,
-                    cx,
-                    cardY - 8 - auraHeight / 2,
-                    auraWidth * .70710678f,
-                    auraHeight * .70710678f,
-                    new int[] {alpha(glow, .34f + .04f * leading), 0x00ffffff},
-                    new float[] {0, .69f});
+            {
+                float auraWidth = 204 + 26 * leading, auraHeight = 104 + 23 * leading;
+                draw.radialGradientRoundRect(
+                        cx - auraWidth / 2,
+                        cardY - 8 - auraHeight,
+                        auraWidth,
+                        auraHeight,
+                        auraHeight / 2,
+                        cx,
+                        cardY - 8 - auraHeight / 2,
+                        auraWidth * .70710678f,
+                        auraHeight * .70710678f,
+                        new int[] {alpha(glow, .34f + .04f * leading), 0x00ffffff},
+                        new float[] {0, .69f});
+            }
             float headY = cardY - 6 - head * 1.175f;
             HubHead.drawPlayer(
                     draw,
@@ -851,44 +1324,60 @@ final class HubLeaderboardsView {
                     -23,
                     -10);
             float cardX = x + 11, cardWidth = width - 22;
-            draw.boxShadow(cardX, cardY, cardWidth, 64, 17, 0, 5, 17, 0, c(0x0c7884ac, 0x330a132c));
-            draw.captureGlassBackdrop(cardX, cardY, cardWidth, 64);
-            draw.glassBackdrop(cardX, cardY, cardWidth, 64, 17, PODIUM_GLASS);
-            draw.linearGradientRoundRect(
-                    cardX,
-                    cardY,
-                    cardWidth,
-                    64,
-                    17,
-                    125,
-                    draw.dark()
-                            ? new int[] {0xd939445d, 0xbf303a52}
-                            : new int[] {0xf0ffffff, 0x8fffffff},
-                    new float[] {0, 1});
-            draw.radialGradientRoundRect(
-                    cardX,
-                    cardY,
-                    cardWidth,
-                    64,
-                    17,
-                    cardX + cardWidth,
-                    cardY,
-                    cardWidth * 1.41421356f,
-                    64 * 1.41421356f,
-                    new int[] {alpha(wash, draw.dark() ? 1 : .85f), wash & 0xffffff},
-                    new float[] {0, .8f});
-            draw.glassDecorations(cardX, cardY, cardWidth, 64, 17, PODIUM_GLASS);
-            draw.insetBoxShadow(
-                    cardX, cardY, cardWidth, 64, 17, 0, 1, 1, 0, c(0xffffffff, 0x14ebf0ff));
-            draw.strokeRoundRect(
-                    cardX + .5f, cardY + .5f, cardWidth - 1, 63, 17, 1, c(0xfaffffff, 0x2ed9e1fb));
+            float cardRadius = 17;
+            {
+                draw.boxShadow(
+                        cardX, cardY, cardWidth, 64, 17, 0, 5, 17, 0, c(0x0c7884ac, 0x330a132c));
+                draw.captureGlassBackdrop(cardX, cardY, cardWidth, 64);
+                draw.glassBackdrop(cardX, cardY, cardWidth, 64, 17, PODIUM_GLASS);
+                draw.linearGradientRoundRect(
+                        cardX,
+                        cardY,
+                        cardWidth,
+                        64,
+                        17,
+                        125,
+                        draw.dark()
+                                ? new int[] {0xd939445d, 0xbf303a52}
+                                : new int[] {0xf0ffffff, 0x8fffffff},
+                        new float[] {0, 1});
+                draw.radialGradientRoundRect(
+                        cardX,
+                        cardY,
+                        cardWidth,
+                        64,
+                        17,
+                        cardX + cardWidth,
+                        cardY,
+                        cardWidth * 1.41421356f,
+                        64 * 1.41421356f,
+                        new int[] {alpha(wash, draw.dark() ? 1 : .85f), wash & 0xffffff},
+                        new float[] {0, .8f});
+                draw.glassDecorations(cardX, cardY, cardWidth, 64, 17, PODIUM_GLASS);
+                draw.insetBoxShadow(
+                        cardX, cardY, cardWidth, 64, 17, 0, 1, 1, 0, c(0xffffffff, 0x14ebf0ff));
+                draw.strokeRoundRect(
+                        cardX + .5f,
+                        cardY + .5f,
+                        cardWidth - 1,
+                        63,
+                        17,
+                        1,
+                        c(0xfaffffff, 0x2ed9e1fb));
+            }
             draw.literalColors(previousColors);
             float located = locateOpacity(state, row, 1_500_000_000L);
             if (located > 0) {
                 draw.strokeRoundRect(
-                        cardX - 1, cardY - 1, cardWidth + 2, 66, 18, 2, alpha(0x1cad97d2, located));
+                        cardX - 1,
+                        cardY - 1,
+                        cardWidth + 2,
+                        66,
+                        cardRadius + 1,
+                        2,
+                        alpha(0x1cad97d2, located));
                 draw.strokeRoundRect(
-                        cardX, cardY, cardWidth, 64, 17, 1, alpha(0xffb8a3d8, located));
+                        cardX, cardY, cardWidth, 64, cardRadius, 1, alpha(0xffb8a3d8, located));
             }
             rank(row, state, cardX + 16, cardY + 32, 72, true, ink);
             float copyX = cardX + 100, copyWidth = cardWidth - 116;
@@ -898,6 +1387,7 @@ final class HubLeaderboardsView {
                             copyWidth - (row.playerId().equals(state.header.viewerId()) ? 17 : 0),
                             14,
                             600);
+            boolean nameHover = !pose.leaving && inside(copyX, cardY + 7, copyWidth, 23);
             text(name, copyX, cardY + 23, 14, 0xff63708a, 600);
             if (row.playerId().equals(state.header.viewerId()))
                 text(
@@ -948,6 +1438,7 @@ final class HubLeaderboardsView {
         draw.roundRect(LEFT, y, WIDTH, LIST_HEIGHT, 18, c(0xa6ffffff, 0xc9283247));
         draw.strokeRoundRect(
                 LEFT + .5f, y + .5f, WIDTH - 1, LIST_HEIGHT - 1, 18, 1, c(0xffffffff, 0x2bd0dfff));
+
         text("排名", 266, y + 23, 10, 0xff939cb1, 400);
         text("玩家", 313, y + 23, 10, 0xff939cb1, 400);
         right(
@@ -979,7 +1470,9 @@ final class HubLeaderboardsView {
             draw.saveLayerAlpha(246, rowY, 973, 48, (float) pose.opacity.value(now, reduced));
             boolean hover = !pose.leaving && inside(246, rowY, 973, 48),
                     selected = row.playerId().equals(state.selected);
-            if (row.playerId().equals(state.header.viewerId()))
+            boolean own = row.playerId().equals(state.header.viewerId());
+
+            if (own)
                 draw.linearGradientRoundRect(
                         246,
                         rowY,
@@ -990,8 +1483,12 @@ final class HubLeaderboardsView {
                         new int[] {c(0x85ece7fd, 0x21a483dc), c(0x40f0edff, 0x10a892d5)},
                         new float[] {0, 1});
             if (hover) draw.roundRect(246, rowY, 973, 48, 10, c(0x67eeedf7, 0x0ec1b0e1));
-            if (selected)
+            if (selected) {
+                // Draw the indicator below the row contents so the light paper selection stays
+                // readable.
+
                 draw.strokeRoundRect(246.5f, rowY + .5f, 972, 47, 10, 1, c(0x5cb5a7d1, 0x57c0a4e6));
+            }
             float located = locateOpacity(state, row, 1_600_000_000L);
             if (located > 0) {
                 draw.roundRect(246, rowY, 973, 48, 10, alpha(c(0xffebe1ff, 0x338e70c7), located));
@@ -1016,7 +1513,6 @@ final class HubLeaderboardsView {
                     rowY + 11,
                     26);
             draw.restore();
-            boolean own = row.playerId().equals(state.header.viewerId());
             String name = fit(row.name(), own ? 210 : 225, 12, 500);
             text(name, 349, rowY + 29, 12, own ? 0xff8670b6 : 0xff758099, 500);
             if (own)
@@ -1076,7 +1572,7 @@ final class HubLeaderboardsView {
             boolean large,
             int color) {
         if (row.rank() == null) {
-            text("未入榜", x, center + 4, 12, 0xffa69bb7, 400);
+            text("未入榜", x, center + 4, 12, paper == null ? 0xffa69bb7 : paper.muted(), 400);
             return;
         }
         boolean tied = tied(state, row),
@@ -1090,7 +1586,7 @@ final class HubLeaderboardsView {
             float size = width == 72 ? 32 : 26;
             text(prefix, x, center + 13, 10, color, 400);
             float start = x + draw.textWidth(prefix, 10, 400) + 3;
-            rankDigits(state, row, start, center + 13, size, color, 600, false);
+            rankDigits(state, row, start, center + 13, size, color, 600, false, false);
             text(
                     "名",
                     start + draw.textWidth(Long.toString(row.rank()), size, 600) + 3,
@@ -1101,26 +1597,60 @@ final class HubLeaderboardsView {
             return;
         }
         float numberCenter = x + (movement ? 11 : width / 2), baseline = center + (tied ? -1 : 4);
-        rankDigits(state, row, numberCenter, baseline, 13, color, 500, true);
-        if (tied) center("并列", numberCenter, center + 10, 8, 0xffb1a8bd, 400);
+        rankDigits(
+                state,
+                row,
+                numberCenter,
+                baseline,
+                winterLayout ? 15 : 13,
+                color,
+                winterLayout ? 600 : 500,
+                true,
+                winterLayout);
+        if (tied)
+            center(
+                    "并列",
+                    numberCenter,
+                    center + 10,
+                    8,
+                    paper == null ? 0xffb1a8bd : paper.muted(),
+                    400);
         if (movement) {
             boolean up = row.delta() > 0;
             float badgeY = center - (tied ? 12 : 7.5f), badgeX = x + 25;
-            draw.roundRect(badgeX, badgeY, 23, 15, 5, up ? 0xffedf7f2 : 0xfffcf1f3);
+            draw.roundRect(
+                    badgeX,
+                    badgeY,
+                    23,
+                    15,
+                    5,
+                    paper == null
+                            ? up ? 0xffedf7f2 : 0xfffcf1f3
+                            : up ? paper.cover() : paper.soft());
             draw.strokeRoundRect(
-                    badgeX + .5f, badgeY + .5f, 22, 14, 5, 1, up ? 0xffd2e8dc : 0xffefd8df);
+                    badgeX + .5f,
+                    badgeY + .5f,
+                    22,
+                    14,
+                    5,
+                    1,
+                    paper == null ? up ? 0xffd2e8dc : 0xffefd8df : paper.ruling());
             draw.icon(
                     up ? "arrow-up" : "arrow-down",
                     badgeX + 2,
                     badgeY + 2.5f,
                     10,
-                    up ? 0xff548d77 : 0xffb87680);
+                    paper == null
+                            ? up ? 0xff548d77 : 0xffb87680
+                            : up ? paper.pine() : paper.mailInk());
             text(
                     fit(Long.toString(Math.abs(row.delta())), 10, 9, 500),
                     badgeX + 12,
                     badgeY + 11,
                     9,
-                    up ? 0xff548d77 : 0xffb87680,
+                    paper == null
+                            ? up ? 0xff548d77 : 0xffb87680
+                            : up ? paper.pine() : paper.mailInk(),
                     500);
         }
     }
@@ -1133,7 +1663,8 @@ final class HubLeaderboardsView {
             float size,
             int color,
             int weight,
-            boolean centered) {
+            boolean centered,
+            boolean georgia) {
         RankGlyph glyph = state.ranks.get(row.playerId());
         float progress =
                 glyph == null || glyph.previous == null || reduced
@@ -1142,9 +1673,10 @@ final class HubLeaderboardsView {
         if (progress < 1) {
             draw.saveLayerAlpha(x - size * 5, y - size * 2, size * 10, size * 4, 1 - progress);
             String previous = Long.toString(glyph.previous);
-            text(
+            digitText(
+                    georgia,
                     previous,
-                    centered ? x - draw.textWidth(previous, size, weight) / 2 : x,
+                    centered ? x - digitWidth(georgia, previous, size, weight) / 2 : x,
                     y - 4 * progress,
                     size,
                     color,
@@ -1153,9 +1685,10 @@ final class HubLeaderboardsView {
         }
         draw.saveLayerAlpha(x - size * 5, y - size * 2, size * 10, size * 4, progress);
         String current = Long.toString(row.rank());
-        text(
+        digitText(
+                georgia,
                 current,
-                centered ? x - draw.textWidth(current, size, weight) / 2 : x,
+                centered ? x - digitWidth(georgia, current, size, weight) / 2 : x,
                 y + 4 * (1 - progress),
                 size,
                 color,
@@ -1164,27 +1697,25 @@ final class HubLeaderboardsView {
     }
 
     private boolean tied(State state, HubRankingData.Row row) {
-        if (row.rank() == null) return false;
-        Set<String> players = new HashSet<>();
-        for (var value : state.header.rows())
-            if (row.rank().equals(value.rank())) players.add(value.playerId());
-        for (var value : state.rows())
-            if (row.rank().equals(value.rank())) players.add(value.playerId());
-        return players.size() > 1;
+        return row.rank() != null && state.tiedRanks.contains(row.rank());
     }
 
-    private void score(
-            State state,
-            HubRankingData.Row row,
-            float x,
-            float baseline,
-            float size,
-            int color,
-            boolean alignRight) {
-        if (row.value() == null) {
-            text("—", x, baseline, size, color, 600);
-            return;
-        }
+    private void digitText(
+            boolean georgia, String value, float x, float y, float size, int color, int weight) {
+        if (georgia) SummitStage.number(draw, value, size, weight, x, y, color, true);
+        else text(value, x, y, size, color, weight);
+    }
+
+    private float digitWidth(boolean georgia, String value, float size, int weight) {
+        return georgia
+                ? SummitStage.number(draw, value, size, weight, 0, 0, 0, false)
+                : draw.textWidth(value, size, weight);
+    }
+
+    private record Score(String digits, String unit, String detail) {}
+
+    private Score scoreParts(State state, HubRankingData.Row row) {
+        if (row.value() == null) return new Score("—", "", "");
         Pose pose = state.poses.get(row.playerId());
         Scalar scalar = state.scores.get(row.playerId());
         double shown =
@@ -1197,19 +1728,49 @@ final class HubLeaderboardsView {
                 shownNumber >= 1_000_000 ? COMPACT.format(shownNumber) : NUMBER.format(shownNumber);
         String unit = displayedBoard.equals("online") ? "小时" : "种";
         String detail = displayedBoard.equals("online") ? NUMBER.format(minutes % 60) + " 分钟" : "";
-        float small = 10,
-                width = draw.textWidth(digits, size, 600) + 4 + draw.textWidth(unit, small, 400);
-        if (!detail.isEmpty()) width += 4 + draw.textWidth(detail, 9, 400);
-        float left = alignRight ? x - width : x;
-        text(digits, left, baseline, size, color, 600);
-        left += draw.textWidth(digits, size, 600) + 4;
-        text(unit, left, baseline, small, 0xff8e94a7, 400);
-        left += draw.textWidth(unit, small, 400) + 4;
-        if (!detail.isEmpty()) text(detail, left, baseline, 9, 0xff8e94a7, 400);
+        return new Score(digits, unit, detail);
+    }
+
+    private float scoreWidth(Score score, float size, boolean georgia) {
+        float width = digitWidth(georgia, score.digits, size, 600);
+        if (!score.unit.isEmpty()) width += 4 + draw.textWidth(score.unit, 10, 400);
+        if (!score.detail.isEmpty())
+            width += 4 + draw.textWidth(score.detail, winterLayout ? 10 : 9, 400);
+        return width;
+    }
+
+    private float scoreWidth(State state, HubRankingData.Row row, float size, boolean georgia) {
+        return scoreWidth(scoreParts(state, row), size, georgia);
+    }
+
+    private void score(
+            State state,
+            HubRankingData.Row row,
+            float x,
+            float baseline,
+            float size,
+            int color,
+            boolean alignRight) {
+        Score score = scoreParts(state, row);
+        boolean georgia = winterLayout && !alignRight;
+        float left = alignRight ? x - scoreWidth(score, size, georgia) : x;
+        digitText(georgia, score.digits, left, baseline, size, color, 600);
+        int muted = winterLayout ? summitMuted() : 0xff8e94a7;
+        left += digitWidth(georgia, score.digits, size, 600) + 4;
+        text(score.unit, left, baseline, 10, muted, 400);
+        if (!score.detail.isEmpty())
+            text(
+                    score.detail,
+                    left + draw.textWidth(score.unit, 10, 400) + 4,
+                    baseline,
+                    winterLayout ? 10 : 9,
+                    muted,
+                    400);
     }
 
     private void self(State state) {
         float top = 769 + bodyOffset;
+        float radius = 16;
         draw.linearGradientRoundRect(
                 LEFT,
                 top,
@@ -1222,7 +1783,7 @@ final class HubLeaderboardsView {
                 },
                 new float[] {0, .65f, 1});
         draw.strokeRoundRect(
-                LEFT + .5f, top + .5f, WIDTH - 1, 56, 16, 1, c(0xffffffff, 0x33cdb6f4));
+                LEFT + .5f, top + .5f, WIDTH - 1, 56, radius, 1, c(0xffffffff, 0x33cdb6f4));
         text("我的位置", 253, top + 33, 11, 0xff8a7aa7, 400);
         HubRankingData.Row row = state.header.self();
         if (row == null)
@@ -1289,6 +1850,7 @@ final class HubLeaderboardsView {
         state.locate = player;
         locateAt = System.nanoTime();
         if (state.leaders().stream().anyMatch(row -> row.playerId().equals(player))) {
+            if (winterLayout) host.focus("rankings-profile-name-" + player);
             host.feedback(
                     state.header.self().rank() == 1
                             ? "你位于榜首"
@@ -1300,9 +1862,12 @@ final class HubLeaderboardsView {
             if (rows.get(index).playerId().equals(player)) {
                 float target =
                         clamp(
-                                index * ROW_HEIGHT - (VIEW_HEIGHT - ROW_HEIGHT) / 2,
+                                (rowOffset(state, index)
+                                                + rowOffset(state, index + 1)
+                                                - viewHeight())
+                                        / 2,
                                 0,
-                                Math.max(0, rows.size() * ROW_HEIGHT - VIEW_HEIGHT));
+                                Math.max(0, contentHeight(state) - viewHeight()));
                 state.scrollMotion = new Scalar(state.scroll);
                 state.scrollMotion.to(target, System.nanoTime(), 380, reduced);
                 if (reduced) {
@@ -1323,26 +1888,56 @@ final class HubLeaderboardsView {
     }
 
     private void empty(State state) {
-        float top = 214 + bodyOffset;
-        draw.linearGradientRoundRect(
-                LEFT,
-                top,
-                WIDTH,
-                612,
-                21,
-                140,
-                new int[] {0xbdffffff, 0x63ffffff},
-                new float[] {0, 1});
-        draw.strokeRoundRect(LEFT + .5f, top + .5f, WIDTH - 1, 611, 21, 1, 0xdcffffff);
+        float top = (winterLayout ? (SUMMIT_BOTTOM + SUMMIT_TOP) / 2 - 292 : 214) + bodyOffset;
+        if (winterLayout) {
+            draw.rect(
+                    SUMMIT_LEFT,
+                    SUMMIT_TOP + bodyOffset,
+                    SUMMIT_WIDTH,
+                    SUMMIT_BOTTOM - SUMMIT_TOP,
+                    summitSheet());
+            SummitStage.landscape(
+                    draw,
+                    SUMMIT_LEFT,
+                    SUMMIT_TOP + bodyOffset,
+                    SUMMIT_WIDTH,
+                    SUMMIT_BOTTOM - SUMMIT_TOP,
+                    true);
+        } else
+            draw.linearGradientRoundRect(
+                    LEFT,
+                    top,
+                    WIDTH,
+                    612,
+                    21,
+                    140,
+                    new int[] {0xbdffffff, 0x63ffffff},
+                    new float[] {0, 1});
+        if (!winterLayout)
+            draw.strokeRoundRect(
+                    LEFT + .5f,
+                    top + .5f,
+                    WIDTH - 1,
+                    611,
+                    21,
+                    1,
+                    paper == null ? 0xdcffffff : paper.ruling());
+        float centerX = winterLayout ? SUMMIT_CENTER : LEFT + WIDTH / 2;
         String status = state.header == null ? "loading" : state.header.status();
         if (!state.error.isEmpty() && !status.equals("unsupported")) status = "unavailable";
         boolean loading = status.equals("loading"),
                 unavailable = status.equals("unavailable") || status.equals("error");
-        draw.roundRect(701, top + 190, 66, 66, 22, c(0x8ae9e3f7, 0x24af91d6));
+        draw.roundRect(
+                centerX - 33,
+                top + 190,
+                66,
+                66,
+                22,
+                paper == null ? c(0x8ae9e3f7, 0x24af91d6) : paper.soft());
         draw.save();
         if (loading && !reduced)
             draw.perspective(
-                    734,
+                    centerX,
                     top + 223,
                     800,
                     0,
@@ -1353,10 +1948,10 @@ final class HubLeaderboardsView {
                     0);
         draw.icon(
                 loading ? "loader-circle" : unavailable ? "wifi-off" : "trophy",
-                719.5f,
+                centerX - 14.5f,
                 top + 208.5f,
                 29,
-                0xffaaa0bd);
+                paper == null ? 0xffaaa0bd : paper.pine());
         draw.restore();
         String title =
                 switch (status) {
@@ -1365,7 +1960,7 @@ final class HubLeaderboardsView {
                     case "loading" -> state.error.isEmpty() ? "正在读取排行" : "暂时无法读取排行";
                     default -> "暂时无法读取排行";
                 };
-        center(title, 734, top + 292, 17, 0xff7b809c, 600);
+        center(title, centerX, top + 292, 17, paper == null ? 0xff7b809c : paper.ink(), 600);
         String detail =
                 status.equals("empty")
                         ? "第一份记录，会从一位旅人开始。"
@@ -1374,14 +1969,21 @@ final class HubLeaderboardsView {
                                 : state.error.isEmpty()
                                         ? (loading ? "稍等片刻，旅途的记录马上就到。" : "连接恢复后，可以重新试试。")
                                         : state.error;
-        center(fit(detail, 430, 12, 400), 734, top + 327, 12, 0xffa0a4b6, 400);
+        center(
+                fit(detail, 430, 12, 400),
+                centerX,
+                top + 327,
+                12,
+                paper == null ? 0xffa0a4b6 : paper.muted(),
+                400);
         if (unavailable) {
-            draw.roundRect(679, top + 350, 110, 34, 9, 0x99ffffff);
-            center("重新读取", 734, top + 373, 12, 0xff8670b6, 400);
+            draw.roundRect(
+                    centerX - 55, top + 350, 110, 34, 9, paper == null ? 0x99ffffff : paper.soft());
+            center("重新读取", centerX, top + 373, 12, paper == null ? 0xff8670b6 : paper.pine(), 400);
             host.hit(
                     "rankings-retry",
                     "重新读取排行",
-                    679,
+                    centerX - 55,
                     top + 350,
                     110,
                     34,
@@ -1390,24 +1992,34 @@ final class HubLeaderboardsView {
     }
 
     private void scrollbar(State state) {
-        float content = state.rows().size() * ROW_HEIGHT;
-        if (content <= VIEW_HEIGHT) return;
-        float height = Math.max(28, VIEW_HEIGHT * VIEW_HEIGHT / content),
+        float content = contentHeight(state);
+        if (content <= viewHeight()) return;
+        float height = Math.max(28, viewHeight() * viewHeight() / content),
                 y =
-                        ROW_TOP
+                        rowsTop()
                                 + bodyOffset
-                                + state.scroll / (content - VIEW_HEIGHT) * (VIEW_HEIGHT - height);
+                                + state.scroll / (content - viewHeight()) * (viewHeight() - height);
         draw.roundRect(
                 1228,
                 y,
                 3,
                 height,
                 2,
-                inside(LEFT, LIST_TOP + 36, WIDTH, LIST_HEIGHT - 36) ? 0x709ba6c1 : 0x3b9ba6c1);
+                paper == null
+                        ? inside(LEFT, LIST_TOP + 36, WIDTH, LIST_HEIGHT - 36)
+                                ? 0x709ba6c1
+                                : 0x3b9ba6c1
+                        : paper.stitch());
     }
 
     boolean scroll(float x, float y, double amount) {
-        if (!insideRect(x, y, LEFT, LIST_TOP + 36, WIDTH, LIST_HEIGHT - 36)) return false;
+        if (!insideRect(
+                x,
+                y,
+                winterLayout ? SUMMIT_LEFT : LEFT,
+                rowsTop(),
+                winterLayout ? SUMMIT_WIDTH : WIDTH,
+                viewHeight())) return false;
         State state = states.get(selectedBoard);
         state.scrollMotion = null;
         state.scroll -= amount * 50;
@@ -1420,7 +2032,7 @@ final class HubLeaderboardsView {
         if (!state.hasData() || state.loading || state.pending != null || state.pages.isEmpty())
             return;
         if (direction < 0
-                && state.scroll + VIEW_HEIGHT >= state.rows().size() * ROW_HEIGHT - 100
+                && state.scroll + viewHeight() >= contentHeight(state) - 100
                 && (state.pages.lastKey() + 1) * 20 < state.header.total())
             requestPage(selectedBoard, state.pages.lastKey() + 1, state.header.revision(), false);
         else if (direction > 0 && state.scroll < 100 && state.pages.firstKey() > 0)
@@ -1429,11 +2041,11 @@ final class HubLeaderboardsView {
 
     boolean pointerDown(float x, float y) {
         State state = states.get(selectedBoard);
-        float content = state.rows().size() * ROW_HEIGHT;
-        if (content <= VIEW_HEIGHT || !insideRect(x, y, 1224, ROW_TOP, 8, VIEW_HEIGHT))
+        float content = contentHeight(state);
+        if (content <= viewHeight() || !insideRect(x, y, 1224, rowsTop(), 8, viewHeight()))
             return false;
-        float height = Math.max(28, VIEW_HEIGHT * VIEW_HEIGHT / content),
-                top = ROW_TOP + state.scroll / (content - VIEW_HEIGHT) * (VIEW_HEIGHT - height);
+        float height = Math.max(28, viewHeight() * viewHeight() / content),
+                top = rowsTop() + state.scroll / (content - viewHeight()) * (viewHeight() - height);
         dragGrab = y >= top && y <= top + height ? y - top : height / 2;
         dragging = true;
         drag(y);
@@ -1449,13 +2061,13 @@ final class HubLeaderboardsView {
 
     private void drag(float y) {
         State state = states.get(selectedBoard);
-        float content = state.rows().size() * ROW_HEIGHT,
-                height = Math.max(28, VIEW_HEIGHT * VIEW_HEIGHT / Math.max(1, content));
+        float content = contentHeight(state),
+                height = Math.max(28, viewHeight() * viewHeight() / Math.max(1, content));
         state.scrollMotion = null;
         float before = state.scroll;
         state.scroll =
-                clamp((y - ROW_TOP - dragGrab) / Math.max(1, VIEW_HEIGHT - height), 0, 1)
-                        * Math.max(0, content - VIEW_HEIGHT);
+                clamp((y - rowsTop() - dragGrab) / Math.max(1, viewHeight() - height), 0, 1)
+                        * Math.max(0, content - viewHeight());
         boundary(state, state.scroll > before ? -1 : 1);
     }
 
@@ -1466,7 +2078,7 @@ final class HubLeaderboardsView {
     }
 
     boolean pointerOnRail(float x, float y) {
-        return insideRect(x, y, 1224, ROW_TOP, 8, VIEW_HEIGHT);
+        return insideRect(x, y, 1224, rowsTop(), 8, viewHeight());
     }
 
     boolean key(int key, String focus) {
@@ -1494,9 +2106,9 @@ final class HubLeaderboardsView {
         else return false;
         state.scrollMotion = null;
         state.selected = rows.get(index).playerId();
-        if (index * ROW_HEIGHT < state.scroll) state.scroll = index * ROW_HEIGHT;
-        else if ((index + 1) * ROW_HEIGHT > state.scroll + VIEW_HEIGHT)
-            state.scroll = (index + 1) * ROW_HEIGHT - VIEW_HEIGHT;
+        if (rowOffset(state, index) < state.scroll) state.scroll = rowOffset(state, index);
+        else if (rowOffset(state, index + 1) > state.scroll + viewHeight())
+            state.scroll = rowOffset(state, index + 1) - viewHeight();
         clampScroll(state);
         boundary(state, key == 264 || key == 269 ? -1 : 1);
         return true;
@@ -1508,15 +2120,36 @@ final class HubLeaderboardsView {
         if (state.header == null) return result;
         for (var row : state.leaders()) result.put(row.playerId(), row.name());
         List<HubRankingData.Row> rows = state.rows();
-        int first = Math.max(0, (int) (state.scroll / ROW_HEIGHT) - 1),
-                last = Math.min(rows.size(), first + (int) (VIEW_HEIGHT / ROW_HEIGHT) + 4);
+        int first = Math.max(0, (int) (state.scroll / rowHeight()) - 1),
+                last = Math.min(rows.size(), first + (int) (viewHeight() / rowHeight()) + 4);
         for (var row : rows.subList(first, last)) result.put(row.playerId(), row.name());
         return result;
     }
 
+    private float contentHeight(State state) {
+        return winterLayout
+                ? state.summitOffsets[state.summitOffsets.length - 1]
+                : state.rows().size() * ROW_HEIGHT;
+    }
+
+    private float rowOffset(State state, int index) {
+        return winterLayout ? state.summitOffsets[index] : index * ROW_HEIGHT;
+    }
+
+    private float rowHeight() {
+        return winterLayout ? SUMMIT_ROW_HEIGHT : ROW_HEIGHT;
+    }
+
+    private float rowsTop() {
+        return winterLayout ? SUMMIT_ROWS : ROW_TOP;
+    }
+
+    private float viewHeight() {
+        return winterLayout ? SUMMIT_SELF - SUMMIT_ROWS : VIEW_HEIGHT;
+    }
+
     private void clampScroll(State state) {
-        state.scroll =
-                clamp(state.scroll, 0, Math.max(0, state.rows().size() * ROW_HEIGHT - VIEW_HEIGHT));
+        state.scroll = clamp(state.scroll, 0, Math.max(0, contentHeight(state) - viewHeight()));
     }
 
     private boolean inside(float x, float y, float w, float h) {

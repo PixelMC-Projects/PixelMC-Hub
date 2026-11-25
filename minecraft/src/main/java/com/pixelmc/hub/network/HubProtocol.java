@@ -40,6 +40,8 @@ public final class HubProtocol {
                             "like",
                             "comment",
                             "deleteComment",
+                            "markSectionSeen",
+                            "markEntrySeen",
                             "snapshotSync",
                             "packsSync",
                             "listSync",
@@ -173,6 +175,11 @@ public final class HubProtocol {
         if (action.equals("window")) integer(payload, "count", 1, 5);
     }
 
+    public static boolean isUpdateReceipt(String module, String action) {
+        return module.equals("updates")
+                && (action.equals("markSectionSeen") || action.equals("markEntrySeen"));
+    }
+
     private static void validateUpdates(String action, JsonObject p) {
         Set<String> fields =
                 switch (action) {
@@ -182,6 +189,8 @@ public final class HubProtocol {
                     case "read" -> Set.of("id", "commentsPage", "replyPages");
                     case "like" -> Set.of("id", "liked");
                     case "comment" -> Set.of("id", "text", "operationId");
+                    case "markSectionSeen" -> Set.of("publication");
+                    case "markEntrySeen" -> Set.of("id", "publication");
                     case "deleteComment" -> Set.of("id", "commentId");
                     default -> throw new IllegalArgumentException("不支持的更新日志操作");
                 };
@@ -190,6 +199,14 @@ public final class HubProtocol {
                 throw new IllegalArgumentException("更新日志操作包含不支持的字段");
         switch (action) {
             case "snapshot" -> {}
+            case "markSectionSeen", "markEntrySeen" -> {
+                if (action.equals("markEntrySeen")) id(p, "id");
+                if (!p.has("publication")
+                        || !p.get("publication").isJsonPrimitive()
+                        || !p.getAsJsonPrimitive("publication").isNumber()
+                        || p.get("publication").getAsBigDecimal().longValueExact() <= 0)
+                    throw new IllegalArgumentException("发布版本无效");
+            }
             case "packs" -> integer(p, "page", 0, 100000);
             case "list" -> {
                 id(p, "packId");

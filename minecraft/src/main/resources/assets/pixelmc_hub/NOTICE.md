@@ -5,3 +5,7 @@ Artwork is copied byte-for-byte from public/assets, with the original source att
 White transparent PNG icons are rasterized at 192 by 192 from installed lucide-react 0.468.0 SVG components, retaining the ISC copyright and permission text in licenses/LUCIDE-ISC.txt. They retain Lucide's 24 by 24 viewBox and round caps/joins. Default icons use 1.65-unit strokes to match the final web global SVG CSS override; the nine title preset symbols also provide 1.5-unit emblem variants under textures/icons/stroke-1.5/ and 1.0-unit preview-symbol variants under textures/icons/stroke-1.0/. These widths reflect the web cascade rather than Lucide's original 2-unit presentation attribute. No image generation or external image service is used.
 
 Demo JSON retains the web prototype's fictitious player, titles, dates and archive; it is not production player data. ASSET-MAPPING.json records original paths, native paths, stroke widths and SHA-256 hashes. System fonts are referenced at runtime and are not distributed. Original tooling and HubHead code are Apache-2.0.
+
+## 冬日驿站素材
+
+images/winter/ 的源素材位于本项目 public/assets/winter/。PNG 由定稿中的冬季插画和矢量纹饰转换而成。书脊、纸背、插画拱窗和场景裁切沿用 src/winter-home.css、src/winter-pages.css 和 src/WinterStation.jsx 的布局与配色。沿用项目中各源素材的署名和许可说明。

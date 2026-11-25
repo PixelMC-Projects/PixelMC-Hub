@@ -47,6 +47,16 @@ export function publishedEntries(state, packId) {
   return state.entries.filter(e => e.packId === packId && e.status === 'published').sort((a,b) => Number(b.pinned)-Number(a.pinned) || new Date(b.publishedAt)-new Date(a.publishedAt));
 }
 // Player projection intentionally omits other players' comments and liker identities.
+export function publicationWatermark(state) {
+  const visible = new Set(visiblePacks(state).map(pack => pack.id));
+  return state.entries.reduce((latest, item) => item.status === 'published' && visible.has(item.packId)
+    ? Math.max(latest, Date.parse(item.publishedAt) || 0) : latest, 0);
+}
+
+export function entryUnread(state, item) {
+  return state.updateReads?.[item.id] !== item.publishedAt;
+}
+
 export function playerEntry(state, entry, uuid = DEMO_PLAYER.uuid) {
   if (!entry || !publishedEntries(state, entry.packId).some(e => e.id === entry.id)) return null;
   const { likes, likeTimes, ...publicEntry } = entry;
@@ -65,6 +75,20 @@ export function reduceAction(input, action, now = new Date().toISOString()) {
   const requireEntry = () => { if (!entry) throw new Error('这条更新记录已不存在。'); };
   const requireVisible = () => { requireEntry(); if (!playerEntry(state, entry)) throw new Error('这条更新记录目前不可见。'); };
   switch (action.type) {
+    case 'resetUpdateReads':
+      delete state.updatesSeen;
+      delete state.updateReads;
+      break;
+    case 'visitUpdates':
+      state.updatesSeen = Math.max(state.updatesSeen || 0, Math.min(action.through, publicationWatermark(state)));
+      break;
+    case 'readUpdate':
+      requireVisible();
+      if (action.edition === entry.publishedAt) {
+        state.updateReads ??= {};
+        state.updateReads[entry.id] = entry.publishedAt;
+      }
+      break;
     case 'saveEntry': {
       const draft = {...action.value};
       if (draft.bodyDocument) { draft.bodyDocument=cleanDocument(draft.bodyDocument); draft.body=documentText(draft.bodyDocument); }
@@ -73,7 +97,7 @@ export function reduceAction(input, action, now = new Date().toISOString()) {
       if (!state.packs.some(p => p.id === draft.packId)) throw new Error('请选择整合包。');
       const existing = state.entries.find(e => e.id === draft.id);
       const status = action.publish ? 'published' : existing?.status || 'draft';
-      const value = { id: existing?.id || uuid(), title: draft.title.trim(), body: draft.body.trim(), ...(draft.bodyDocument?{bodyDocument:draft.bodyDocument}:{}), summary: draft.summary?.trim().slice(0,160) || '', version: draft.packVersion?.trim().slice(0,32) || '', packName: draft.packName?.trim().slice(0,40) || '', packVersion: draft.packVersion?.trim().slice(0,32) || '', updateVersion: draft.updateVersion?.trim().slice(0,32) || '', category: draft.category || '功能更新', packId: draft.packId, pinned: !!draft.pinned, status, updatedAt: now, publishedAt: existing?.publishedAt || (status === 'published' ? now : null), likes: existing?.likes || [], likeTimes: existing?.likeTimes || {} };
+      const value = { id: existing?.id || uuid(), title: draft.title.trim(), body: draft.body.trim(), ...(draft.bodyDocument?{bodyDocument:draft.bodyDocument}:{}), summary: draft.summary?.trim().slice(0,160) || '', version: draft.packVersion?.trim().slice(0,32) || '', packName: draft.packName?.trim().slice(0,40) || '', packVersion: draft.packVersion?.trim().slice(0,32) || '', updateVersion: draft.updateVersion?.trim().slice(0,32) || '', category: draft.category || '功能更新', packId: draft.packId, pinned: !!draft.pinned, status, updatedAt: now, publishedAt: status === 'published' && existing?.status !== 'published' ? now : existing?.publishedAt || null, likes: existing?.likes || [], likeTimes: existing?.likeTimes || {} };
       if (existing) state.entries[state.entries.indexOf(existing)] = value; else state.entries.unshift(value);
       break;
     }
@@ -84,7 +108,7 @@ export function reduceAction(input, action, now = new Date().toISOString()) {
       state.comments=state.comments.filter(c=>c.entryId!==entry.id);
       break;
     }
-    case 'status': requireEntry(); entry.status = action.value; if (action.value === 'published') entry.publishedAt ||= now; break;
+    case 'status': requireEntry(); if (entry.status !== 'published' && action.value === 'published') entry.publishedAt = now; entry.status = action.value; break;
     case 'pin': requireEntry(); entry.pinned = !entry.pinned; break;
     case 'packVisibility': { const pack = state.packs.find(p => p.id === action.packId); if (pack) pack.visible = !!action.value; break; }
     case 'settings': {

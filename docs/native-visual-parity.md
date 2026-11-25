@@ -127,3 +127,112 @@ GPU 图层使用实际组合 alpha。进入动画不是逐个 primitive 乘 alph
 本机隐藏 GPU 检查通过：四种格式共 360 帧、双向共享纹理同步、独立 UBO/混合设置、实际深度写入、中文/衬线字体、GPU 背景模糊、异常恢复、4K 下八次重开和资源关闭。刷新保留缓存的像素比较与白色 Toast 动画检查通过。测试中发现本机布尔深度掩码查询在切换上下文后与整数查询不一致；回归检查改用整数查询，并用真实深度清除和回读独立确认写入掩码，未据查询结果推断实际写入。
 
 这些检查不启动或控制 Minecraft，未重现完整整合包的原始闪退。0.2.4-dev 仍为修复候选，不能据此宣布生产兼容问题已解决；本轮只推送源码，不发布发行版或重新部署生产。
+
+### 0.3.0-dev：更新日志原生接入与 Terra 对照（2026-11-05）
+
+以下为本地源码对应修正；不是生产部署或真实 Minecraft 验收。绿色 Newspaper 导航、分类底板配色与填充点赞心形已先行修正，以下 23 项来自后续静态审查。
+
+| 对照项 | 当前实现 |
+| --- | --- |
+| 1. 列表 hover / press | 未选中项 hover 使用 brightness .97，按下使用 .92；绘制隔离图层只改变该项 RGB，保留 alpha。 |
+| 2. 独立弹簧选中框 | 选中框单独追踪位置/高度，omega30、zeta.78、最大1/240秒积分步，普通数据刷新不重置已有运动。 |
+| 3. 列表方向键选择与滚入视野 | 上下键更改记录选择；Home/End 选中窗口首末项；按行测量位置滚入当前视口。 |
+| 4. 搜索长文本与点击光标 | 接入独立单行编辑器，光标水平跟随、点击定位和拖选，选区复制/剪切由 Screen 路由。 |
+| 5. 留言文本编辑 | 接入多行编辑器，支持局部选区、拖选、Shift/Control移动、上下行定位、剪贴板以及成对UTF16输入。 |
+| 6. 长留言跟随光标 | 最大168逻辑像素输入区以 caret 确保可见；Ctrl+Home 可回首行；保留玩家手动滚动。 |
+| 7. 文章退出后入场与数据身份 | selected 和 displayedId 分离；目标数据未就绪时保留旧记录；目标就绪后旧文章200ms上移5px淡出，再新文章200ms下方10px淡入；互动绑定显示ID且过渡时禁用。 |
+| 8. 3px滚动条拖动及hover | 列表/正文独立拖动；轨道透明；hover 对齐 Web 的整个 viewport 命中与 #9aa7c273，常态 #9aa7c23d。 |
+| 9. 菜单滚轮命中 | 只有鼠标位于整合包菜单边界时滚动菜单；文章区域仍由文章滚动处理。 |
+| 10. 菜单外点击关闭 | pointerDown 在菜单和触发按钮以外关闭菜单，Escape也可关闭。 |
+| 11. 点号日期 | 列表 MM.dd，正文/留言/回复 yyyy.MM.dd HH:mm，Asia/Shanghai，无秒。 |
+| 12. 空摘要不预留行 | 仅非空摘要参与封面高度和绘制；空文本 normal measure为0。 |
+| 13. 长版本换行与封面重排 | 版本标签保留全部文本并换行；category/pin空间不足时换到下一行，标题与时间随 kicker/摘要高度重排。 |
+| 14. 最新标记身份 | 按 provider list.latestId / snapshot.list.latestId 标记，不再使用搜索结果第一行。 |
+| 15. 标题数量不受搜索影响 | 分页total只控制查询结果，标题使用未过滤 counts.published；显式demo也返回未过滤counts。 |
+| 16. 英文单词换行 | 使用Unicode行边界优先；无法容纳整词时才按码点拆；每行按实际富文本字重测量，保留粗体段。 |
+| 17. 多段li只画一次bullet | listItem首段为bullet，后续段为listParagraph并保留缩进；嵌套列表继续按层级处理。 |
+| 18. 留言锁与发送图标 | 隐私标签前绘制LockKeyhole，发送按钮绘制Send；Lucide/ISC素材沿同源生成。 |
+| 19. 25px圆角头像底框 | 25x25、5px圆角裁切、#e9edf6底色、#a9b2cd22细框；内部复用自己的2D皮肤和独立透明帽子层。 |
+| 20. ClickSpark即时点击坐标 | 点击未点赞按钮即在实际点击坐标产生7个四色星形粒子：radius23、duration480ms、source randomness；仅动画即时，点赞状态仍等权威回执。 |
+| 21. 点赞数量独立动画 | 回执计数变化触发200ms从opacity.4/y3进入；同值回执不重播。 |
+| 22. 删除hover及确认细节 | trash hover #b86f81，确认区域 #fcf3f5、8px圆角，取消/确认使用文本操作。 |
+| 23. 发送按钮状态 | 发送含图标；normal/hover渐变、阴影、边线与inset高光按source；hover上移、press下移、禁用.45 alpha且不注册提交hit。 |
+
+玩家侧更新日志、留言、回复及整合包菜单改为连续滚动按需加载，后端保持有界分页；Manager 管理端分页不变。窗口对账使用稳定 ID，刷新替换而非反复追加；较早回复前插保持阅读锚点，被逐出窗口可重新读取。普通同连接刷新保留旧画面，权威隐藏/撤回/停用才清除。新连接的磁盘缓存先经服务端确认，按 UUID 与稳定 Manager serverId 隔离；详细协议见 player-integration-contract.md。
+
+Java 17 编译与完整 build 通过。输入检查 54 项及 1500 次混合操作、缓存检查 295 项、现有 nativeUpdatesChecks，以及 NativeTerraChecks 的 66 项聚焦断言通过。最后仅调整滚动条 viewport hover 范围与透明度，受影响的 66 项检查及完整 build 再次通过；没有重新宣称全部旧检查都在此微调后执行。输入接线中发现并修复 render 外编辑访问 frame-local HubDraw=null 的生命周期问题，现绑定 renderer-lifetime draw，并在 renderer 更换时失效布局。
+
+聚焦检查覆盖双批列表删除/去重/锚点、103 个整合包续载及隐藏/更名、回复前插和重访、光标与选区、文章退出/进入/迟回标识、拖动细滚动条、菜单边界、日期/长版本/英文和多段列表、点击粒子与确认后计数动效。没有运行真实游戏。实际字体/DPI/GUI 缩放、当前玩家皮肤与帽子捕获、输入法候选框、完整整合包兼容性及动画观感仍由用户验收；1260×850 逻辑布局不等于 CSS 引擎，不保证跨机器逐像素一致。
+
+
+### 0.3.1-dev：客户端启动预热与通用资源复用（2026-11-05）
+
+本轮调整初始化时机及资源生命周期，保留 0.3.0-dev 的页面、字体选择规则、素材、配色、动画参数和服务器协议。启动后在正确的渲染线程上分阶段准备通用资源，使用独立的小离屏目标；不预绘真实 HubView、不改变 hello 展示记录、不写进游戏画面。关闭面板保留可复用的通用资源，释放当前游戏画面引用、临时文本和大绘制池；资源重载失效并安全重建，退出时完整释放。
+
+玩家皮肤在会话可用后准备，沿用原版皮肤流程；使用独立 GL 状态中的完整像素读取边界，并以原始 RGBA 交给 Skija，避免打开面板时重复 PNG 编解码。跨玩家和资源重载清理旧皮肤；头像与帽层绘制规则不变。
+
+分阶段与首个显示帧增加毫秒计时。构建及隔离 GPU/生命周期检查以本地 0.3.1-dev 交付记录为准；未启动或控制 Minecraft，未替换用户正在使用的 0.2.5-dev。隐藏冷/热路径数据只描述该测试设备与夹具，不证明实际整合包首次打开已经无卡顿，也不证明全尺寸逐像素相同。
+
+
+### 0.3.1-dev 源码补充：复用菜单背景（2026-11-06）
+
+有世界时先执行标准 `Screen.renderBackground(GuiGraphics)`，flush 后由 Hub 采样并合成；真实 HubScreen 不再调用低分辨率全屏 sceneBlur。当前 1.20.1 整合包由 Modern UI 的标准 Screen hook 处理菜单虚化和进入过渡，Hub 不反射调用其私有类，也不强依赖该模组。无此类效果模组时是原版暗化。标题预览仍绘制全景；面板玻璃及内部弹窗的局部模糊保持各自参数。
+
+依据：本地 Forge 1.20.1 Screen 的 renderBackground 调用 fillGradient；本地 Modern UI 3.11.1.6 的 MixinScreen 将该调用转入 BlurHandler.drawScreenBackground。现有配置启用 blurEffect/blurWithBackground、blurRadius=7；未修改配置。此前 Hub 自有缩小采样可能导致边缘台阶，但未通过实际游戏测量确认，不能将此静态核对称为抗锯齿问题已验证修复。
+
+全部 35 个主 Java 源码经 Java 17 和本地缓存依赖直接编译通过；标准 Gradle build 被本机 loopback 通信错误阻断，未完成新 JAR 打包。前次预热候选 JAR 不包含本次修改。未运行 Minecraft；菜单动画、外部模组兼容与实际虚化观感待用户验收。旧隐藏 GPU 夹具中的显式 sceneBlur 仅验证独立渲染器能力，不是本次游戏标准背景链的运行证明。
+
+### 0.4.0-dev 排行榜原生接入与审查修复（2026-11-06）
+
+逐项映射当前 LeaderboardPage.jsx 与 leaderboards.css。三榜标签、前三玩家玻璃卡、独立帽层头像、普通行数据条及本人位置均接入原生 Skija。普通行保留涨跌位数和并列标签，前三及本人栏突出名次。
+
+数值过渡 460ms、条长 320ms、UUID 位置 420ms、名次文本 220ms。前三玩家新增 320ms 淡入/淡出和上下偏移，退出完成后释放旧位置，连续变化从当前插值继续。普通行首次进入视口淡入，初次展示按 25ms 错开，移除行有短退出。刷新只对账当前有界窗口并保留滚动。
+
+Terra 审查的 1–7 项已落入本地修复。补入前三不足三人时的列表提示、本人已知未入榜数值、平滑定位和 1.5/1.6s 消退高亮、榜首提示、加载旋转及断线图标。皮肤图片 LRU 淘汰后，玩家重新进入可视区域可重新读取已注册纹理，保留有限尝试。
+
+审查第 8 项经用户决定本轮跳过。原生继续使用全页统一缩放的 1260×850 逻辑画布，小窗口 CSS 重排属于明确保留的差异。头像面投影仍沿既有原生实现，实际皮肤、玻璃取样、DPI/GUI 缩放和游戏兼容性由用户实游验收。
+
+本候选同时包含先前的启动预热和标准 Screen 背景接入。Java 17 完整构建及隐藏 GPU 检查已通过。独立 GPU 夹具与合成背景只用于自动回归。
+
+## 2026-11-07 community native candidate
+
+The Forge 1.20.1 candidate ports the approved public-profile modal and journey-memory reader. It retains ten background colors and six profile patterns, in-place biography editing, original-position title/fortune selection, a three-card memory carousel, bounded modal scroll, independent candidate rails, entrance/exit and expansion animations. Home and leaderboard identity links open profiles. Memory navigation uses the existing home entry and five-item sidebar.
+
+The shared large-surface fill, border and clipping use the same continuous-corner path. Dark materials are mapped by the approved CSS roles, including low-alpha blue/violet glass highlights and warm dark fortune paper. The native light-theme 42-percent white frosted decoration is replaced with dark-specific sheen and a bounded edge rim. Themes are stored per player and server/save. Rich title glyph colors and source images remain literal.
+
+3D head geometry uses one device-space 2x supersampled layer for base and hat. Skin texels retain nearest sampling. The pooled surface count is bounded and resources are released with the panel. Hidden checks cover 1080p/1440p and DPI 1/1.25/1.5, with internal seam and alpha-edge checks.
+
+Verification uses actual compiled Gradle classes, real isolated-service DTOs, normal HubView mouse/keyboard dispatch and hidden GPU surfaces. Build receipts, targeted session checks, screenshots and source/artifact hashes are stored in the local `outputs/playerhub-native-community-20261107` handoff directory. These establish local integration evidence. Actual Minecraft/client rendering, resource packs, drivers and production deployment await user acceptance. The previously waived whole-app small-window responsive reflow stays outside this candidate.
+
+Persisted archive cover presets are currently limited to the explicit defaults from Manager. The renderer supports the full four-pattern/six-palette artwork set for future metadata. Pack art selection in the administrator UI remains deferred.
+
+## 2026-11-07 0.5.1-dev 视觉差异修复
+
+本地 Forge 候选对齐本轮确认的十四项差异，并补齐主页旅程标签、两个链接按钮与最近签图的深色呈现。共享颜色根因已由回归确认：连续圆角在局部路径绘制前平移画布，而渐变已定义在调用者坐标中，导致着色器再次偏移。HubCorners 现直接绘制有界缓存的绝对坐标路径；fill、clip、阴影、glare 及玻璃位移图共用连续轮廓。旧版同坐标普通／连续圆角渐变检查失败，新版通过，不通过整体提高饱和度补偿。
+
+页面逐项对应 CSS farthest-corner 径向渐变、背景层叠与深色覆盖。称号各色卡面、佩戴预览、排行金／蓝紫／青卡面和光晕、主页身份与今日签恢复层次；日历、纸面装饰、按钮高光和图标按当前 Web 调整。设置采用右侧紧凑日／月分段，小时与分钟数字采用同一层级。真实最近收藏保持实际类型与排序，不拿 Web 样例图标替换真实记录。
+
+资料卡白色／近白富文本在浅色下增加细轮廓，保留原始填色、逐字渐变及粗斜／划线，不加底块。此为真实白字 DTO 的可读性处理，Web 彩色样例未覆盖该数据情形。
+
+Windows 通过后台只读 SPI 获取系统动画偏好。首次或过期查询完成后才决定打开面板与欢迎动画，请求按会话和屏幕身份失效。本地开关独立保存，有效值为本地或系统；正常系统保留原欢迎频率。其他平台当前使用本地开关，未宣称跨平台系统偏好均已实现。
+
+完整构建、偏好／渲染隔离／生命周期／排行回归、五页浅深截图、资料与实际隔离服务 DTO 输入检查已执行。完整回执和源码摘要在私有本地 outputs/hub-parity-fixes-20261107 交接目录。没有启动游戏、部署或发布；截图来自隐藏 GPU，不代替实际整合包场景、字体、DPI 和输入验收。全局小窗口重排仍按用户豁免保留。
+
+
+## 问舟原生导航动效
+
+Forge 1.20.1 的 Hub 0.5.4-dev 移出原生导航的共用绘制函数。问舟 0.1.6-dev 在最后一个可见导航项之后注册入口，使用原生的悬停缓动、指针视差、玻璃图标入场、键盘焦点和点击区域。手册打开期间收到确认的授权时，问舟入口从自身的起始状态出现。禁用「更新日志」时沿用实际可见的顺序。减少动态效果时入口直接显示。
+
+问舟页面调用 Hub 的按钮悬停与位移时序。从手册进入问舟时，动画中的页面点击区域跟随画面。客户端和专用端 Mixin 检查及浅色、深色离屏 GPU 检查已通过，实际游戏体验待验证。
+
+## 冬日驿站
+
+冬日驿站和深浅色独立选择，偏好按玩家及服务器／存档隔离。旧偏好沿用经典主题。原生 HUB 使用与 Web 定稿相同的驿站原画、徽章、纹饰与纸张。首页按 1260 × 850 逻辑画布排版，跟随游戏面板缩放。玩家头像、称号、签文、公告、在线同伴和点击区域均由原生界面绘制。管理器提供的当前存档公告、共同存档数为可选增强摘要，未提供时保留已知数据。
+
+冬季开屏以原画的拱窗、关灯／亮灯图层、14 片雪、4 组足印、标题和织纹分别合成。760 ms 展开拱窗，570 ms 开始亮灯，920 ms 淡入标题，2600 ms 开始向主页淡出。开启减少动态效果时跳过开屏。问舟的季节外观由配套客户端扩展渲染。
+
+### 冬日收藏与社区页面
+
+本轮使用 Web 定稿的称号徽章、旅行签纸、雪窗印刷间、排行榜雪景和旅程地图。目录以 186 × 848 的逻辑尺寸绘制，高分辨率底图保存封面、布纹和桥景。六个入口从同一图集取样，选中丝带、存档信息、服务器图标及命中区域由客户端绘制。开屏结束后，各入口间隔 82 毫秒开始 360 毫秒的淡入和平移。减少动态效果时立即显示。
+
+称号页使用六枚一页的收藏匣，签笺页使用月历和阅读页。排行榜按皮肤纹理及手臂模型计算领奖姿势。界面设置的频率拖动使用绘制滑轨的同一组坐标。公开资料和旅程数据沿用已确认的玩家响应。游戏标题菜单没有服务器连接，合成的社区数据由独立回归程序提供。问舟延续原有页面结构，冬日样式作用于发送、工具、提醒和浮层。

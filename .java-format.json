@@ -1,0 +1,4 @@
+{
+  "sources": ["minecraft/src/main/java"],
+  "exclude": []
+}

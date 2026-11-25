@@ -5,7 +5,10 @@ package com.pixelmc.hub.client.ui;
 
 import com.google.gson.*;
 import com.pixelmc.hub.client.render.HubDraw;
+import com.pixelmc.hub.client.render.WinterPaper;
+
 import io.github.humbleui.skija.Matrix33;
+
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -146,11 +149,14 @@ final class HubUpdatesView {
     private int packPage, packTotal;
     private float packScroll;
     private JsonObject selectedPack, demoSnapshot;
+    private JsonObject stationPack, stationPage, stationSelection;
+    private List<JsonObject> stationRows = List.of();
+    private String stationRevision = "", stationNoticeState = "";
     private final Map<String, JsonObject> demoEntries = new LinkedHashMap<>();
 
-    private record LayoutKey(List<Run> runs, float width, float size, int weight) {}
+    private record LayoutKey(List<Run> runs, float width, float size, int weight, boolean serif) {}
 
-    private record MetricKey(int codepoint, float size, int weight) {}
+    private record MetricKey(int codepoint, float size, int weight, boolean serif) {}
 
     private final Map<LayoutKey, List<Line>> layouts = new LinkedHashMap<>(128, .75f, true);
     private final Map<MetricKey, Float> metrics = new LinkedHashMap<>(256, .75f, true);
@@ -188,7 +194,16 @@ final class HubUpdatesView {
     private String pressed = "";
     private final HubMotion.Transition likeHover = new HubMotion.Transition(),
             likePress = new HubMotion.Transition();
-    static final float X = 236, Y = 174, LW = 252, GAP = 20, RX = 508, RW = 724, H = 630;
+    private static final float PRESS_HEIGHT = 149.4f;
+    private float pageX = 236, pageWidth = 996;
+    private float pageTop = 174,
+            pageHeight = 630,
+            indexWidth = 252,
+            readerX = 508,
+            readerWidth = 724;
+    private float searchY = 174, listInset = 50, pickerRight = 1050, menuX = 875, menuLimit = 550;
+    private InputBox pickerBounds;
+    private HubGazetteSheet gazette;
 
     HubUpdatesView(Host host) {
         this.host = host;
@@ -313,7 +328,16 @@ final class HubUpdatesView {
         status = "正在读取更新日志…";
     }
 
+    private long publication, seenThrough, pendingSection, attemptedReadEdition;
+    private boolean enteredBeforeSnapshot;
+    private final Map<String, Long> pendingReads = new HashMap<>(),
+            confirmedReads = new HashMap<>();
+
     void clear() {
+        publication = seenThrough = pendingSection = attemptedReadEdition = 0;
+        enteredBeforeSnapshot = false;
+        pendingReads.clear();
+        confirmedReads.clear();
         editorDraw = null;
         controlMotion.clear();
         replyBoxes.clear();
@@ -350,6 +374,7 @@ final class HubUpdatesView {
         searchEditor.setText("");
         composeEditor.setText("");
         settings = new JsonObject();
+        clearStationNotices();
         entry = null;
         demoEntries.clear();
         demoSnapshot = null;
@@ -406,9 +431,18 @@ final class HubUpdatesView {
     }
 
     void failure(String action, JsonObject payload, String message) {
+        if (action.equals("markSectionSeen")) {
+            if (pendingSection == stamp(payload, "publication")) pendingSection = 0;
+            return;
+        }
+        if (action.equals("markEntrySeen")) {
+            pendingReads.remove(s(payload, "id", ""), stamp(payload, "publication"));
+            return;
+        }
         readInFlight = false;
         if (message.equals("更新日志入口暂未开放")) {
             settings.addProperty("updatesEnabled", false);
+            clearStationNotices();
             purgeArticles();
             entry = null;
             rows.clear();
@@ -417,7 +451,13 @@ final class HubUpdatesView {
             total = 0;
         } else if (message.equals("只接受已入服玩家本人的更新日志请求")
                 || message.equals("记录不存在或不可见") && selected.equals(s(payload, "id", ""))) {
-            articleCache.remove(s(payload, "id", ""));
+            String id = s(payload, "id", "");
+            if (message.equals("只接受已入服玩家本人的更新日志请求")) clearStationNotices();
+            else
+                stationRows =
+                        stationRows.stream().filter(row -> !id.equals(s(row, "id", ""))).toList();
+            stationSelection = null;
+            articleCache.remove(id);
             staleArticles.remove(s(payload, "id", ""));
             displayedId = "";
             clearLayout();
@@ -430,17 +470,31 @@ final class HubUpdatesView {
         }
     }
 
+    boolean sectionUnread() {
+        return enabled() && publication > Math.max(seenThrough, pendingSection);
+    }
+
+    private void markSection() {
+        if (!sectionUnread()) return;
+        pendingSection = publication;
+        JsonObject query = new JsonObject();
+        query.addProperty("publication", publication);
+        perform("markSectionSeen", query);
+    }
+
     void activate() {
         active = true;
         if (!loaded) {
-            perform("snapshot", new JsonObject());
+            enteredBeforeSnapshot = true;
             return;
         }
+        markSection();
         ensureRead(false);
     }
 
     void deactivate() {
         active = false;
+        attemptedReadEdition = 0;
         packMenu = false;
         editorDraw = null;
     }
@@ -660,8 +714,35 @@ final class HubUpdatesView {
         flattenList(false);
     }
 
+    private static long stamp(JsonObject value, String key) {
+        return value.has(key) && !value.get(key).isJsonNull() ? value.get(key).getAsLong() : 0;
+    }
+
+    private boolean articleUnread(JsonObject row) {
+        String id = s(row, "id", "");
+        return b(row, "unread", false)
+                && stamp(row, "publishedAt")
+                        > Math.max(
+                                pendingReads.getOrDefault(id, 0L),
+                                confirmedReads.getOrDefault(id, 0L));
+    }
+
+    private void markDisplayed(JsonObject row) {
+        String id = s(row, "id", "");
+        long edition = stamp(row, "publishedAt");
+        if (edition == attemptedReadEdition || !articleUnread(row)) return;
+        // A failed receipt may be retried on the next visit, without resending every frame.
+        attemptedReadEdition = edition;
+        pendingReads.put(id, edition);
+        JsonObject query = new JsonObject();
+        query.addProperty("id", id);
+        query.addProperty("publication", edition);
+        perform("markEntrySeen", query);
+    }
+
     private void select(String id) {
         if (selected.equals(id)) return;
+        attemptedReadEdition = 0;
         readRefreshQueue.clear();
         readRefreshId = "";
         selected = id;
@@ -756,7 +837,7 @@ final class HubUpdatesView {
     private void rememberReaderAnchor() {
         for (var reply : replyBoxes.entrySet()) {
             Box box = reply.getValue();
-            if (box.y + box.height >= readerScroll && box.y <= readerScroll + H) {
+            if (box.y + box.height >= readerScroll && box.y <= readerScroll + pageHeight) {
                 readerAnchor = "reply:" + reply.getKey();
                 readerAnchorOffset = box.y - readerScroll;
                 return;
@@ -855,7 +936,29 @@ final class HubUpdatesView {
     }
 
     void accept(String action, JsonObject value) {
+        if (action.equals("stationNotices")) {
+            if (stationPack != null
+                    && stationRevision.equals(s(value, "revision", ""))
+                    && s(stationPack, "id", "").equals(s(value, "packId", ""))) {
+                stationNoticeState = s(value, "state", "");
+                replaceStationRows(objects(value, "rows"));
+            }
+            return;
+        }
         JsonObject request = obj(value, "_hubRequest");
+        if (action.equals("markSectionSeen")) {
+            seenThrough = Math.max(seenThrough, stamp(value, "publication"));
+            if (pendingSection <= seenThrough || pendingSection == stamp(request, "publication"))
+                pendingSection = 0;
+            return;
+        }
+        if (action.equals("markEntrySeen")) {
+            String id = s(value, "id", "");
+            long edition = stamp(value, "publication");
+            pendingReads.remove(id, edition);
+            confirmedReads.merge(id, edition, Math::max);
+            return;
+        }
         if (action.equals("snapshot")) {
             boolean first = !loaded;
             readInFlight = false;
@@ -891,6 +994,7 @@ final class HubUpdatesView {
             loaded = true;
             status = "";
             if (!enabled()) {
+                clearStationNotices();
                 purgeArticles();
                 rows.clear();
                 selected = "";
@@ -898,6 +1002,13 @@ final class HubUpdatesView {
                 return;
             }
             JsonObject page = obj(value, "list");
+            acceptStationNotices(value, page);
+            publication = stamp(page, "publication");
+            seenThrough = Math.max(seenThrough, stamp(page, "seenThrough"));
+            if (enteredBeforeSnapshot) {
+                enteredBeforeSnapshot = false;
+                markSection();
+            }
             if (first || packId.equals(s(value, "selectedPackId", "")) && search.isBlank()) {
                 if (first) {
                     listPages.clear();
@@ -1033,6 +1144,7 @@ final class HubUpdatesView {
 
     void purgeCachedUpdates(java.util.Set<String> visibleIds, java.util.Set<String> visiblePacks) {
         if (visibleIds.isEmpty() && visiblePacks.isEmpty()) {
+            clearStationNotices();
             purgeArticles();
             listPages.clear();
             rows.clear();
@@ -1043,6 +1155,22 @@ final class HubUpdatesView {
             total = unfilteredTotal = 0;
             loaded = false;
             return;
+        }
+        if (stationPack != null && !visiblePacks.contains(s(stationPack, "id", ""))) {
+            clearStationNotices();
+        } else {
+            stationRows =
+                    stationRows.stream()
+                            .filter(row -> visibleIds.contains(s(row, "id", "")))
+                            .toList();
+            if (stationPage != null) {
+                JsonArray visible = new JsonArray();
+                for (JsonObject row : objects(stationPage, "rows"))
+                    if (visibleIds.contains(s(row, "id", ""))) visible.add(row);
+                stationPage.add("rows", visible);
+            }
+            if (stationSelection != null && !visibleIds.contains(s(stationSelection, "id", "")))
+                stationSelection = null;
         }
         articleCache
                 .entrySet()
@@ -1095,6 +1223,114 @@ final class HubUpdatesView {
                 rows.set(i, summary.deepCopy());
     }
 
+    private void clearStationNotices() {
+        stationPack = stationPage = stationSelection = null;
+        stationRows = List.of();
+        stationRevision = stationNoticeState = "";
+    }
+
+    private void acceptStationNotices(JsonObject snapshot, JsonObject page) {
+        String defaultPack = s(snapshot, "selectedPackId", "");
+        JsonObject current =
+                objects(snapshot, "packs").stream()
+                        .filter(
+                                pack ->
+                                        b(pack, "current", false)
+                                                && defaultPack.equals(s(pack, "id", ""))
+                                                && b(pack, "visible", true))
+                        .findFirst()
+                        .orElse(null);
+        if (current == null || defaultPack.isBlank()) {
+            clearStationNotices();
+            return;
+        }
+        stationPack = current;
+        stationPage = page.deepCopy();
+        stationRevision = s(snapshot, "revision", "");
+        stationNoticeState =
+                s(
+                        snapshot,
+                        "_hubStationNoticeState",
+                        live && !snapshot.has("stationNotices") ? "unavailable" : "");
+        replaceStationRows(
+                snapshot.has("stationNotices")
+                        ? objects(snapshot, "stationNotices")
+                        : live ? List.of() : objects(page, "rows"));
+    }
+
+    private void replaceStationRows(List<JsonObject> feed) {
+        String currentPack = s(stationPack, "id", "");
+        stationRows =
+                feed.stream()
+                        .filter(
+                                row ->
+                                        currentPack.equals(s(row, "packId", ""))
+                                                && !s(row, "id", "").isBlank()
+                                                && stamp(row, "publishedAt") > 0
+                                                && s(row, "status", "published")
+                                                        .equals("published"))
+                        .sorted(
+                                Comparator.comparingLong(
+                                                (JsonObject row) -> stamp(row, "publishedAt"))
+                                        .reversed()
+                                        .thenComparing(row -> s(row, "id", "")))
+                        .limit(2)
+                        .toList();
+        if (stationSelection != null) {
+            String id = s(stationSelection, "id", "");
+            stationSelection =
+                    stationRows.stream()
+                            .filter(row -> id.equals(s(row, "id", "")))
+                            .findFirst()
+                            .orElse(null);
+        }
+    }
+
+    String stationNoticesEmptyText() {
+        if (!loaded) return status.isBlank() ? "正在读取更新日志…" : status;
+        return switch (stationNoticeState) {
+            case "loading" -> status.isBlank() ? "正在读取最近更新…" : "最近更新暂不可用";
+            case "unavailable" -> "最近更新暂不可用";
+            default -> "当前存档暂无公开更新";
+        };
+    }
+
+    List<JsonObject> stationNotices() {
+        if (!loaded || !enabled()) return List.of();
+        return stationRows.stream().map(JsonObject::deepCopy).toList();
+    }
+
+    void openStationNotice(JsonObject row) {
+        if (!loaded || !enabled() || stationPack == null || row == null) return;
+        String id = s(row, "id", "");
+        JsonObject notice =
+                stationRows.stream()
+                        .filter(candidate -> id.equals(s(candidate, "id", "")))
+                        .findFirst()
+                        .orElse(null);
+        if (notice == null) return;
+        String targetPack = s(stationPack, "id", "");
+        stationSelection = notice;
+        if (!packId.equals(targetPack) || !search.isBlank()) {
+            packId = targetPack;
+            selectedPack = stationPack;
+            search = "";
+            searchEditor.setText("");
+            listPage = 0;
+            listScroll = 0;
+            listLoadingPage = -1;
+            listResetRequested = false;
+            listRefreshActive = false;
+            listRefreshQueue.clear();
+            listRefreshData.clear();
+            animateNextList = true;
+            acceptList(stationPage);
+        }
+        select(id);
+        listAnchor = id;
+        listAnchorOffset = 0;
+    }
+
     private void acceptList(JsonObject value) {
         listPages.clear();
         listPages.put(0, objects(value, "rows"));
@@ -1105,7 +1341,7 @@ final class HubUpdatesView {
                         value,
                         "latestId",
                         listPages.get(0).isEmpty() ? "" : s(listPages.get(0).get(0), "id", ""));
-        flattenList(true);
+        flattenList(false);
     }
 
     String selectedId() {
@@ -1114,10 +1350,15 @@ final class HubUpdatesView {
 
     private JsonObject chosen() {
         if (entry != null && !displayedId.isEmpty()) return entry;
-        return rows.stream()
-                .filter(row -> selected.equals(s(row, "id", "")))
-                .findFirst()
-                .orElse(null);
+        JsonObject summary =
+                rows.stream()
+                        .filter(row -> selected.equals(s(row, "id", "")))
+                        .findFirst()
+                        .orElse(null);
+        if (summary != null) return summary;
+        return stationSelection != null && selected.equals(s(stationSelection, "id", ""))
+                ? stationSelection
+                : null;
     }
 
     void render(
@@ -1128,52 +1369,108 @@ final class HubUpdatesView {
             String pressedId,
             boolean reducedMotion,
             String player,
-            long now) {
+            long now,
+            float readerAlpha) {
         if (editorDraw != draw) {
             editorDraw = draw;
             searchEditor.invalidateLayout();
             composeEditor.invalidateLayout();
         }
         d = draw;
+        boolean press = draw.winter();
+        if (press && (gazette == null || gazette.dark() != draw.dark()))
+            gazette = new HubGazetteSheet(draw.dark());
+        if (!press) gazette = null;
+        // Web's winter page padding and the 30% index in the 1260 by 850 logical shell.
+        pageX = press ? 215 : 236;
+        pageWidth = press ? 1016 : 996;
+        pageTop = press ? 123.25f : 174;
+        pageHeight = press ? 671.75f : 630;
+        indexWidth = press ? pageWidth * .30f : 252;
+        readerX = pageX + indexWidth + (press ? 0 : 20);
+        readerWidth = pageX + pageWidth - readerX;
+        searchY = pageTop + (press ? PRESS_HEIGHT + 34.25f + 8 : 0);
+        listInset = press ? searchY + 36.5f - pageTop : 50;
+        boolean winterColors = winter() && d.literalColors(true);
         rails.clear();
         mx = mouseX;
         my = mouseY;
         focus = focused == null ? "" : focused;
         pressed = pressedId == null ? "" : pressedId;
         reduced = reducedMotion;
+        searchInput = composeInput = pickerBounds = null;
+        pickerRight = 1050;
+        menuX = 875;
+        menuLimit = press ? pageHeight * .5f : 550;
+        if (press) {
+            d.textSerif("更新日志", pageX + 1, 108, 25, paper().ink(), 700);
+            if (loaded && enabled()) {
+                String count = Integer.toString(total());
+                float right = pageX + pageWidth - 1, end = right - d.textWidth("篇", 12, 400) - 5;
+                text("篇", end + 5, 105, 12, gazette.muted(), 400);
+                float start = end - d.textWidthSerif(count, 16, 600);
+                d.textSerif(count, start, 105, 16, gazette.ink(), 600);
+                float labelX = start - 5 - d.textWidth("已刊", 12, 400);
+                text("已刊", labelX, 105, 12, gazette.muted(), 400);
+                pickerRight = labelX - 15;
+                menuX = pickerRight - 280;
+            }
+        }
         if (!loaded) {
-            empty(X, Y, 996, H, status.isBlank() ? "更新日志暂不可用" : status, "服务器未提供更新日志时，不显示示例内容。");
+            empty(
+                    pageX,
+                    pageTop,
+                    pageWidth,
+                    pageHeight,
+                    status.isBlank() ? "更新日志暂不可用" : status,
+                    "服务器未提供更新日志时，不显示示例内容。");
             button(
                     "updates-retry",
                     "重新读取",
-                    X + 424,
-                    Y + 350,
+                    pageX + (pageWidth - 148) / 2,
+                    pageTop + pageHeight / 2 + (press ? 48 : 35),
                     148,
                     34,
                     () -> perform("refresh", new JsonObject()),
                     true);
+            if (winter()) d.literalColors(winterColors);
             d = null;
             return;
         }
         if (!enabled()) {
-            empty(X, Y, 996, H, "更新日志暂未开放", "发布后的更新会出现在这里。");
+            empty(pageX, pageTop, pageWidth, pageHeight, "更新日志暂未开放", "发布后的更新会出现在这里。");
+            if (winter()) d.literalColors(winterColors);
             d = null;
             return;
         }
         packPicker();
+        if (press) {
+            d.boxShadow(pageX, pageTop + 2, pageWidth, pageHeight, 21, 0, 3, 10, -5, 0x4d182a24);
+            d.roundRect(pageX, pageTop + 2, pageWidth, pageHeight, 21, gazette.rule());
+            d.save();
+            d.clipRoundRect(pageX, pageTop, pageWidth, pageHeight, 21);
+            gazette.spread(d, pageX, pageTop, pageWidth, pageHeight, indexWidth, PRESS_HEIGHT);
+        }
         searchBox();
         renderList(now);
-        renderReader(player, now);
+        renderReader(player, now, readerAlpha);
+        if (press) d.restore();
         if (packMenu) packMenu();
+        if (winter()) d.literalColors(winterColors);
         d = null;
     }
 
     private void empty(float x, float y, float w, float h, String title, String hint) {
-        d.roundRect(x, y, w, h, 20, c(0x88ffffff, 0x09a3b4d8));
-        d.strokeRoundRect(x, y, w, h, 20, 1, c(0xffffffff, 0x20c3cfed));
-        icon("file-text", x + w / 2 - 16, y + h / 2 - 58, 32, 0xffa4aabe);
-        center(title, x + w / 2, y + h / 2, 16, 0xff697a98, 600);
-        center(hint, x + w / 2, y + h / 2 + 29, 12, 0xffa4aabe, 400);
+        if (winter()) {
+            if (w == pageWidth || !loaded || !enabled())
+                HubWinterSheet.panel(d, x, y, w, h, 20, gazette.stock(), 1);
+        } else {
+            d.roundRect(x, y, w, h, 20, c(0x88ffffff, 0x09a3b4d8));
+            d.strokeRoundRect(x, y, w, h, 20, 1, c(0xffffffff, 0x20c3cfed));
+        }
+        icon("file-text", x + w / 2 - 16, y + h / 2 - 58, 32, muted(0xffa4aabe));
+        center(fit(title, w - 32, 16, 600), x + w / 2, y + h / 2, 16, ink(0xff697a98), 600);
+        center(hint, x + w / 2, y + h / 2 + 29, 12, muted(0xffa4aabe), 400);
     }
 
     private String packLabel(JsonObject pack) {
@@ -1181,27 +1478,42 @@ final class HubUpdatesView {
     }
 
     private void packPicker() {
-        if (packTotal < 2) return;
+        if (packTotal < 2 && (!winter() || packs.isEmpty() && selectedPack == null)) return;
         JsonObject current =
                 selectedPack != null
                         ? selectedPack
                         : packs.isEmpty() ? new JsonObject() : packs.get(0);
-        String name = packLabel(current);
+        String name = winter() ? s(current, "name", packLabel(current)) : packLabel(current);
         float w = Math.min(250, d.textWidth(name, 12, 400) + 32);
-        text(fit(name, w - 26, 12, 400), 1055 - w, 105, 12, 0xff697695, 400);
-        icon("chevron-down", 1038, 94, 14, 0xff697695);
-        hit("updates-packs", "选择整合包", 1050 - w, 82, w, 32, () -> packMenu = !packMenu);
+        if (winter() && packTotal == 1) {
+            d.circle(pickerRight - w + 20, 100, 2.5f, gazette.red());
+            text(fit(name, w - 29, 12, 400), pickerRight - w + 29, 105, 12, gazette.muted(), 400);
+            return;
+        }
+        pickerBounds = new InputBox(pickerRight - w, 82, w, 32);
+        if (winter() && (packMenu || inside(pickerRight - w, 86, w, 27)))
+            d.roundRect(pickerRight - w, 86, w, 27, 6, paper().soft());
+        text(fit(name, w - 26, 12, 400), pickerRight - w + 5, 105, 12, ink(0xff697695), 400);
+        icon("chevron-down", pickerRight - 12, 94, 14, muted(0xff697695));
+        hit("updates-packs", "选择整合包", pickerRight - w, 82, w, 32, () -> packMenu = !packMenu);
     }
 
     private void packMenu() {
-        float x = 875,
+        float x = menuX,
                 y = 119,
                 w = 280,
-                viewport = Math.min(550, packs.size() * 55),
+                viewport = Math.min(menuLimit, packs.size() * 55),
                 height = viewport + 12;
-        d.boxShadow(x, y, w, height, 12, 0, 10, 40, 0, 0x2b727ba7);
-        d.roundRect(x, y, w, height, 12, c(0xeeffffff, 0xef2b344b));
-        d.strokeRoundRect(x, y, w, height, 12, 1, c(0xffffffff, 0x33c3d3f2));
+        if (winter()) d.boxShadow(x, y, w, height, 14, 0, 7, 22, -10, 0x45152720);
+        else d.boxShadow(x, y, w, height, 12, 0, 10, 40, 0, 0x2b727ba7);
+        d.roundRect(
+                x,
+                y,
+                w,
+                height,
+                winter() ? 14 : 12,
+                winter() ? paper().sheet() : c(0xeeffffff, 0xef2b344b));
+        d.strokeRoundRect(x, y, w, height, 12, 1, rule(c(0xffffffff, 0x33c3d3f2)));
         packScroll = clamp(packScroll, 0, Math.max(0, packs.size() * 55 - viewport));
         d.save();
         d.clipRoundRect(x + 6, y + 6, w - 12, viewport, 7);
@@ -1210,10 +1522,29 @@ final class HubUpdatesView {
             float yy = y + 6 + i * 55 - packScroll;
             if (yy + 53 < y + 6 || yy > y + 6 + viewport) continue;
             if (inside(x + 6, yy, w - 12, 53))
-                d.roundRect(x + 6, yy, w - 12, 53, 7, c(0xffedeafa, 0x1cc0a5ee));
-            text(fit(packLabel(p), w - 50, 12, 400), x + 16, yy + 20, 12, 0xff697695, 400);
-            text(b(p, "current", false) ? "当前整合包" : "历史整合包", x + 16, yy + 38, 10, 0xff8b95aa, 400);
-            if (packId.equals(s(p, "id", ""))) icon("check", x + w - 28, yy + 17, 14, 0xff8065b5);
+                d.roundRect(
+                        x + 6,
+                        yy,
+                        w - 12,
+                        53,
+                        7,
+                        winter() ? paper().cover() : c(0xffedeafa, 0x1cc0a5ee));
+            text(
+                    fit(winter() ? s(p, "name", packLabel(p)) : packLabel(p), w - 50, 12, 400),
+                    x + 16,
+                    yy + 20,
+                    12,
+                    ink(0xff697695),
+                    400);
+            text(
+                    b(p, "current", false) ? "当前整合包" : "历史整合包",
+                    x + 16,
+                    yy + 38,
+                    10,
+                    muted(0xff8b95aa),
+                    400);
+            if (packId.equals(s(p, "id", "")))
+                icon("check", x + w - 28, yy + 17, 14, accent(0xff8065b5));
             clippedHit(
                     "updates-pack-" + i,
                     "选择" + packLabel(p),
@@ -1236,23 +1567,29 @@ final class HubUpdatesView {
         }
         d.restore();
         scrollbar(3, x + w - 4, y + 7, 3, viewport - 2, packs.size() * 55, packScroll);
-        if (packLoadingPage >= 0) text("正在载入…", x + 12, y + viewport - 6, 10, 0xffa0a5ba, 400);
+        if (packLoadingPage >= 0)
+            text("正在载入…", x + 12, y + viewport - 6, 10, muted(0xffa0a5ba), 400);
     }
 
     private void searchBox() {
-        d.roundRect(X, Y, LW, 38, 11, c(0x6bffffff, 0x611b243a));
-        d.strokeRoundRect(
-                X,
-                Y,
-                LW,
-                38,
-                11,
-                1,
-                focus.equals("updates-search")
-                        ? c(0xffbaa9e9, 0x66c0a6f2)
-                        : c(0xc9ffffff, 0x2bb0c0e0));
-        icon("search", X + 12, Y + 11, 15, 0xff939db3);
-        searchInput = new InputBox(X + 36, Y + 9, LW - 47, 20);
+        boolean focused = focus.equals("updates-search");
+        if (winter()) {
+            int color = focused ? paper().pine() : gazette.rule();
+            d.line(pageX + 13, searchY + 35, pageX + indexWidth - 13, searchY + 35, 1, color);
+        } else {
+            d.roundRect(pageX, searchY, indexWidth, 38, 11, c(0x6bffffff, 0x611b243a));
+            d.strokeRoundRect(
+                    pageX,
+                    searchY,
+                    indexWidth,
+                    38,
+                    11,
+                    1,
+                    focused ? c(0xffbaa9e9, 0x66c0a6f2) : c(0xc9ffffff, 0x2bb0c0e0));
+        }
+        float inset = winter() ? 18 : 12;
+        icon("search", pageX + inset, searchY + 11, 15, muted(0xff939db3));
+        searchInput = new InputBox(pageX + inset + 24, searchY + 9, indexWidth - inset - 35, 20);
         searchEditor.setText(search);
         searchEditor.layout(
                 value -> editorWidth(value, 11), searchInput.width, searchInput.height, 20);
@@ -1260,11 +1597,18 @@ final class HubUpdatesView {
                 searchEditor,
                 searchInput,
                 11,
-                0xff596c8e,
+                ink(0xff596c8e),
                 "搜索标题或版本…",
-                0xff99a3b9,
+                muted(0xff99a3b9),
                 focus.equals("updates-search"));
-        hit("updates-search", "搜索更新日志", X, Y, LW, 38, () -> host.focus("updates-search"));
+        hit(
+                "updates-search",
+                "搜索更新日志",
+                pageX,
+                searchY,
+                indexWidth,
+                38,
+                () -> host.focus("updates-search"));
     }
 
     private float editorWidth(String text, float size) {
@@ -1291,7 +1635,7 @@ final class HubUpdatesView {
                         rect.width(),
                         rect.height(),
                         2,
-                        0x33765bd4);
+                        winter() ? paper().cover() : 0x33765bd4);
         if (editor.text().isEmpty())
             text(
                     placeholder,
@@ -1314,18 +1658,20 @@ final class HubUpdatesView {
                     box.x + caret.x(),
                     box.y + caret.y() + caret.height() - 2,
                     1,
-                    0xff765bd4);
+                    accent(0xff765bd4));
         }
         d.restore();
     }
 
     private float rowHeight(JsonObject row) {
+        if (winter())
+            return 56.6f + measure(s(row, "title", ""), indexWidth - 39, 15, 650, 21.75f, 2);
         return 15
                 + 15
                 + 9
-                + measure(s(row, "title", ""), LW - 38, 13, 650, 19.5f, 0)
+                + measure(s(row, "title", ""), indexWidth - 38, 13, 650, 19.5f, 0)
                 + 5
-                + Math.min(34, measure(s(row, "summary", ""), LW - 38, 10, 400, 17, 0))
+                + Math.min(34, measure(s(row, "summary", ""), indexWidth - 38, 10, 400, 17, 0))
                 + 12
                 + 13
                 + 15;
@@ -1360,13 +1706,13 @@ final class HubUpdatesView {
     }
 
     private void renderList(long now) {
-        float top = Y + 50, height = H - 50;
+        float top = pageTop + listInset, height = pageHeight - listInset;
         rowBoxes.clear();
-        float contentY = 2;
+        float contentY = winter() ? 0 : 2;
         for (JsonObject row : rows) {
             float rowHeight = rowHeight(row);
             rowBoxes.put(s(row, "id", ""), new Box(contentY, rowHeight));
-            contentY += rowHeight + 10;
+            contentY += rowHeight + (winter() ? 0 : 10);
         }
         listHeight = contentY;
         if (!listAnchor.isEmpty()) {
@@ -1376,16 +1722,27 @@ final class HubUpdatesView {
         }
         listScroll = clamp(listScroll, 0, Math.max(0, listHeight - height));
         d.save();
-        d.clipRoundRect(X, top, LW, height, 0);
+        d.clipRoundRect(pageX, top, indexWidth, height, 0);
         if (rows.isEmpty()) {
-            icon("file-text", X + 112, top + 160, 24, 0xffa4aabe);
-            center("没有匹配的记录", X + 126, top + 208, 12, 0xffa4aabe, 400);
+            icon(
+                    "file-text",
+                    pageX + indexWidth / 2 - 12,
+                    top + Math.min(208, height / 2) - 48,
+                    24,
+                    muted(0xffa4aabe));
+            center(
+                    "没有匹配的记录",
+                    pageX + indexWidth / 2,
+                    top + Math.min(208, height / 2),
+                    12,
+                    muted(0xffa4aabe),
+                    400);
             if (!search.isEmpty())
                 button(
                         "updates-clear",
                         "清除搜索",
-                        X + 66,
-                        top + 226,
+                        pageX + indexWidth / 2 - 60,
+                        top + Math.min(208, height / 2) + 18,
                         120,
                         30,
                         () -> {
@@ -1410,85 +1767,255 @@ final class HubUpdatesView {
                                             clamp(elapsed / 300, 0, 1), .22f, 1, .36f, 1),
                     motion = reduced ? 1 : listSpring(clamp(elapsed / 620, 0, 1)),
                     ry = yy + (1 - motion) * 28;
-            boolean on = id.equals(selected), hover = inside(X + 2, ry, LW - 8, rh);
+            boolean on = id.equals(selected), hover = inside(pageX + 2, ry, indexWidth - 8, rh);
             float brightness = pressed.equals("updates-row-" + id) ? .92f : hover && !on ? .97f : 1;
             if (ry + rh < top || ry > top + height) continue;
-            d.saveLayerAlpha(X, ry, LW, rh, enter);
-            d.saveBrightnessLayer(X - 4, ry - 4, LW + 8, rh + 10, brightness);
+            d.saveLayerAlpha(pageX, ry, indexWidth, rh, enter);
+            d.saveBrightnessLayer(pageX - 4, ry - 4, indexWidth + 8, rh + 10, brightness);
             d.save();
             d.canvas()
                     .concat(
-                            Matrix33.makeTranslate(X + LW / 2, ry + rh / 2)
+                            Matrix33.makeTranslate(pageX + indexWidth / 2, ry + rh / 2)
                                     .makeConcat(Matrix33.makeScale(.98f + .02f * motion))
-                                    .makeConcat(Matrix33.makeTranslate(-X - LW / 2, -ry - rh / 2)));
-            d.boxShadow(X + 2, ry, LW - 8, rh, 14, 0, 2, 8, 0, 0x087183aa);
-            d.linearGradientRoundRect(
-                    X + 2,
-                    ry,
-                    LW - 8,
-                    rh,
-                    14,
-                    135,
-                    new int[] {0xd6ffffff, 0xa6ffffff},
-                    new float[] {0, 1});
-            if (on)
+                                    .makeConcat(
+                                            Matrix33.makeTranslate(
+                                                    -pageX - indexWidth / 2, -ry - rh / 2)));
+            if (winter()) {
+                gazetteRow(row, ry, rh, on, hover);
+            } else {
+                d.boxShadow(pageX + 2, ry, indexWidth - 8, rh, 14, 0, 2, 8, 0, 0x087183aa);
                 d.linearGradientRoundRect(
-                        X + 2,
+                        pageX + 2,
                         ry,
-                        LW - 8,
+                        indexWidth - 8,
                         rh,
                         14,
-                        120,
-                        new int[] {c(0x77e7ecff, 0x258a9ed2), c(0x88ede5ff, 0x26b28cde)},
+                        135,
+                        new int[] {0xd6ffffff, 0xa6ffffff},
                         new float[] {0, 1});
-            d.strokeRoundRect(X + 2, ry, LW - 8, rh, 14, 1, c(0xffffffff, 0x22c2d1ef));
-            float x = X + 18, y = ry + 25;
-            text(fit(version(row), LW - 84, 10, 600), x, y, 10, on ? 0xff8064b6 : 0xff8985a7, 600);
-            right(time(row, "MM.dd"), X + LW - 22, y, 10, 0xff929db4, 400);
-            y += 24;
-            y = plain(s(row, "title", ""), x, y, LW - 38, 13, 650, 0xff4b5874, 19.5f, 0) + 5;
-            plain(s(row, "summary", ""), x, y, LW - 38, 10, 400, 0xff97a0b4, 17, 2);
-            int color = listCategoryColor(s(row, "category", "功能更新"));
-            d.circle(x + 2, ry + rh - 20, 2, listCategoryDot(s(row, "category", "功能更新")));
-            text(s(row, "category", "功能更新"), x + 10, ry + rh - 16, 10, color, 400);
-            if (b(row, "pinned", false)) {
-                icon("pin", X + LW - 59, ry + rh - 26, 11, 0xffa498ba);
-                text("置顶", X + LW - 45, ry + rh - 16, 10, 0xffa498ba, 400);
-            } else if (id.equals(latestId))
-                text("最新", X + LW - 45, ry + rh - 16, 10, 0xffa498ba, 400);
-            else icon("arrow-right", X + LW - 32, ry + rh - 27, 12, 0xffa498ba);
+                if (on)
+                    d.linearGradientRoundRect(
+                            pageX + 2,
+                            ry,
+                            indexWidth - 8,
+                            rh,
+                            14,
+                            120,
+                            new int[] {c(0x77e7ecff, 0x258a9ed2), c(0x88ede5ff, 0x26b28cde)},
+                            new float[] {0, 1});
+                d.strokeRoundRect(
+                        pageX + 2, ry, indexWidth - 8, rh, 14, 1, c(0xffffffff, 0x22c2d1ef));
+                float x = pageX + 18, y = ry + 25;
+                boolean unread = articleUnread(row);
+                text(
+                        fit(version(row), indexWidth - (unread ? 120 : 84), 10, 600),
+                        x,
+                        y,
+                        10,
+                        accent(on ? 0xff8064b6 : 0xff8985a7),
+                        600);
+                if (unread) {
+                    float badgeX =
+                            pageX + indexWidth - 22 - d.textWidth(time(row, "MM.dd"), 10, 400) - 36;
+                    d.roundRect(badgeX, y - 10, 30, 13, 4, accent(0xff238554));
+                    d.text("NEW", badgeX + 4, y, 9, winter() ? paper().sheet() : 0xffffffff, true);
+                }
+                right(time(row, "MM.dd"), pageX + indexWidth - 22, y, 10, muted(0xff929db4), 400);
+                y += 24;
+                y =
+                        plain(
+                                        s(row, "title", ""),
+                                        x,
+                                        y,
+                                        indexWidth - 38,
+                                        13,
+                                        650,
+                                        ink(0xff4b5874),
+                                        19.5f,
+                                        0)
+                                + 5;
+                plain(
+                        s(row, "summary", ""),
+                        x,
+                        y,
+                        indexWidth - 38,
+                        10,
+                        400,
+                        muted(0xff97a0b4),
+                        17,
+                        2);
+                int color = listCategoryColor(s(row, "category", "功能更新"));
+                d.circle(
+                        x + 2,
+                        ry + rh - 20,
+                        2,
+                        accent(listCategoryDot(s(row, "category", "功能更新"))));
+                text(s(row, "category", "功能更新"), x + 10, ry + rh - 16, 10, muted(color), 400);
+                if (b(row, "pinned", false)) {
+                    icon("pin", pageX + indexWidth - 59, ry + rh - 26, 11, muted(0xffa498ba));
+                    text("置顶", pageX + indexWidth - 45, ry + rh - 16, 10, muted(0xffa498ba), 400);
+                } else if (id.equals(latestId))
+                    text("最新", pageX + indexWidth - 45, ry + rh - 16, 10, muted(0xffa498ba), 400);
+                else
+                    icon(
+                            "arrow-right",
+                            pageX + indexWidth - 32,
+                            ry + rh - 27,
+                            12,
+                            muted(0xffa498ba));
+            }
             d.restore();
             d.restore();
             d.restore();
             clippedHit(
                     "updates-row-" + id,
                     s(row, "title", ""),
-                    X + 2,
+                    pageX + 2,
                     ry,
-                    LW - 8,
+                    indexWidth - 8,
                     rh,
                     top,
                     top + height,
                     () -> select(id));
         }
         Box target = rowBoxes.get(selected);
-        if (target != null) {
+        if (target != null && !winter()) {
             updateRing(target.y, target.height, now);
             float ry = top + ringY - listScroll;
-            d.boxShadow(X + 2, ry, LW - 8, ringHeight, 14, 0, 3, 13, 0, 0x158e76b9);
-            d.roundRect(X + 2, ry, LW - 8, ringHeight, 14, c(0x10c4b5ef, 0x0cc4b5ef));
-            d.strokeRoundRect(X + 2, ry, LW - 8, ringHeight, 14, 1, c(0x78ac98d4, 0x73c0a4ed));
+            d.boxShadow(pageX + 2, ry, indexWidth - 8, ringHeight, 14, 0, 3, 13, 0, 0x158e76b9);
+            d.roundRect(pageX + 2, ry, indexWidth - 8, ringHeight, 14, c(0x10c4b5ef, 0x0cc4b5ef));
+            d.strokeRoundRect(
+                    pageX + 2,
+                    ry,
+                    indexWidth - 8,
+                    ringHeight,
+                    14,
+                    1,
+                    accent(c(0x78ac98d4, 0x73c0a4ed)));
         } else ringReady = false;
         if (listLoadingPage >= 0)
             text(
                     "正在载入…",
-                    X + 18,
+                    pageX + 18,
                     Math.min(top + height - 8, top + listHeight - listScroll + 14),
                     10,
-                    0xffa0a5ba,
+                    muted(0xffa0a5ba),
                     400);
         d.restore();
-        scrollbar(1, X + LW - 3, top, 3, height, listHeight, listScroll);
+        scrollbar(1, pageX + indexWidth - 3, top, 3, height, listHeight, listScroll);
+    }
+
+    private void gazetteRow(JsonObject row, float y, float h, boolean selectedRow, boolean hover) {
+        float left = pageX + 9, width = indexWidth - 18, x = left + 11;
+        if (selectedRow || hover)
+            d.rect(
+                    left,
+                    y,
+                    width,
+                    h,
+                    selectedRow
+                            ? gazette.active()
+                            : HubWinterSheet.mix(gazette.index(), gazette.active(), .6f));
+        d.line(
+                left,
+                y + h - 1,
+                left + width,
+                y + h - 1,
+                1,
+                HubWinterSheet.alpha(gazette.rule(), .57f));
+        if (selectedRow) d.rect(left, y + 11, 3, h - 23, gazette.red());
+        String pack = s(row, "packVersion", ""), update = s(row, "updateVersion", "");
+        String edition = pack + (pack.isEmpty() || update.isEmpty() ? "" : "-") + update;
+        String date = time(row, "MM.dd");
+        d.textSerif(
+                fit(edition.isBlank() ? version(row) : edition, width - 75, 12, 600),
+                x,
+                y + 19,
+                12,
+                gazette.muted(),
+                600);
+        d.textSerif(
+                date,
+                left + width - 9 - d.textWidthSerif(date, 12, 400),
+                y + 19,
+                12,
+                gazette.muted(),
+                400);
+        plain(s(row, "title", ""), x, y + 45.5f, width - 21, 15, 650, gazette.ink(), 21.75f, 2);
+        float baseline = y + h - 13;
+        String category = s(row, "category", "功能更新");
+        text(category, x, baseline, 10, gazette.muted(), 400);
+        x += d.textWidth(category, 10, 400) + 8;
+        if (b(row, "pinned", false)) {
+            icon("pin", x, baseline - 9, 10, gazette.muted());
+            text("置顶", x + 13, baseline, 10, gazette.muted(), 400);
+            x += 41;
+        }
+        if (s(row, "id", "").equals(latestId)) text("最新", x, baseline, 10, gazette.muted(), 400);
+        if (articleUnread(row)) {
+            float end = left + width - 9;
+            right("未读", end, baseline, 10, gazette.red(), 400);
+            d.circle(end - d.textWidth("未读", 10, 400) - 6, baseline - 4, 2, gazette.red());
+        }
+    }
+
+    private float drawGazetteCover(JsonObject row, float x, float y, float width) {
+        gazette.mast(d, x, y, width, time(row, "yyyy.MM.dd HH:mm"));
+        String category = s(row, "category", "功能更新");
+        float bylineTop = y + 22.41f + 37 + 17;
+        float metaY = bylineTop + 12;
+        text(category, x, metaY, 11, gazette.red(), 650);
+        float versionX = x + d.textWidth(category, 11, 650) + 10;
+        d.line(versionX, metaY - 10, versionX, metaY + 2, 1, gazette.rule());
+        boolean pinned = b(row, "pinned", false);
+        float versionWidth = x + width - versionX - (pinned ? 65 : 10);
+        float belowVersion =
+                plain(
+                        version(row),
+                        versionX + 10,
+                        metaY,
+                        versionWidth,
+                        11,
+                        400,
+                        gazette.muted(),
+                        15.4f,
+                        0);
+        if (pinned) {
+            icon("pin", x + width - 36, metaY - 10, 11, gazette.muted());
+            right("置顶", x + width, metaY, 11, gazette.muted(), 400);
+        }
+        float titleTop = belowVersion - 12 + 7;
+        float titleSize = clamp(readerWidth * .054f, 25, 37);
+        float titleLine = titleSize * 1.3f, titleBaseline = titleSize * .99f;
+        float afterTitle =
+                plain(
+                                s(row, "title", ""),
+                                x,
+                                titleTop + titleBaseline,
+                                width,
+                                titleSize,
+                                750,
+                                gazette.ink(),
+                                titleLine,
+                                0)
+                        - titleBaseline;
+        String summary = s(row, "summary", "");
+        float bottom = afterTitle;
+        if (!summary.isBlank())
+            bottom =
+                    plain(
+                                    summary,
+                                    x,
+                                    afterTitle + 9 + 16,
+                                    width,
+                                    13,
+                                    400,
+                                    gazette.muted(),
+                                    22.1f,
+                                    0)
+                            - 16;
+        d.line(x, bottom + 19.5f, x + width, bottom + 19.5f, 1, gazette.rule());
+        return bottom + 20 + 4;
     }
 
     private record Cover(
@@ -1505,8 +2032,12 @@ final class HubUpdatesView {
             float metaHeight,
             float height) {}
 
+    private float coverWidth() {
+        return readerWidth - 56;
+    }
+
     private Cover cover(JsonObject current) {
-        float w = RW - 56, kickerWidth = w - 50;
+        float w = coverWidth(), kickerWidth = w - 50;
         List<Line> versionLines =
                 wrap(List.of(new Run(version(current), 650)), kickerWidth - 18, 11, 650);
         float versionWidth = 0;
@@ -1558,18 +2089,24 @@ final class HubUpdatesView {
                 metaTop + metaHeight + 22);
     }
 
-    private void renderReader(String player, long now) {
+    private void renderReader(String player, long now, float readerAlpha) {
         advanceArticle(now);
         JsonObject current = chosen();
         composeInput = null;
         if (current == null) {
-            empty(RX, Y, RW, H, "这里还没有更新记录", search.isEmpty() ? "发布后的更新会出现在这里。" : "换个关键词试试。");
+            empty(
+                    readerX,
+                    pageTop,
+                    readerWidth,
+                    pageHeight,
+                    "这里还没有更新记录",
+                    search.isEmpty() ? "发布后的更新会出现在这里。" : "换个关键词试试。");
             if (!status.isBlank())
                 button(
                         "updates-empty-retry",
                         "重新读取",
-                        RX + RW / 2 - 55,
-                        Y + H / 2 + 62,
+                        readerX + readerWidth / 2 - 55,
+                        pageTop + pageHeight / 2 + 62,
                         110,
                         32,
                         () -> perform("refresh", new JsonObject()),
@@ -1577,12 +2114,14 @@ final class HubUpdatesView {
             return;
         }
         boolean actionable = entry != null && displayedId.equals(selected) && !exitingArticle;
-        d.boxShadow(RX, Y, RW, H, 20, 0, 6, 24, 0, 0x0b65729b);
+        if (!winter())
+            d.boxShadow(readerX, pageTop, readerWidth, pageHeight, 20, 0, 6, 24, 0, 0x0b65729b);
         d.save();
-        d.clipRoundRect(RX, Y, RW, H, 20);
-        d.roundRect(RX, Y, RW, H, 20, c(0xffffffff, 0xff293349));
+        d.clipRoundRect(readerX, pageTop, readerWidth, pageHeight, winter() ? 0 : 20);
+        if (!winter())
+            d.roundRect(readerX, pageTop, readerWidth, pageHeight, 20, c(0xffffffff, 0xff293349));
         readerDrawing = true;
-        readerScroll = clamp(readerScroll, 0, Math.max(0, readerHeight - H));
+        readerScroll = clamp(readerScroll, 0, Math.max(0, readerHeight - pageHeight));
         float animation = 1, move = 0;
         if (!reduced) {
             if (exitingArticle) {
@@ -1598,180 +2137,263 @@ final class HubUpdatesView {
                 move = 10 * (1 - p);
             }
         }
-        float y = Y - readerScroll + move;
-        d.saveLayerAlpha(RX, Y, RW, H, animation);
-        Cover cover = cover(current);
-        float x = RX + 28, w = RW - 56;
-        d.linearGradientRoundRect(
-                RX,
-                y,
-                RW,
-                cover.height,
-                0,
-                122,
-                new int[] {c(0xfff4f8ff, 0xff30405c), c(0xfff8f6ff, 0xff383750)},
-                new float[] {0, 1});
-        d.radialGradientRoundRect(
-                RX,
-                y,
-                RW,
-                cover.height,
-                0,
-                RX + RW * .94f,
-                y,
-                RW * .65f,
-                cover.height,
-                new int[] {c(0x80dcd6ff, 0x299780c7), c(0x00dcd6ff, 0x009780c7)},
-                new float[] {0, 1});
-        d.roundRect(x, y + 26, cover.pillWidth, cover.pillHeight, 6, c(0xaeffffff, 0x1ac4ace2));
-        d.strokeRoundRect(
-                x, y + 26, cover.pillWidth, cover.pillHeight, 6, 1, c(0xffffffff, 0x2bccbbeb));
-        plain(
-                version(current),
-                x + 9,
-                y + 26 + 13,
-                cover.pillWidth - 18,
-                11,
-                650,
-                0xff7258b4,
-                19.8f,
-                0);
-        float categoryX = cover.categoryOnNext ? x : x + cover.pillWidth + 10,
-                categoryBaseline = y + 26 + cover.categoryY + 14;
-        text(s(current, "category", "功能更新"), categoryX, categoryBaseline, 11, 0xff7c719f, 400);
-        if (b(current, "pinned", false)) {
-            float pinX = categoryX + d.textWidth(s(current, "category", "功能更新"), 11, 400) + 10;
-            icon("pin", pinX, categoryBaseline - 11, 12, 0xff7c719f);
-            text("置顶", pinX + 15, categoryBaseline, 11, 0xff7c719f, 400);
-        }
-        categoryArt(s(current, "category", "功能更新"), RX + RW - 75, y + 33);
-        plain(
-                s(current, "title", ""),
-                x,
-                y + cover.titleTop + 23,
-                w - 36,
-                23,
-                700,
-                c(0xff26344f, 0xffe0e8f7),
-                33.35f,
-                0);
-        if (cover.summaryHeight > 0)
-            plain(
-                    s(current, "summary", ""),
+        float y = pageTop - readerScroll + move;
+        d.saveLayerAlpha(readerX, pageTop, readerWidth, pageHeight, animation);
+        float gutter = winter() ? clamp(readerWidth * .057f, 18, 49) : 28;
+        float x = readerX + gutter, w = readerWidth - 2 * gutter;
+        if (winter()) {
+            y = drawGazetteCover(current, x, y, w);
+        } else {
+            Cover cover = cover(current);
+            float printWidth = coverWidth();
+            d.linearGradientRoundRect(
+                    readerX,
+                    y,
+                    readerWidth,
+                    cover.height,
+                    0,
+                    122,
+                    new int[] {c(0xfff4f8ff, 0xff30405c), c(0xfff8f6ff, 0xff383750)},
+                    new float[] {0, 1});
+            d.radialGradientRoundRect(
+                    readerX,
+                    y,
+                    readerWidth,
+                    cover.height,
+                    0,
+                    readerX + readerWidth * .94f,
+                    y,
+                    readerWidth * .65f,
+                    cover.height,
+                    new int[] {c(0x80dcd6ff, 0x299780c7), c(0x00dcd6ff, 0x009780c7)},
+                    new float[] {0, 1});
+            d.roundRect(x, y + 26, cover.pillWidth, cover.pillHeight, 6, c(0xaeffffff, 0x1ac4ace2));
+            d.strokeRoundRect(
                     x,
-                    y + cover.summaryTop + 12,
-                    w * .92f,
-                    12,
-                    400,
-                    0xff73819a,
-                    21.6f,
+                    y + 26,
+                    cover.pillWidth,
+                    cover.pillHeight,
+                    6,
+                    1,
+                    rule(c(0xffffffff, 0x2bccbbeb)));
+            plain(
+                    version(current),
+                    x + 9,
+                    y + 26 + 13,
+                    cover.pillWidth - 18,
+                    11,
+                    650,
+                    accent(0xff7258b4),
+                    19.8f,
                     0);
-        float metaY = y + cover.metaTop + 10;
-        icon("calendar-days", x, metaY - 11, 13, 0xff8791a6);
-        text(time(current, "yyyy.MM.dd HH:mm"), x + 19, metaY, 10, 0xff8791a6, 400);
-        float tx = x + 19 + d.textWidth(time(current, "yyyy.MM.dd HH:mm"), 10, 400) + 16;
-        d.line(tx, metaY - 8, tx, metaY + 1, 1, 0xffcfd5e6);
-        plain(
-                s(current, "packName", "") + s(current, "packVersion", ""),
-                tx + 16,
-                metaY,
-                w - (tx - x) - 16,
-                10,
-                400,
-                0xff8791a6,
-                18,
-                0);
-        d.line(RX, y + cover.height, RX + RW, y + cover.height, 1, 0xffe8ebf5);
-        y += cover.height + 7;
+            float categoryX = cover.categoryOnNext ? x : x + cover.pillWidth + 10,
+                    categoryBaseline = y + 26 + cover.categoryY + 14;
+            text(
+                    s(current, "category", "功能更新"),
+                    categoryX,
+                    categoryBaseline,
+                    11,
+                    muted(0xff7c719f),
+                    400);
+            if (b(current, "pinned", false)) {
+                float pinX = categoryX + d.textWidth(s(current, "category", "功能更新"), 11, 400) + 10;
+                icon("pin", pinX, categoryBaseline - 11, 12, muted(0xff7c719f));
+                text("置顶", pinX + 15, categoryBaseline, 11, muted(0xff7c719f), 400);
+            }
+            categoryArt(s(current, "category", "功能更新"), readerX + readerWidth - 75, y + 33);
+            plain(
+                    s(current, "title", ""),
+                    x,
+                    y + cover.titleTop + 23,
+                    printWidth - 36,
+                    23,
+                    700,
+                    ink(c(0xff26344f, 0xffe0e8f7)),
+                    33.35f,
+                    0);
+            if (cover.summaryHeight > 0)
+                plain(
+                        s(current, "summary", ""),
+                        x,
+                        y + cover.summaryTop + 12,
+                        printWidth * .92f,
+                        12,
+                        400,
+                        muted(0xff73819a),
+                        21.6f,
+                        0);
+            float metaY = y + cover.metaTop + 10;
+            icon("calendar-days", x, metaY - 11, 13, muted(0xff8791a6));
+            text(time(current, "yyyy.MM.dd HH:mm"), x + 19, metaY, 10, muted(0xff8791a6), 400);
+            float tx = x + 19 + d.textWidth(time(current, "yyyy.MM.dd HH:mm"), 10, 400) + 16;
+            d.line(tx, metaY - 8, tx, metaY + 1, 1, rule(0xffcfd5e6));
+            plain(
+                    s(current, "packName", "") + s(current, "packVersion", ""),
+                    tx + 16,
+                    metaY,
+                    printWidth - (tx - x) - 16,
+                    10,
+                    400,
+                    muted(0xff8791a6),
+                    18,
+                    0);
+            d.line(
+                    readerX,
+                    y + cover.height,
+                    readerX + readerWidth,
+                    y + cover.height,
+                    1,
+                    rule(0xffe8ebf5));
+            y += cover.height + 7;
+        }
+        float bodyTop = y;
         if (entry == null) {
-            text(status.isBlank() ? "正在读取正文…" : status, x, y + 30, 12, 0xff8994aa, 400);
+            text(status.isBlank() ? "正在读取正文…" : status, x, y + 30, 12, muted(0xff8994aa), 400);
             y += 100;
-        } else
+        } else {
+            boolean afterHeading = false, afterList = false;
             for (Block block : bodyBlocks) {
                 boolean heading = block.kind.equals("heading"),
                         bullet = block.kind.equals("bullet"),
                         continuation = block.kind.equals("listParagraph");
-                float size = heading ? 13 : 12,
-                        line = heading ? 19.5f : bullet || continuation ? 22.8f : 23.4f;
-                y += heading ? 22 : bullet ? 4 : continuation ? 0 : 16;
-                float indent = bullet || continuation ? 18 + block.depth * 14 : 0;
+                float size = winter() ? heading ? 17 : 13 : heading ? 13 : 12,
+                        line =
+                                winter()
+                                        ? 24.7f
+                                        : heading ? 19.5f : bullet || continuation ? 22.8f : 23.4f;
+                // Adjacent CSS block margins collapse. The first list item shares the list top.
+                float blockGap = heading ? 22 : bullet ? 4 : continuation ? 0 : 16;
+                if (winter())
+                    blockGap =
+                            heading
+                                    ? 19
+                                    : bullet
+                                            ? afterList ? 4 : 8
+                                            : continuation ? 0 : afterHeading ? 7 : 16;
+                y += blockGap;
+                afterHeading = heading;
+                afterList = bullet || continuation;
+                float indent = bullet || continuation ? (winter() ? 16 : 18) + block.depth * 14 : 0;
                 if (heading) {
-                    d.linearGradientRoundRect(
-                            x,
-                            y + 2,
-                            3,
-                            12,
-                            2,
-                            180,
-                            new int[] {0xff6f9de1, 0xffa889d9},
-                            new float[] {0, 1});
-                    indent = 11;
+                    if (winter()) {
+                        d.save();
+                        d.translate(x + 4, y + 9);
+                        d.canvas().rotate(45);
+                        d.rect(-3, -3, 6, 6, gazette.red());
+                        d.restore();
+                    } else
+                        d.linearGradientRoundRect(
+                                x,
+                                y + 2,
+                                3,
+                                12,
+                                2,
+                                180,
+                                new int[] {0xff6f9de1, 0xffa889d9},
+                                new float[] {0, 1});
+                    indent = winter() ? 15 : 11;
                 }
-                if (bullet) d.circle(x + indent - 8, y + 8, 1.8f, 0xffa295ca);
+                if (bullet) d.circle(x + indent - 8, y + 8, 1.8f, accent(0xffa295ca));
+                float baselineShift = winter() ? (line - size) / 2 : 0;
                 y =
                         rich(
-                                block.runs,
-                                x + indent,
-                                y + size,
-                                w - indent,
-                                size,
-                                heading ? 650 : 400,
-                                heading ? 0xff384466 : 0xff66748e,
-                                line);
+                                        block.runs,
+                                        x + indent,
+                                        y + size + baselineShift,
+                                        w - indent,
+                                        size,
+                                        heading ? 650 : 400,
+                                        heading
+                                                ? ink(0xff384466)
+                                                : winter() ? gazette.body() : muted(0xff66748e),
+                                        line)
+                                - baselineShift;
             }
-        y += 24;
+        }
+        boolean bodyVisible = bodyTop < pageTop + pageHeight && y > pageTop && y > bodyTop;
+        y += winter() ? 21 : 24;
         float reactionY = y;
-        d.line(RX, y, RX + RW, y, 1, 0xffeceef7);
-        y += 19;
-        text("这次更新怎么样？", x, y + 12, 12, 0xff5b6881, 550);
-        text("一个赞，就是一份支持。", x, y + 30, 10, 0xffa0a7b8, 400);
+        d.line(readerX, y, readerX + readerWidth, y, 1, rule(0xffeceef7));
+        y += winter() ? 22.3f : 19;
+        text("这次更新怎么样？", x, y + 12, 12, ink(0xff5b6881), 550);
+        text("一个赞，就是一份支持。", x, y + 30, 10, muted(0xffa0a7b8), 400);
         boolean liked = b(current, "liked", false),
                 likesEnabled = b(settings, "likesEnabled", true);
-        float bw = 118, bx = RX + RW - 28 - bw;
+        float bw = winter() ? 108 : 118, bx = x + w - bw;
+        float buttonHeight = winter() ? 37.8f : 36;
         float
                 hover =
                         likeHover.sample(
-                                likesEnabled && inside(bx, y, bw, 36) ? 1 : 0,
+                                likesEnabled && inside(bx, y, bw, buttonHeight) ? 1 : 0,
                                 now,
                                 180_000_000L,
                                 reduced),
                 press =
                         likePress.sample(
                                 pressed.equals("updates-like") ? 1 : 0, now, 180_000_000L, reduced);
-        d.saveLayerAlpha(bx, y, bw, 36, likesEnabled ? 1 : .45f);
+        d.saveLayerAlpha(bx, y, bw, buttonHeight, likesEnabled ? 1 : .45f);
         d.save();
         d.canvas()
                 .concat(
                         Matrix33.makeTranslate(bx + bw / 2, y + 18 - hover)
                                 .makeConcat(Matrix33.makeScale(1 - .04f * press))
                                 .makeConcat(Matrix33.makeTranslate(-bx - bw / 2, -y - 18)));
-        d.linearGradientRoundRect(
-                bx,
-                y,
-                bw,
-                36,
-                10,
-                110,
-                new int[] {
-                    c(
-                            liked ? 0xfff0ecfc : mix(0xfffaf9ff, 0xfff0eafb, hover),
-                            liked ? 0x29aa83dd : mix(0x17b59bd7, 0x29c1a4e8, hover)),
-                    c(
-                            liked ? 0xfff7eefb : mix(0xfffaf9ff, 0xfff0eafb, hover),
-                            liked ? 0x1fc48acb : mix(0x17b59bd7, 0x29c1a4e8, hover))
-                },
-                new float[] {0, 1});
-        d.strokeRoundRect(
-                bx,
-                y,
-                bw,
-                36,
-                10,
+        if (winter()) {
+            d.roundRect(
+                    bx,
+                    y,
+                    bw,
+                    buttonHeight,
+                    10,
+                    liked ? paper().cover() : mix(paper().sheet(), paper().cover(), hover));
+            d.strokeRoundRect(
+                    bx, y, bw, buttonHeight, 10, 1, liked ? paper().pine() : paper().ruling());
+        } else {
+            d.linearGradientRoundRect(
+                    bx,
+                    y,
+                    bw,
+                    buttonHeight,
+                    10,
+                    110,
+                    new int[] {
+                        c(
+                                liked ? 0xfff0ecfc : mix(0xfffaf9ff, 0xfff0eafb, hover),
+                                liked ? 0x29aa83dd : mix(0x17b59bd7, 0x29c1a4e8, hover)),
+                        c(
+                                liked ? 0xfff7eefb : mix(0xfffaf9ff, 0xfff0eafb, hover),
+                                liked ? 0x1fc48acb : mix(0x17b59bd7, 0x29c1a4e8, hover))
+                    },
+                    new float[] {0, 1});
+            d.strokeRoundRect(
+                    bx,
+                    y,
+                    bw,
+                    buttonHeight,
+                    10,
+                    1,
+                    liked ? c(0xffe2d7f3, 0x40d2a9ed) : c(0xffe8e3f5, 0x29c2a8e1));
+        }
+        icon(
+                liked ? "heart-filled" : "heart",
+                bx + 12,
+                y + 9,
+                17,
+                liked ? accent(0xff9c76c3) : ink(0xff9b8caf));
+        text(
+                liked ? "已点赞" : "点赞",
+                bx + 36,
+                y + 23,
+                11,
+                liked ? accent(0xff9c76c3) : ink(0xff9b8caf),
+                400);
+        d.line(
+                bx + (winter() ? 74 : 80),
+                y + 11,
+                bx + (winter() ? 74 : 80),
+                y + 25,
                 1,
-                liked ? c(0xffe2d7f3, 0x40d2a9ed) : c(0xffe8e3f5, 0x29c2a8e1));
-        icon(liked ? "heart-filled" : "heart", bx + 12, y + 9, 17, liked ? 0xff9c76c3 : 0xff9b8caf);
-        text(liked ? "已点赞" : "点赞", bx + 36, y + 23, 11, liked ? 0xff9c76c3 : 0xff9b8caf, 400);
-        d.line(bx + 80, y + 11, bx + 80, y + 25, 1, 0xffd9cfe8);
+                rule(0xffd9cfe8));
         float countProgress =
                 reduced
                         ? 1
@@ -1779,10 +2401,10 @@ final class HubUpdatesView {
         d.saveLayerAlpha(bx + 82, y + 5, 34, 29, .4f + .6f * countProgress);
         text(
                 fit(Integer.toString(n(current, "likesCount", 0)), 26, 11, 400),
-                bx + 87,
+                bx + (winter() ? 83 : 87),
                 y + 23 + 3 * (1 - countProgress),
                 11,
-                0xff9b8caf,
+                liked ? accent(0xff9b8caf) : ink(0xff9b8caf),
                 400);
         d.restore();
         d.restore();
@@ -1794,11 +2416,11 @@ final class HubUpdatesView {
                 bx,
                 y,
                 bw,
-                36,
-                Y,
-                Y + H,
+                buttonHeight,
+                pageTop,
+                pageTop + pageHeight,
                 () -> {
-                    if (!liked && !reduced) spawnSpark(bx, buttonY, bw, 36);
+                    if (!liked && !reduced) spawnSpark(bx, buttonY, bw, buttonHeight);
                     JsonObject payload = new JsonObject();
                     payload.addProperty("id", displayedId);
                     payload.addProperty("liked", !liked);
@@ -1806,24 +2428,32 @@ final class HubUpdatesView {
                 },
                 likesEnabled && !pending && actionable);
         drawSparks(now);
-        y = reactionY + 76;
-        d.linearGradientRoundRect(
-                RX,
-                y,
-                RW,
-                Math.max(H, readerHeight),
-                0,
-                180,
-                new int[] {c(0xfff9faff, 0xff252f45), c(0xffffffff, 0xff293349)},
-                new float[] {0, .25f});
-        d.line(RX, y, RX + RW, y, 1, 0xffedeef6);
+        y = reactionY + (winter() ? 83.6f : 76);
+        if (winter())
+            d.rect(
+                    readerX,
+                    y,
+                    readerWidth,
+                    Math.max(pageHeight, readerHeight),
+                    mix(gazette.stock(), gazette.index(), .24f));
+        else
+            d.linearGradientRoundRect(
+                    readerX,
+                    y,
+                    readerWidth,
+                    Math.max(pageHeight, readerHeight),
+                    0,
+                    180,
+                    new int[] {c(0xfff9faff, 0xff252f45), c(0xffffffff, 0xff293349)},
+                    new float[] {0, .25f});
+        d.line(readerX, y, readerX + readerWidth, y, 1, rule(0xffedeef6));
         y += 24;
-        icon("message-circle", x, y, 16, 0xff66728d);
-        text("我的留言", x + 23, y + 13, 13, 0xff66728d, 600);
-        text(Integer.toString(commentsTotal), x + 86, y + 13, 10, 0xffa0a5ba, 400);
+        icon("message-circle", x, y, 16, ink(0xff66728d));
+        text("我的留言", x + 23, y + 13, 13, ink(0xff66728d), 600);
+        text(Integer.toString(commentsTotal), x + 86, y + 13, 10, muted(0xffa0a5ba), 400);
         float privacyWidth = d.textWidth("仅你与管理员可见", 10, 400);
-        icon("lock-keyhole", RX + RW - 28 - privacyWidth - 16, y + 2, 12, 0xff9c9bb2);
-        right("仅你与管理员可见", RX + RW - 28, y + 13, 10, 0xff9c9bb2, 400);
+        icon("lock-keyhole", x + w - privacyWidth - 16, y + 2, 12, muted(0xff9c9bb2));
+        right("仅你与管理员可见", x + w, y + 13, 10, muted(0xff9c9bb2), 400);
         y += 30;
         if (b(settings, "commentsEnabled", true)) {
             float inputW = w - 172;
@@ -1831,7 +2461,7 @@ final class HubUpdatesView {
             composeEditor.setText(draft());
             composeEditor.layout(value -> editorWidth(value, 12), inputW - 10, 160, 22);
             float ih = Math.min(168, Math.max(30, composeEditor.contentHeight() + 8)), ch = ih + 14;
-            d.roundRect(x, y, w, ch, 12, c(0xffffffff, 0x991b263b));
+            d.roundRect(x, y, w, ch, 12, winter() ? gazette.stock() : c(0xffffffff, 0x991b263b));
             d.strokeRoundRect(
                     x,
                     y,
@@ -1839,9 +2469,9 @@ final class HubUpdatesView {
                     ch,
                     12,
                     1,
-                    focus.equals("updates-compose")
+                    !winter() && focus.equals("updates-compose")
                             ? c(0xffbca8df, 0x66c5a8ed)
-                            : c(0xffe1e5f1, 0x30adc1e5));
+                            : rule(c(0xffe1e5f1, 0x30adc1e5)));
             composeInput = new InputBox(x + 13, y + 11, inputW - 10, ih - 8);
             composeEditor.layout(
                     value -> editorWidth(value, 12), composeInput.width, composeInput.height, 22);
@@ -1849,9 +2479,9 @@ final class HubUpdatesView {
                     composeEditor,
                     composeInput,
                     12,
-                    0xff56627d,
+                    ink(0xff56627d),
                     "写下想法，或遇到的问题…",
-                    0xffa0a9bc,
+                    muted(0xffa0a9bc),
                     focus.equals("updates-compose"));
             clippedHit(
                     "updates-compose",
@@ -1860,8 +2490,8 @@ final class HubUpdatesView {
                     y + 7,
                     inputW,
                     ih,
-                    Y,
-                    Y + H,
+                    pageTop,
+                    pageTop + pageHeight,
                     () -> host.focus("updates-compose"),
                     actionable);
             text(
@@ -1869,7 +2499,7 @@ final class HubUpdatesView {
                     x + w - 158,
                     y + ch - 17,
                     9,
-                    0xffacb3c3,
+                    muted(0xffacb3c3),
                     400);
             buttonClipped(
                     "updates-send",
@@ -1881,8 +2511,11 @@ final class HubUpdatesView {
                     () -> submit(),
                     !pending && !draft().isBlank() && actionable);
             y += ch + 2;
-        } else y = plain("管理员已暂停接收新留言，已有的对话仍然保留。", x, y + 14, w, 11, 400, 0xff979cb0, 22, 0) + 4;
-        positionThreads(y + readerScroll - Y, w);
+        } else
+            y =
+                    plain("管理员已暂停接收新留言，已有的对话仍然保留。", x, y + 14, w, 11, 400, muted(0xff979cb0), 22, 0)
+                            + 4;
+        positionThreads(y + readerScroll - pageTop, w);
         if (!readerAnchor.isEmpty()) {
             Box anchor =
                     readerAnchor.startsWith("reply:")
@@ -1897,13 +2530,13 @@ final class HubUpdatesView {
         }
         Article article = articleCache.get(displayedId);
         if (article != null && !article.pages.isEmpty() && article.pages.firstKey() > 0) {
-            text("向上滚动载入较新的留言", x, y + 17, 10, 0xffa7adbf, 400);
+            text("向上滚动载入较新的留言", x, y + 17, 10, muted(0xffa7adbf), 400);
             y += 24;
         }
         for (JsonObject c : comments) {
             String cid = s(c, "id", "");
             y += 20;
-            if (y + 25 > Y && y < Y + H) {
+            if (y + 25 > pageTop && y < pageTop + pageHeight) {
                 d.roundRect(x, y, 25, 25, 5, 0xffe9edf6);
                 d.save();
                 d.clipRoundRect(x, y, 25, 25, 5);
@@ -1911,24 +2544,35 @@ final class HubUpdatesView {
                 d.restore();
                 d.strokeRoundRect(x, y, 25, 25, 5, 1, 0x22a9b2cd);
             }
-            text(player, x + 32, y + 16, 11, 0xff67708a, 600);
-            text("我", x + 38 + d.textWidth(player, 11, 600), y + 16, 9, 0xffa7adbf, 400);
-            right(time(c, "yyyy.MM.dd HH:mm"), RX + RW - 55, y + 15, 9, 0xffa7adc0, 400);
-            boolean deleteHover = inside(RX + RW - 46, y, 24, 24);
-            icon("trash-2", RX + RW - 41, y + 5, 13, deleteHover ? 0xffb86f81 : 0xffb1b4c4);
+            text(player, x + 32, y + 16, 11, ink(0xff67708a), 600);
+            text("我", x + 38 + d.textWidth(player, 11, 600), y + 16, 9, muted(0xffa7adbf), 400);
+            right(
+                    time(c, "yyyy.MM.dd HH:mm"),
+                    readerX + readerWidth - 55,
+                    y + 15,
+                    9,
+                    muted(0xffa7adc0),
+                    400);
+            boolean deleteHover = inside(readerX + readerWidth - 46, y, 24, 24);
+            icon(
+                    "trash-2",
+                    readerX + readerWidth - 41,
+                    y + 5,
+                    13,
+                    deleteHover ? warning(0xffb86f81) : muted(0xffb1b4c4));
             clippedHit(
                     "updates-delete-" + cid,
                     "删除我的留言",
-                    RX + RW - 46,
+                    readerX + readerWidth - 46,
                     y,
                     24,
                     24,
-                    Y,
-                    Y + H,
+                    pageTop,
+                    pageTop + pageHeight,
                     () -> deleting = cid,
                     !pending && actionable);
             y += 38;
-            y = plain(s(c, "text", ""), x, y, w, 12, 400, 0xff77809a, 22.2f, 0);
+            y = plain(s(c, "text", ""), x, y, w, 12, 400, ink(0xff77809a), 22.2f, 0);
             List<JsonObject> replies = objects(c, "replies");
             int replyCount = n(c, "replyCount", replies.size()),
                     oldestPage = n(c, "repliesPage", 0),
@@ -1939,34 +2583,63 @@ final class HubUpdatesView {
                         x + 26,
                         y + 20,
                         10,
-                        0xffa7adbf,
+                        muted(0xffa7adbf),
                         400);
                 y += 27;
             }
             for (JsonObject reply : replies) {
                 y += 12;
                 float rh = measure(s(reply, "text", ""), w - 39, 11, 400, 20.35f, 0) + 38;
-                if (y + rh > Y && y < Y + H) {
-                    d.roundRect(x + 11, y, w - 11, rh, 9, c(0xfff6f5fb, 0x10b9a0e3));
-                    d.rect(x + 11, y, 2, rh, c(0xffd9d1ec, 0x4ab89ae4));
+                if (y + rh > pageTop && y < pageTop + pageHeight) {
+                    d.roundRect(
+                            x + 11,
+                            y,
+                            w - 11,
+                            rh,
+                            9,
+                            winter() ? paper().soft() : c(0xfff6f5fb, 0x10b9a0e3));
+                    d.rect(x + 11, y, 2, rh, rule(c(0xffd9d1ec, 0x4ab89ae4)));
                 }
-                text("管理员回复", x + 26, y + 20, 10, 0xff9282b0, 400);
-                right(time(reply, "yyyy.MM.dd HH:mm"), RX + RW - 41, y + 20, 9, 0xffaca9bd, 400);
-                plain(s(reply, "text", ""), x + 26, y + 40, w - 39, 11, 400, 0xff7a7490, 20.35f, 0);
+                text("管理员回复", x + 26, y + 20, 10, muted(0xff9282b0), 400);
+                right(
+                        time(reply, "yyyy.MM.dd HH:mm"),
+                        readerX + readerWidth - 41,
+                        y + 20,
+                        9,
+                        muted(0xffaca9bd),
+                        400);
+                plain(
+                        s(reply, "text", ""),
+                        x + 26,
+                        y + 40,
+                        w - 39,
+                        11,
+                        400,
+                        ink(0xff7a7490),
+                        20.35f,
+                        0);
                 y += rh;
             }
             if (newestPage > 0) {
-                text("向下滚动载入较新回复", x + 26, y + 20, 10, 0xffa7adbf, 400);
+                text("向下滚动载入较新回复", x + 26, y + 20, 10, muted(0xffa7adbf), 400);
                 y += 27;
             }
             if (replies.isEmpty()) {
-                text("已送达，等待管理员回复", x, y + 19, 10, 0xffacb1c0, 400);
+                text("已送达，等待管理员回复", x, y + 19, 10, muted(0xffacb1c0), 400);
                 y += 25;
             }
             if (deleting.equals(cid)) {
                 y += 10;
-                d.roundRect(x, y, w, 38, 8, c(0xfffcf3f5, 0x1aca7695));
-                text("删除这条留言及回复？", x + 10, y + 24, 11, 0xffa57683, 400);
+                d.roundRect(
+                        x,
+                        y,
+                        w,
+                        38,
+                        8,
+                        winter()
+                                ? mix(paper().sheet(), paper().mail(), .09f)
+                                : c(0xfffcf3f5, 0x1aca7695));
+                text("删除这条留言及回复？", x + 10, y + 24, 11, warning(0xffa57683), 400);
                 buttonClipped(
                         "updates-delete-cancel",
                         "取消",
@@ -1993,23 +2666,29 @@ final class HubUpdatesView {
                 y += 38;
             }
             y += 19;
-            d.line(x, y, x + w, y, 1, 0xffecedf5);
+            d.line(x, y, x + w, y, 1, rule(0xffecedf5));
         }
         if (comments.isEmpty()) {
             y += 30;
-            icon("lock-keyhole", x + 15, y - 3, 15, 0xffa6aec0);
-            text("你的留言和回复会留在这里。其他玩家看不到。", x + 39, y + 9, 11, 0xffa6aec0, 400);
+            icon("lock-keyhole", x + 15, y - 3, 15, muted(0xffa6aec0));
+            text("你的留言和回复会留在这里。其他玩家看不到。", x + 39, y + 9, 11, muted(0xffa6aec0), 400);
             y += 38;
         }
         if (article != null
                 && !article.pages.isEmpty()
                 && (article.pages.lastKey() + 1) * 12 < commentsTotal) {
-            text(readInFlight ? "正在载入较早留言…" : "继续向下滚动载入较早留言", x, y + 22, 10, 0xffa7adbf, 400);
+            text(
+                    readInFlight ? "正在载入较早留言…" : "继续向下滚动载入较早留言",
+                    x,
+                    y + 22,
+                    10,
+                    muted(0xffa7adbf),
+                    400);
             y += 32;
         }
         if (!status.isBlank()) {
             y += 14;
-            y = plain(status, x, y + 12, w, 11, 400, 0xffa06c80, 20, 0);
+            y = plain(status, x, y + 12, w, 11, 400, warning(0xffa06c80), 20, 0);
             buttonClipped(
                     "updates-read-retry",
                     "重新读取",
@@ -2022,12 +2701,29 @@ final class HubUpdatesView {
             y += 38;
         }
         y += 28;
-        readerHeight = y + readerScroll - Y - move;
+        readerHeight = y + readerScroll - pageTop - move;
         d.restore();
         d.restore();
-        d.strokeRoundRect(RX, Y, RW, H, 20, 1, c(0xffffffff, 0x2bd0dfff));
-        scrollbar(2, RX + RW - 4, Y + 8, 3, H - 16, readerHeight, readerScroll);
+        if (!winter())
+            d.strokeRoundRect(
+                    readerX,
+                    pageTop,
+                    readerWidth,
+                    pageHeight,
+                    20,
+                    1,
+                    rule(c(0xffffffff, 0x2bd0dfff)));
+        scrollbar(
+                2,
+                readerX + readerWidth - 4,
+                pageTop + 8,
+                3,
+                pageHeight - 16,
+                readerHeight,
+                readerScroll);
         readerDrawing = false;
+        if (active && actionable && bodyVisible && readerAlpha * animation >= .2f)
+            markDisplayed(current);
     }
 
     private void positionThreads(float y, float width) {
@@ -2216,8 +2912,12 @@ final class HubUpdatesView {
     }
 
     private String version(JsonObject row) {
-        String pack = s(row, "packName", "") + s(row, "packVersion", "");
-        return pack + (pack.isEmpty() ? "" : "-") + s(row, "updateVersion", "");
+        String pack = s(row, "packName", "");
+        if (pack.isBlank() && selectedPack != null)
+            pack = s(selectedPack, "shortName", s(selectedPack, "name", ""));
+        String update = s(row, "updateVersion", "");
+        String version = pack + s(row, "packVersion", "") + (update.isBlank() ? "" : "-" + update);
+        return version.isBlank() ? "更新记录" : version;
     }
 
     private String time(JsonObject o, String pattern) {
@@ -2241,18 +2941,37 @@ final class HubUpdatesView {
                 sy = y + (h - thumb) * clamp(scroll / Math.max(1, content - h), 0, 1);
         boolean hover =
                 dragRail == id
-                        || id == 1 && inside(X, Y + 50, LW, H - 50)
-                        || id == 2 && inside(RX, Y, RW, H)
+                        || id == 1
+                                && inside(
+                                        pageX,
+                                        pageTop + listInset,
+                                        indexWidth,
+                                        pageHeight - listInset)
+                        || id == 2 && inside(readerX, pageTop, readerWidth, pageHeight)
                         || id == 3 && menuContains(mx, my);
-        d.roundRect(
-                x, sy, w, thumb, 2, hover ? c(0x739aa7c2, 0x70acbee4) : c(0x3d9aa7c2, 0x3da2b2d6));
+        int color =
+                winter()
+                        ? HubWinterSheet.alpha(paper().wool(), hover ? .54f : .28f)
+                        : hover ? c(0x739aa7c2, 0x70acbee4) : c(0x3d9aa7c2, 0x3da2b2d6);
+        d.roundRect(x, sy, w, thumb, 2, color);
         rails.put(id, new Rail(x, y, h, content, scroll, sy, thumb));
+    }
+
+    private boolean gazetteSerif(float size, int weight) {
+        return gazette != null && size >= 15 && weight >= 600;
+    }
+
+    private float typeWidth(String value, float size, int weight) {
+        return gazetteSerif(size, weight)
+                ? d.textWidthSerif(value, size, weight)
+                : d.textWidth(value, size, weight);
     }
 
     private record Span(int start, int end, int weight) {}
 
     private List<Line> wrap(List<Run> runs, float width, float size, int defaultWeight) {
-        LayoutKey key = new LayoutKey(runs, width, size, defaultWeight);
+        LayoutKey key =
+                new LayoutKey(runs, width, size, defaultWeight, gazetteSerif(size, defaultWeight));
         List<Line> cached = layouts.get(key);
         if (cached != null) return cached;
         StringBuilder joined = new StringBuilder();
@@ -2285,11 +3004,11 @@ final class HubUpdatesView {
                 int cp = text.codePointAt(at), next = at + Character.charCount(cp);
                 while (spanIndex + 1 < spans.size() && spans.get(spanIndex).end <= at) spanIndex++;
                 int weight = spans.isEmpty() ? defaultWeight : spans.get(spanIndex).weight;
-                MetricKey mk = new MetricKey(cp, size, weight);
+                MetricKey mk = new MetricKey(cp, size, weight, gazetteSerif(size, weight));
                 Float known = metrics.get(mk);
                 float cw;
                 if (known == null) {
-                    cw = d.textWidth(new String(Character.toChars(cp)), size, weight);
+                    cw = typeWidth(new String(Character.toChars(cp)), size, weight);
                     metrics.put(mk, cw);
                     if (metrics.size() > 8192) metrics.remove(metrics.keySet().iterator().next());
                 } else cw = known;
@@ -2303,7 +3022,7 @@ final class HubUpdatesView {
             List<Glyph> glyphs = lineGlyphs(text, spans, start, end, size);
             while (end > start + 1 && !glyphs.isEmpty()) {
                 Glyph last = glyphs.get(glyphs.size() - 1);
-                if (last.x + d.textWidth(last.text, size, last.weight) <= width + .01f) break;
+                if (last.x + typeWidth(last.text, size, last.weight) <= width + .01f) break;
                 int previous = text.offsetByCodePoints(end, -1);
                 if (previous <= start) break;
                 end = previous;
@@ -2337,7 +3056,7 @@ final class HubUpdatesView {
             if (right <= left) continue;
             String part = text.substring(left, right);
             out.add(new Glyph(part, span.weight, x));
-            x += d.textWidth(part, size, span.weight);
+            x += typeWidth(part, size, span.weight);
         }
         return out;
     }
@@ -2352,12 +3071,19 @@ final class HubUpdatesView {
             int color,
             float line) {
         List<Line> lines = wrap(runs, width, size, weight);
-        int start = readerDrawing ? Math.max(0, (int) Math.floor((Y - baseline - size) / line)) : 0,
+        int
+                start =
+                        readerDrawing
+                                ? Math.max(0, (int) Math.floor((pageTop - baseline - size) / line))
+                                : 0,
                 end =
                         readerDrawing
                                 ? Math.min(
                                         lines.size(),
-                                        (int) Math.ceil((Y + H - baseline + size) / line))
+                                        (int)
+                                                Math.ceil(
+                                                        (pageTop + pageHeight - baseline + size)
+                                                                / line))
                                 : lines.size();
         for (int i = start; i < end; i++) {
             Line row = lines.get(i);
@@ -2367,7 +3093,7 @@ final class HubUpdatesView {
                         x + g.x,
                         baseline + i * line,
                         size,
-                        g.weight == 600 ? 0xff435675 : color,
+                        g.weight == 600 ? ink(0xff435675) : color,
                         g.weight);
         }
         return baseline + lines.size() * line - size;
@@ -2392,10 +3118,19 @@ final class HubUpdatesView {
         if (text == null || text.isEmpty()) return baseline;
         List<Line> lines = wrap(List.of(new Run(text, weight)), width, size, weight);
         int count = max > 0 ? Math.min(max, lines.size()) : lines.size();
-        int start = readerDrawing ? Math.max(0, (int) Math.floor((Y - baseline - size) / line)) : 0,
+        int
+                start =
+                        readerDrawing
+                                ? Math.max(0, (int) Math.floor((pageTop - baseline - size) / line))
+                                : 0,
                 end =
                         readerDrawing
-                                ? Math.min(count, (int) Math.ceil((Y + H - baseline + size) / line))
+                                ? Math.min(
+                                        count,
+                                        (int)
+                                                Math.ceil(
+                                                        (pageTop + pageHeight - baseline + size)
+                                                                / line))
                                 : count;
         for (int i = start; i < end; i++) {
             Line row = lines.get(i);
@@ -2493,7 +3228,10 @@ final class HubUpdatesView {
     }
 
     private boolean menuContains(float x, float y) {
-        return x >= 875 && x < 1155 && y >= 119 && y < 131 + Math.min(550, packs.size() * 55);
+        return x >= menuX
+                && x < menuX + 280
+                && y >= 119
+                && y < 131 + Math.min(menuLimit, packs.size() * 55);
     }
 
     boolean scroll(float x, float y, double amount) {
@@ -2501,7 +3239,7 @@ final class HubUpdatesView {
             packScroll -= amount * 48;
             if (packLoadingPage < 0 && !packPages.isEmpty()) {
                 if (amount < 0
-                        && packScroll + 550 >= packs.size() * 55 - 160
+                        && packScroll + menuLimit >= packs.size() * 55 - 160
                         && (packPages.lastKey() + 1) * 100 < packTotal) {
                     packPage = packPages.lastKey() + 1;
                     packPage();
@@ -2519,12 +3257,18 @@ final class HubUpdatesView {
             composeEditor.scrollBy(0, (float) -amount * 22);
             return true;
         }
-        if (x >= X && x < X + LW && y >= Y + 50 && y <= Y + H) {
+        if (x >= pageX
+                && x < pageX + indexWidth
+                && y >= pageTop + listInset
+                && y <= pageTop + pageHeight) {
             listScroll -= amount * 48;
             loadListBoundary(amount);
             return true;
         }
-        if (x >= RX && x <= RX + RW && y >= Y && y <= Y + H) {
+        if (x >= readerX
+                && x <= readerX + readerWidth
+                && y >= pageTop
+                && y <= pageTop + pageHeight) {
             readerScroll -= amount * 48;
             loadReaderBoundary(amount);
             return true;
@@ -2535,7 +3279,7 @@ final class HubUpdatesView {
     private void loadListBoundary(double direction) {
         if (listLoadingPage >= 0 || listPages.isEmpty()) return;
         if (direction < 0
-                && listScroll + H - 50 >= listHeight - 180
+                && listScroll + pageHeight - listInset >= listHeight - 180
                 && (listPages.lastKey() + 1) * 12 < total) {
             listPage = listPages.lastKey() + 1;
             list(false);
@@ -2558,7 +3302,7 @@ final class HubUpdatesView {
                         && windows != null
                         && windows.firstKey() > 0
                         && box.y + box.height >= readerScroll
-                        && box.y + box.height <= readerScroll + H + 180) {
+                        && box.y + box.height <= readerScroll + pageHeight + 180) {
                     commentsPage = pageOf(article, cid);
                     replyPages.clear();
                     replyPages.put(cid, windows.firstKey() - 1);
@@ -2568,7 +3312,7 @@ final class HubUpdatesView {
             }
         }
         if (direction < 0
-                && readerScroll + H >= readerHeight - 180
+                && readerScroll + pageHeight >= readerHeight - 180
                 && (article.pages.lastKey() + 1) * 12 < article.total) {
             commentsPage = article.pages.lastKey() + 1;
             read();
@@ -2582,7 +3326,7 @@ final class HubUpdatesView {
                 if (box != null
                         && windows != null
                         && box.y + 90 >= readerScroll
-                        && box.y < readerScroll + H
+                        && box.y < readerScroll + pageHeight
                         && (windows.lastKey() + 1) * 20
                                 < n(c, "replyCount", objects(c, "replies").size())) {
                     commentsPage = pageOf(article, id);
@@ -2614,9 +3358,11 @@ final class HubUpdatesView {
 
     boolean pointerDown(float x, float y, boolean shift) {
         pointerAt(x, y);
-        if (packMenu && !menuContains(x, y) && !(y >= 82 && y <= 114 && x >= 780 && x <= 1058))
+        boolean onMenu = packMenu && menuContains(x, y);
+        if (packMenu && !onMenu && (pickerBounds == null || !pickerBounds.contains(x, y)))
             packMenu = false;
         for (var item : rails.entrySet()) {
+            if (onMenu && item.getKey() != 3) continue;
             Rail rail = item.getValue();
             if (x >= rail.x - 4 && x <= rail.x + 7 && y >= rail.y && y <= rail.y + rail.height) {
                 dragRail = item.getKey();
@@ -2631,7 +3377,19 @@ final class HubUpdatesView {
                 return true;
             }
         }
-        if (searchInput != null && x >= X && x < X + LW && y >= Y && y < Y + 38) {
+        if (onMenu) {
+            float offset = y - 125 + packScroll;
+            return x < menuX + 6
+                    || x >= menuX + 274
+                    || y < 125
+                    || y >= 125 + Math.min(menuLimit, packs.size() * 55)
+                    || offset % 55 >= 53;
+        }
+        if (searchInput != null
+                && x >= pageX
+                && x < pageX + indexWidth
+                && y >= searchY
+                && y < searchY + 38) {
             host.focus("updates-search");
             draggingEditor = searchEditor;
             searchEditor.pointerDown(x - searchInput.x, y - searchInput.y, shift);
@@ -2755,8 +3513,8 @@ final class HubUpdatesView {
                     Box box = rowBoxes.get(next);
                     if (box != null) {
                         if (box.y < listScroll) listScroll = box.y;
-                        else if (box.y + box.height > listScroll + H - 50)
-                            listScroll = box.y + box.height - H + 50;
+                        else if (box.y + box.height > listScroll + pageHeight - listInset)
+                            listScroll = box.y + box.height - pageHeight + listInset;
                     }
                 }
                 return true;
@@ -2764,8 +3522,10 @@ final class HubUpdatesView {
             if (key == 266 || key == 267 || key == 265 || key == 264 || key == 268 || key == 269) {
                 float delta =
                         key == 266
-                                ? -H * .8f
-                                : key == 267 ? H * .8f : key == 265 ? -38 : key == 264 ? 38 : 0;
+                                ? -pageHeight * .8f
+                                : key == 267
+                                        ? pageHeight * .8f
+                                        : key == 265 ? -38 : key == 264 ? 38 : 0;
                 readerScroll = key == 268 ? 0 : key == 269 ? readerHeight : readerScroll + delta;
                 loadReaderBoundary(delta > 0 ? -1 : 1);
                 return true;
@@ -2865,7 +3625,7 @@ final class HubUpdatesView {
             Runnable action,
             boolean enabled) {
         buttonDraw(id, label, x, y, w, h, enabled);
-        clippedHit(id, label, x, y, w, h, Y, Y + H, action, enabled);
+        clippedHit(id, label, x, y, w, h, pageTop, pageTop + pageHeight, action, enabled);
     }
 
     private void button(
@@ -2906,18 +3666,42 @@ final class HubUpdatesView {
         boolean deletion =
                 id.equals("updates-delete-cancel") || id.equals("updates-delete-confirm");
         if (deletion) {
+            if (winter() && id.equals("updates-delete-confirm"))
+                d.roundRect(x, y, w, h, 7, paper().sheet());
             center(
                     label,
                     x + w / 2,
                     y + (h + 10) / 2 + down,
                     10,
-                    id.endsWith("cancel") ? 0xff8890a4 : mix(0xffa57683, 0xffb86f81, over),
+                    id.endsWith("cancel")
+                            ? muted(0xff8890a4)
+                            : warning(mix(0xffa57683, 0xffb86f81, over)),
                     400);
             return;
         }
         d.saveLayerAlpha(x - 10, y - 10, w + 20, h + 30, enabled ? 1 : .45f);
         d.save();
         d.translate(0, down > 0 ? down : -over);
+        if (winter()) {
+            boolean primary = id.equals("updates-send");
+            int textColor = primary ? paper().sheet() : paper().pine();
+            d.roundRect(
+                    x,
+                    y,
+                    w,
+                    h,
+                    9,
+                    primary ? paper().pine() : mix(paper().sheet(), paper().soft(), over));
+            d.strokeRoundRect(x, y, w, h, 9, 1, primary ? paper().pine() : paper().ruling());
+            if (primary) {
+                float content = d.textWidth(label, 10, 500) + 17;
+                icon("send", x + (w - content) / 2, y + (h - 13) / 2, 13, textColor);
+                text(label, x + (w - content) / 2 + 17, y + (h + 10) / 2, 10, textColor, 500);
+            } else center(label, x + w / 2, y + (h + 10) / 2, 10, textColor, 500);
+            d.restore();
+            d.restore();
+            return;
+        }
         d.boxShadow(
                 x, y, w, h, 8, 0, 3 + 3 * over, 8 + 8 * over, 0, mix(0x1a9d8bca, 0x4d7558d1, over));
         d.linearGradientRoundRect(
@@ -2943,13 +3727,43 @@ final class HubUpdatesView {
         d.restore();
     }
 
+    private boolean winter() {
+        return d.winter();
+    }
+
+    private WinterPaper paper() {
+        return d.winterPaper();
+    }
+
+    private int ink(int classic) {
+        return winter() ? gazette.ink() : classic;
+    }
+
+    private int muted(int classic) {
+        return winter() ? gazette.muted() : classic;
+    }
+
+    private int accent(int classic) {
+        return winter() ? paper().pine() : classic;
+    }
+
+    private int rule(int classic) {
+        return winter() ? gazette.rule() : classic;
+    }
+
+    private int warning(int classic) {
+        return winter() ? paper().mailInk() : classic;
+    }
+
     private int c(int light, int dark) {
         return d.dark() ? dark : light;
     }
 
     private void text(String text, float x, float y, float size, int color, int weight) {
-        if (readerDrawing && (y < Y - size * 2 || y > Y + H + size * 2)) return;
-        d.text(text, x, y, size, color, weight);
+        if (readerDrawing && (y < pageTop - size * 2 || y > pageTop + pageHeight + size * 2))
+            return;
+        if (gazetteSerif(size, weight)) d.textSerif(text, x, y, size, color, weight);
+        else d.text(text, x, y, size, color, weight);
     }
 
     private void center(String text, float x, float y, float size, int color, int weight) {
@@ -2961,7 +3775,7 @@ final class HubUpdatesView {
     }
 
     private void icon(String icon, float x, float y, float size, int color) {
-        if (readerDrawing && (y + size < Y || y > Y + H)) return;
+        if (readerDrawing && (y + size < pageTop || y > pageTop + pageHeight)) return;
         d.icon(icon, x, y, size, color);
     }
 

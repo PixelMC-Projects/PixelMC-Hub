@@ -3,6 +3,9 @@ package com.pixelmc.hub.client.render;
 
 import io.github.humbleui.skija.Canvas;
 import io.github.humbleui.skija.Image;
+import io.github.humbleui.skija.ClipMode;
+import io.github.humbleui.skija.Matrix33;
+import java.util.ArrayList;
 import io.github.humbleui.skija.Paint;
 import io.github.humbleui.skija.Surface;
 import io.github.humbleui.types.IRect;
@@ -12,6 +15,10 @@ final class HubThemeTransition implements AutoCloseable {
     private static final long DURATION_NANOS = 220_000_000L;
     private final Paint paint = new Paint();
     private final HubCorners corners = new HubCorners();
+
+    private record LiveControl(Matrix33 device, float x, float y, float w, float h, float radius) {}
+
+    private final ArrayList<LiveControl> controls = new ArrayList<>(2);
     private Image outgoing;
     private float x, y, scale, panelWidth, panelHeight, radius;
     private int cropX, cropY;
@@ -49,6 +56,14 @@ final class HubThemeTransition implements AutoCloseable {
         return this.x == x && this.y == y && this.scale == scale;
     }
 
+    void beginFrame() {
+        controls.clear();
+    }
+
+    void excludeControl(Matrix33 device, float x, float y, float w, float h, float radius) {
+        controls.add(new LiveControl(device, x, y, w, h, radius));
+    }
+
     boolean draw(Canvas canvas, long now) {
         if (outgoing == null) return false;
         float t = Math.max(0, (now - startedAt) / (float) DURATION_NANOS);
@@ -60,6 +75,17 @@ final class HubThemeTransition implements AutoCloseable {
             canvas.translate(x, y).scale(scale, scale);
             // Clip in logical coordinates, preserving the shell's continuous corner contour.
             corners.clip(canvas, 0, 0, panelWidth, panelHeight, radius);
+            for (LiveControl control : controls) {
+                canvas.setMatrix(control.device());
+                corners.clip(
+                        canvas,
+                        control.x(),
+                        control.y(),
+                        control.w(),
+                        control.h(),
+                        control.radius(),
+                        ClipMode.DIFFERENCE);
+            }
             canvas.resetMatrix();
             canvas.drawImage(outgoing, cropX, cropY, paint.setAlphaf(alpha));
         } finally {

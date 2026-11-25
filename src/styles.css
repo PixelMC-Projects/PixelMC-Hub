@@ -284,24 +284,97 @@ nav {
 .server-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 8px 20px;
-  padding: 15px 0 19px;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 18px;
+  padding: 12px 4px 16px;
+  border: 0;
   border-bottom: 1px solid #dfe8e1;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px 10px 0 0;
+  transition: background 150ms ease;
+}
+.server-card:hover {
+  background: #ffffff66;
+}
+.server-card.is-static {
+  cursor: default;
+}
+.server-card.is-static:hover {
+  background: transparent;
+}
+.server-card .server-caption {
+  min-width: 0;
+  flex: 1;
+}
+.server-card strong {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.server-card strong em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.65;
+  flex-shrink: 0;
+}
+.server-card-chevron {
+  flex-shrink: 0;
+  opacity: 0.45;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+.server-card:hover .server-card-chevron {
+  opacity: 0.85;
+  transform: translateX(2px);
+}
+.server-card i.is-preview {
+  background: #8a6ee3;
+}
+.server-card i.is-paused {
+  background: #9aa3b2;
+}
+.setting-row.is-dimmed {
+  opacity: 0.6;
+}
+.sync-revoke-btn {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: 9px;
+  border: 1px solid #d9829066;
+  background: #d94c6212;
+  color: #b83d52;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.sync-revoke-btn:hover {
+  background: #d94c6222;
+  border-color: #c84b6099;
+}
+.sync-restore-btn {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  font-size: 11px;
 }
 .server-icon {
   width: 35px;
   height: 39px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   background: #ebf0e3;
   border: 1px solid #dfe7d6;
   color: #72845a;
   border-radius: 8px;
-}
-.server-card strong {
-  font-size: 12px;
-  font-weight: 600;
 }
 .server-card small {
   display: flex;
@@ -310,10 +383,14 @@ nav {
   font-size: 10px;
   color: #8b978e;
   margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .server-card i {
   width: 4px;
   height: 4px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: #74a884;
 }

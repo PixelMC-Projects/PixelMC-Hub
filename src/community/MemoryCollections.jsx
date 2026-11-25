@@ -3,17 +3,19 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Check, Leaf, Pencil } from 'lucide-react';
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'motion/react';
 import { titleIcons } from '../title-icons.js';
+import { WinterTitlePin } from '../WinterTitleCase.jsx';
 import { SELF_PROFILE } from './demo.js';
 import {
   filterMemoryCollectionSelection, formatAcquisitionDate, getMemoryCollectionCandidates,
   initialMemoryCollections, readMemoryCollections, saveMemoryCollections, subscribeMemoryCollections,
 } from './memoryCollections.js';
 
-function CollectionItem({ event, showDate = false }) {
+function CollectionItem({ event, showDate = false, winter }) {
   const Badge = titleIcons[event.item.icon] || Leaf;
   return <>
     {event.kind === 'title'
-      ? <span className={`profile-collection-emblem ${event.item.style}`}><Badge size={23} strokeWidth={1.55} /></span>
+      ? (winter ? <WinterTitlePin title={event.item}/> :
+        <span className={`profile-collection-emblem ${event.item.style}`}><Badge size={23} strokeWidth={1.55} /></span>)
       : <img className="memory-collection-slip" src="/assets/fortune-slip.png" alt="" />}
     <div className="memory-collection-item-copy">
       <span className="community-caption">{event.kind === 'title' ? '称号' : event.item.grade}</span>
@@ -34,7 +36,7 @@ function CollectionEditorTransition({ reduceMotion, children }) {
   </motion.div>;
 }
 
-export default function MemoryCollections({ player, archive, reduceMotion = false, notify }) {
+export default function MemoryCollections({ player, archive, reduceMotion = false, notify, winter = false }) {
   const systemReducedMotion = useReducedMotion();
   const noMotion = reduceMotion || systemReducedMotion;
   const [stored, setStored] = useState(() => {
@@ -97,7 +99,7 @@ export default function MemoryCollections({ player, archive, reduceMotion = fals
       </div>
 
       <div className="memory-collection-row">
-        {selected.map(event => <div className="memory-selected-collection" key={event.eventId}><CollectionItem event={event} showDate /></div>)}
+        {selected.map(event => <div className="memory-selected-collection" key={event.eventId}><CollectionItem event={event} showDate winter={winter} /></div>)}
         {selected.length === 0 && <p className="memory-collection-empty">还没有选择这段旅途的纪念。</p>}
       </div>
 
@@ -112,7 +114,7 @@ export default function MemoryCollections({ player, archive, reduceMotion = fals
               <div className="memory-collection-candidates">
                 {available.map(event => <label key={event.eventId} className={`memory-collection-choice ${draft[field] === event.eventId ? 'is-selected' : ''}`}>
                   <input type="radio" name={`${editorId}-${kind}`} value={event.eventId} checked={draft[field] === event.eventId} onChange={() => setDraft({ ...draft, [field]: event.eventId })} />
-                  <CollectionItem event={event} showDate />
+                  <CollectionItem event={event} showDate winter={winter} />
                   <span className="memory-collection-check" aria-hidden="true">{draft[field] === event.eventId && <Check size={12} />}</span>
                 </label>)}
                 {available.length === 0 && <p className="memory-collection-empty">此区间暂无获得记录。</p>}
@@ -125,7 +127,7 @@ export default function MemoryCollections({ player, archive, reduceMotion = fals
           })}
         </div>
         <div className="memory-editor-footer"><span>保存到此浏览器的 Web 演示</span><div>
-          <button type="button" className="community-button subtle" disabled={saving} onClick={closeEditor}>取消</button>
+          <button type="button" className="community-button subtle" data-memory-cancel disabled={saving} onClick={closeEditor}>取消</button>
           <button type="submit" className="community-button primary" disabled={saving || Boolean(stored.error)}><Check size={13} />{saving ? '保存中…' : '保存选择'}</button>
         </div></div>
       </form>

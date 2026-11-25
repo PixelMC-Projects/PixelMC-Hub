@@ -1150,6 +1150,132 @@
       "color": "white RGBA, transparent background",
       "license": "ISC",
       "sha256": "cd227eb527a0dab4299db97cdfd17e72361c17e87f35f5112826a146d92f0b93"
+    },
+    {
+      "exportName": "ChevronUp",
+      "target": "textures/icons/chevron-up.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "6b7e87fe47f2fe654cba6013b8769f1f370536308985cbcbbbe5c731f7184752"
+    },
+    {
+      "exportName": "ScrollText",
+      "target": "textures/icons/scroll-text.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "1f56265e6ad47d872effb6811606aa6433173c8e2b50a6273d2397090eba6ce3"
+    },
+    {
+      "exportName": "Inbox",
+      "target": "textures/icons/inbox.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "79b12097f51ce17130f1b720379a7ce646f5afd4df621587b26f294f12c34be3"
+    },
+    {
+      "exportName": "BookmarkCheck",
+      "target": "textures/icons/bookmark-check.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "cc3112579b855111c8e7f0785e021f4cc1d769d2937226a0c08677be9b78a745"
+    },
+    {
+      "exportName": "ArrowDown",
+      "target": "textures/icons/arrow-down.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "03f9aca7ecc6d7340ccd4bac1f10579c117105c1099b38c2316b9e8f54b0799c"
+    },
+    {
+      "exportName": "Clock3",
+      "target": "textures/icons/clock-3.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "45f2acc3ff844456e379436db94e546d766590e0118f735a09f95451d31e2fa0"
+    },
+    {
+      "exportName": "Utensils",
+      "target": "textures/icons/utensils.png",
+      "dimensions": [
+        192,
+        192
+      ],
+      "viewBox": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "strokeWidth": 1.65,
+      "color": "white RGBA, transparent background",
+      "license": "ISC",
+      "sha256": "7e3ef560a357e9df41b9429c30df68a573f37f8228094cb3b2c10b3af81637da"
     }
   ],
   "data": [

@@ -9,12 +9,23 @@ import LeaderboardPage from "./leaderboards/LeaderboardPage.jsx";
 import PlayerProfileCard from "./community/PlayerProfileCard.jsx";
 import JourneyMemories from "./community/JourneyMemories.jsx";
 import {
-  SELF_PROFILE, getPublicProfile, readCommunityProfile, readSelfFortuneState,
-  saveSelfFortuneSelection, persistHubPreviewState, subscribeCommunity,
+  MEMORY_ARCHIVES, SELF_PROFILE, getPublicProfile, readCommunityProfile, readHubPreviewState, readSelfFortuneState,
+  saveSelfFortuneSelection, persistHubPreviewState, subscribeCommunity, readProfilePreferences,
 } from "./community/demo.js";
+import { previewAppearance } from "./previewAppearance.js";
 import { useLeaderboardPreview } from "./leaderboards/store.js";
-import { useChangelog } from "./changelog/store.js";
+import { dispatch as updateChangelog, useChangelog } from "./changelog/store.js";
+import { publicationWatermark } from "./changelog/model.js";
 import PlayerHead from "./PlayerHead.jsx";
+import { FoxStamp, WinterNavigation, StationPaper, StationNews } from "./WinterStation.jsx";
+import { grantKey, rememberedGrant, subscribePreview, writeValue } from "./wenzhou/managerPreview.js";
+import Wenzhou from "./wenzhou/Wenzhou.jsx";
+import {changeModelMode, modelMode, modelModes} from "./wenzhou/modelPreview.js";
+import HubRouteSurface from "./wenzhou/HubRouteSurface.jsx";
+import { Glyph } from "./wenzhou/Glyph.jsx";
+import WinterTitleCase from "./WinterTitleCase.jsx";
+import WinterFortuneCounter, { JournalSlip } from "./WinterFortuneCounter.jsx";
+import "./winter-title-case.css";
 import WelcomeSplash from "./WelcomeSplash.jsx";
 import WelcomeFrequency, { shouldShowWelcome, welcomeModes } from "./WelcomeFrequency.jsx";
 import { titleIcons } from "./title-icons.js";
@@ -63,6 +74,13 @@ import {
   Gift,
   Flower2,
   Wind,
+  Snowflake,
+  BookUser,
+  Footprints,
+  Hourglass,
+  CalendarCheck2,
+  MailOpen,
+  Map,
 } from "lucide-react";
 import {
   player,
@@ -76,7 +94,16 @@ import {
   stateLabels,
 } from "./data.js";
 
-const storageKey = "pixelmc-player-hub-preview-v1";
+const handbookPages = ["home", "titles", "fortunes", "updates", "leaderboards", "memories", "wenzhou"];
+
+function previewRoute(requested, granted) {
+  if (requested === "rankings") return "leaderboards";
+  if (requested === "wenzhou" && !granted) return "home";
+  return handbookPages.includes(requested) ? requested : "home";
+}
+
+const currentArchive = MEMORY_ARCHIVES.find(archive => !archive.end && SELF_PROFILE.memoryIds.includes(archive.id));
+
 function initial() {
   const defaults = {
     equipped: "dew",
@@ -86,17 +113,24 @@ function initial() {
     reducedMotion: false,
     welcomeMode: "login",
     theme: "light",
+    homeStyle: "classic",
     hasSeenWelcome: false,
+    modpackSyncPlugin: true,
+    modpackSyncEnabled: true,
+    modpackSyncChannel: "stable",
+    modpackSyncGranted: true,
   };
   try {
-    const saved = { ...defaults, ...JSON.parse(localStorage.getItem(storageKey) || "{}") };
+    const saved = { ...defaults, ...readHubPreviewState() };
     if (!welcomeModes.some((mode) => mode.id === saved.welcomeMode)) saved.welcomeMode = defaults.welcomeMode;
+    if (!["stable", "preview"].includes(saved.modpackSyncChannel)) saved.modpackSyncChannel = defaults.modpackSyncChannel;
+    saved.modpackSyncPlugin = saved.modpackSyncPlugin !== false;
+    saved.modpackSyncEnabled = saved.modpackSyncEnabled !== false;
+    saved.modpackSyncGranted = saved.modpackSyncGranted !== false;
     saved.hasSeenWelcome = saved.hasSeenWelcome === true;
-    saved.theme = saved.theme === "dark" ? "dark" : "light";
-    Object.assign(saved, readSelfFortuneState());
-    return saved;
+    return { ...saved, ...previewAppearance(saved) };
   } catch {
-    return defaults;
+    return { ...defaults, ...previewAppearance(defaults) };
   }
 }
 function Symbol({ name, ...props }) {
@@ -156,6 +190,9 @@ function Pill({ children, color = "green" }) {
   );
 }
 
+// A replacement dialog can open while its animated predecessor is still mounted.
+const modalReturnTargets = new WeakMap();
+
 function Modal({ title, subtitle, onClose, children, wide = false, className = "", animated = false, reducedMotion = false }) {
   const Backdrop = animated ? motion.div : "div";
   const Surface = animated ? motion.section : "section";
@@ -171,8 +208,11 @@ function Modal({ title, subtitle, onClose, children, wide = false, className = "
   } : {};
   const ref = useRef();
   useEffect(() => {
-    const prev = document.activeElement;
     const root = ref.current;
+    const trigger = document.activeElement;
+    const parent = trigger?.closest('[role="dialog"]');
+    const returnTargets = [trigger, ...(modalReturnTargets.get(parent) ?? [])];
+    modalReturnTargets.set(root, returnTargets);
     const focusable = () => [
       ...root.querySelectorAll(
         'button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]',
@@ -182,7 +222,10 @@ function Modal({ title, subtitle, onClose, children, wide = false, className = "
     const onKey = (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        if (e.repeat || e.isComposing) return;
+        const cancel = root.querySelector("[data-profile-cancel]:not([inert] *)");
+        if (cancel) cancel.click();
+        else onClose();
       }
       if (e.key === "Tab") {
         const all = focusable();
@@ -200,7 +243,12 @@ function Modal({ title, subtitle, onClose, children, wide = false, className = "
     root.addEventListener("keydown", onKey);
     return () => {
       root.removeEventListener("keydown", onKey);
-      prev?.focus({ preventScroll: true });
+      modalReturnTargets.delete(root);
+      const activeDialog = document.activeElement?.closest('[role="dialog"]');
+      if (activeDialog && activeDialog !== root) return;
+      const target = returnTargets.find(el => el?.isConnected && !root.contains(el)
+        && !el.closest('[inert]') && el.getClientRects().length > 0);
+      target?.focus({ preventScroll: true });
     };
   }, []);
   return (
@@ -231,16 +279,17 @@ function Modal({ title, subtitle, onClose, children, wide = false, className = "
     </Backdrop>
   );
 }
-function FortuneReading({ fortune, onClose, displayDate, onDisplay }) {
+function FortuneReading({ fortune, onClose, displayDate, onDisplay, winter }) {
   return (
     <Modal
       title="签笺详情"
+      className="fortune-reading-dialog"
       subtitle={`${fortune.date.replaceAll("-", "/")} · ${player.name} 所得`}
       onClose={onClose}
       wide
     >
       <div className="reading">
-        <div className="reading-paper">
+        {winter ? <JournalSlip fortune={fortune} selected={fortune.date}/> : <div className="reading-paper">
           <div className="paper-corner tl" />
           <div className="paper-corner br" />
           <span
@@ -257,7 +306,7 @@ function FortuneReading({ fortune, onClose, displayDate, onDisplay }) {
           </div>
           <div className="paper-stamp">签</div>
           <span className="paper-foot">DAILY FORTUNES</span>
-        </div>
+        </div>}
         <div className="reading-interpretation">
           <span className="section-eyebrow">
             <Leaf size={15} /> 解签
@@ -295,14 +344,40 @@ function FortuneReading({ fortune, onClose, displayDate, onDisplay }) {
   );
 }
 
+const requestedDemo = new URLSearchParams(location.search).get("demo");
+const inboxDemo = ["unread", "shares"].includes(requestedDemo) ? requestedDemo : null;
+
 export default function App() {
-  const requestedPreview = new URLSearchParams(location.search).get("page");
-  const previewPage = requestedPreview === "rankings" ? "leaderboards" : ["home", "titles", "fortunes", "updates", "leaderboards", "memories"].includes(requestedPreview) ? requestedPreview : "home";
-  const [page, setPage] = useState(previewPage);
+  const [previewGrant, setPreviewGrant] = useState(() => Boolean(inboxDemo) || rememberedGrant(SELF_PROFILE.playerId));
+  const [wenzhouModelMode, setWenzhouModelMode] = useState(() => modelMode(SELF_PROFILE.playerId));
+  useEffect(() => subscribePreview(() => setWenzhouModelMode(modelMode(SELF_PROFILE.playerId))), []);
+  useEffect(() => subscribePreview(key => {
+    if (key && key !== grantKey(SELF_PROFILE.playerId)) return;
+    const granted = Boolean(inboxDemo) || rememberedGrant(SELF_PROFILE.playerId);
+    setPreviewGrant(granted);
+    if (!granted && location.hash === '#/wenzhou') {
+      setPage('home');
+      history.replaceState(history.state, '', '#/home');
+    }
+  }), []);
+  const [page, setPage] = useState(() => previewRoute(
+    location.hash.slice(2) || new URLSearchParams(location.search).get("page"), previewGrant
+  ));
   const updatePrototype = useChangelog();
+  const [updateToOpen, setUpdateToOpen] = useState(null);
+  const updatesUnread = publicationWatermark(updatePrototype) > (updatePrototype.updatesSeen || 0);
   const [leaderboardPreview, setLeaderboardPreview, simulateLeaderboardUpdate] = useLeaderboardPreview();
-  useEffect(() => { location.hash = "/" + previewPage; }, []);
+  useEffect(() => {
+    const url = new URL(location.href);
+    url.hash = "/" + page;
+    url.searchParams.delete("winter");
+    history.replaceState(history.state, "", url);
+  }, []);
   const [state, setState] = useState(initial);
+  const winterTheme = state.homeStyle === "winter";
+  const winterHome = winterTheme && page === "home";
+  const Navigation = winterTheme ? WinterNavigation : GlassIcons;
+  const IdentitySurface = winterHome ? StationPaper : GlassSurface;
   const [systemReduced, setSystemReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -312,6 +387,7 @@ export default function App() {
   }, []);
   const reduceMotion = state.reducedMotion || systemReduced;
   const [modal, setModal] = useState(null);
+  const [stationBio, setStationBio] = useState(() => readProfilePreferences(SELF_PROFILE).bio);
   const [publicProfile, setPublicProfile] = useState(null);
   const [memoryPlayer, setMemoryPlayer] = useState(SELF_PROFILE);
   const [memoryArchive, setMemoryArchive] = useState(null);
@@ -321,6 +397,7 @@ export default function App() {
   }, [state.theme]);
   useEffect(() => subscribeCommunity(() => {
     try {
+      setStationBio(readProfilePreferences(SELF_PROFILE).bio);
       const selected = readSelfFortuneState();
       setState(current => current.displayDate === selected.displayDate && current.fortuneState === selected.fortuneState
         ? current : { ...current, ...selected });
@@ -343,7 +420,7 @@ export default function App() {
   const [closed, setClosed] = useState(false);
   // One page load represents one login in this browser-only prototype.
   const seenThisLogin = useRef(false);
-  const [opening, setOpening] = useState(() => previewPage === "home" && shouldShowWelcome(state.welcomeMode, {
+  const [opening, setOpening] = useState(() => page === "home" && shouldShowWelcome(requestedDemo === "opening" && winterTheme ? "always" : state.welcomeMode, {
     reducedMotion: reduceMotion, seenThisLogin: false, seenBefore: state.hasSeenWelcome,
   }));
   useEffect(() => {
@@ -388,11 +465,21 @@ export default function App() {
     ),
   );
   const latestFortune = Object.values(archivedFortunes).at(-1);
-  const navigate = (p) => {
-    setPage(p);
-    location.hash = "/" + p;
+  const navigate = (p, entry = null) => {
+    const next = previewRoute(p, previewGrant);
+    setUpdateToOpen(next === "updates" ? entry : null);
+    setPage(next);
+    location.hash = "/" + next;
     setClosed(false);
   };
+  function changePreviewGrant(granted) {
+    if (!granted && page === "wenzhou") {
+      setPage("home");
+      history.replaceState(history.state, "", "#/home");
+    }
+    try { writeValue(grantKey(SELF_PROFILE.playerId), granted); }
+    catch { notify("浏览器未能保存模拟授权。", "error"); }
+  }
   const openPublicProfile = (row = SELF_PROFILE) => {
     const base = row.memoryIds ? row : getPublicProfile(row);
     let profile;
@@ -433,95 +520,158 @@ export default function App() {
       : "full";
   }, [state, reduceMotion]);
   useEffect(() => {
-    const f = () =>
-      setPage(
-        ["titles", "fortunes", "updates", "leaderboards", "memories"].includes(location.hash.slice(2))
-          ? location.hash.slice(2)
-          : "home",
-      );
+    const f = () => {
+      const requested = location.hash.slice(2);
+      const next = previewRoute(requested, previewGrant);
+      if (requested === "wenzhou" && next === "home") history.replaceState(history.state, "", "#/home");
+      setPage(next);
+    };
     window.addEventListener("hashchange", f);
     return () => window.removeEventListener("hashchange", f);
-  }, []);
+  }, [previewGrant]);
   useEffect(() => {
     const f = (e) => {
       if (e.key === "Escape" && !e.repeat && !modal && !reading && !publicProfile) {
         e.preventDefault();
         if (closed) openHandbook();
+        else if (page === "wenzhou") navigate("home");
+        else if (page === "memories") {
+          const cancel = document.querySelector(".memories-page [data-memory-cancel]");
+          if (cancel) cancel.click();
+          else navigate(memoryReturnPage.current);
+        }
         else setClosed(true);
       }
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
-  }, [modal, reading, publicProfile, closed, reduceMotion, state.welcomeMode, state.hasSeenWelcome]);
+  }, [page, modal, reading, publicProfile, closed, reduceMotion, state.welcomeMode, state.hasSeenWelcome]);
   function equip(title) {
     update({ equipped: title.id });
     notify(`已佩戴「${title.name}」`);
   }
+  const NameHeading = winterHome ? "h1" : "h2";
+  const playerIntro = page === "home" && <>
+    {winterHome && <div className="avatar station-portrait"><PlayerHead name={player.name}/></div>}
+    <div className="identity-copy">
+      {!winterHome && <div className="identity-greeting">你好</div>}
+      <NameHeading>{player.name}{!winterHome && <Pill>在线</Pill>}</NameHeading>
+      <div className="equipped-line">
+        <TitleText title={equipped} />
+        {equipped && !state.visible && <span className="hidden-indicator"><EyeOff size={13}/>展示已隐藏</span>}
+        {winterHome && <span className="station-joined">{player.joined} 加入</span>}
+      </div>
+      {winterHome && stationBio && <p className="station-bio">{stationBio}</p>}
+    </div>
+    <button className="btn subtle profile-btn" onClick={() => openPublicProfile(SELF_PROFILE)}>
+      {winterHome && <BookUser size={15}/>}公开资料{!winterHome && <ArrowUpRight size={15}/>}
+    </button>
+    <button className="btn subtle profile-btn memories-btn" onClick={() => openMemories()}>
+      {winterHome && <Map size={15}/>}旅程档案{!winterHome && <Bookmark size={14}/>}
+    </button>
+  </>;
   function readToday() {
     if (["read", "archived"].includes(state.fortuneState))
       setReading(todayFortune);
     else setModal("fortune-help");
   }
   return (
-    <div className="preview-stage">
+    <div className={`preview-stage${winterTheme ? " winter-theme" : ""}${winterHome ? " winter-home" : ""}`}>
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
       <div className="preview-caption">
         <span className="caption-brand">PIXELMC</span>
         <span>PLAYER EXPERIENCE</span>
       </div>
-      {!closed ? (
-        <div className={`app-shell welcome-shell has-leaderboards-nav ${opening ? "is-opening" : ""}`}>
-          {opening && <WelcomeSplash />}
+        <div style={closed ? {display:"none"} : undefined} className={`app-shell welcome-shell has-leaderboards-nav handbook-routes ${previewGrant ? "has-wenzhou-nav" : ""} ${opening ? "is-opening" : ""}`}>
+          {opening && <WelcomeSplash winter={winterTheme} />}
+          {previewGrant && <Wenzhou hubClosed={closed} demo={inboxDemo} blocked={Boolean(modal || opening)} playerId={SELF_PROFILE.playerId} active={!closed && page === "wenzhou"} reduceMotion={reduceMotion} notify={notify} onBack={() => navigate("home")} />}
+          <AnimatePresence initial={false}>
+          {!closed && page !== "wenzhou" && <HubRouteSurface key="handbook" side="handbook" reduceMotion={reduceMotion}>
           <aside className="sidebar" inert={opening}>
-            <GlassSurface width="100%" height="100%" borderRadius={0}
+            {!winterTheme && <GlassSurface width="100%" height="100%" borderRadius={0}
               borderWidth={0.08} brightness={65} opacity={0.9} blur={12} displace={0.5}
               backgroundOpacity={0.32} saturation={1.15} distortionScale={-12}
-              redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="sidebar-material" />
+              redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="sidebar-material" />}
             <button
               className="brand"
               onClick={() => navigate("home")}
               aria-label="旅人手册首页"
             >
-              <img className="server-brand-logo" src="/assets/server-logo.png" alt="PixelMC 服务器 Logo" />
+              {winterTheme ? <img className="station-field-atlas" src="/assets/winter/directory-handbook.webp" alt=""/>
+                : <img className="server-brand-logo" src="/assets/server-logo.png" alt="PixelMC 服务器 Logo"/>}
               <span>
                 <strong>旅人手册</strong>
                 <small>PixelMC-Hub</small>
               </span>
             </button>
-            <div className="nav-label">我的空间</div>
+            {!winterTheme && <div className="nav-label">我的空间</div>}
             <nav aria-label="主导航">
-              <GlassIcons
+              <Navigation
                 key={String(reduceMotion)}
                 items={[
                   { id: "home", label: "个人主页", icon: <Home />, color: "blue" },
                   { id: "titles", label: "我的称号", icon: <Tag />, color: "purple" },
                   { id: "fortunes", label: "我的签笺", icon: <BookOpen />, color: "orange" },
-                  ...(updatePrototype.settings.updatesEnabled ? [{ id: "updates", label: "更新日志", icon: <Newspaper />, color: "green" }] : []),
+                  ...(updatePrototype.settings.updatesEnabled ? [{ id: "updates", ariaLabel: updatesUnread ? "更新日志，有新发布" : "更新日志", label: <span className="wz-nav-label">更新日志{updatesUnread && <small className="wz-beta updates-new">NEW</small>}</span>, icon: <Newspaper />, color: "green" }] : []),
                   { id: "leaderboards", label: "玩家排行", icon: <Trophy />, color: "pink" },
+                  ...(previewGrant ? [{
+                    id: "wenzhou", color: "teal", icon: <Glyph name="boat" />,
+                    label: <span className="wz-nav-label">问舟<small className="wz-beta">BETA</small></span>,
+                    ariaLabel: "问舟，内测",
+                  }] : []),
                 ].map(item => ({ ...item, onClick: () => navigate(item.id), current: page === item.id || (page === "memories" && item.id === "home"),
                   className: page === item.id || (page === "memories" && item.id === "home") ? "is-current" : "" }))}
                 size={46} gap={28} columns={1} labels="always" theme={state.theme}
                 plate="tilt" tilt={-16} roundness={0.65} shine={0.9} frost={0.1}
                 tint="#ffffff" tintOpacity={0.16}
                 hover={reduceMotion ? "none" : "lift"} parallax={reduceMotion ? 0 : 0.65}
-                intro={!reduceMotion} reducedMotion={reduceMotion} className="hub-navigation"
+                intro={!reduceMotion} introReady={!opening} reducedMotion={reduceMotion} className="hub-navigation"
               />
             </nav>
+            {winterTheme && <div className="station-directory-scene" aria-hidden="true"/>}
             <div className="sidebar-bottom">
-              <div className="server-card">
-                <span className="server-icon">
-                  <Flower2 size={21} />
-                </span>
-                <div>
-                  <strong>香草纪元</strong>
-                  <small>
-                    <i /> 当前存档 · 演示
-                  </small>
+              {state.modpackSyncPlugin ? (
+                <button
+                  type="button"
+                  className="server-card"
+                  aria-label="打开整合包同步设置"
+                  onClick={() => setModal("modpack-sync")}
+                >
+                  <span className="server-icon">
+                    {winterTheme ? <img src="/assets/server-logo.png" width="32" height="32" alt="PixelMC 服务器"/> : <Flower2 size={21} />}
+                  </span>
+                  <span className="server-caption">
+                    <strong>{currentArchive?.name ?? "当前整合包"}{currentArchive?.version && <em>{currentArchive.version}</em>}</strong>
+                    <small>
+                      <i className={!state.modpackSyncEnabled || !state.modpackSyncGranted ? "is-paused" : state.modpackSyncChannel === "preview" ? "is-preview" : ""} />
+                      {!state.modpackSyncGranted
+                        ? "未授权 · 点击设置"
+                        : !state.modpackSyncEnabled
+                          ? "自动同步已关闭"
+                          : state.modpackSyncChannel === "preview"
+                            ? "预览版 · 自动同步"
+                            : "正式版 · 自动同步"}
+                    </small>
+                  </span>
+                  <ChevronRight className="server-card-chevron" size={13}/>
+                </button>
+              ) : (
+                <div className="server-card is-static">
+                  <span className="server-icon">
+                    {winterTheme ? <img src="/assets/server-logo.png" width="32" height="32" alt="PixelMC 服务器"/> : <Flower2 size={21} />}
+                  </span>
+                  <span className="server-caption">
+                    <strong>{currentArchive?.name ?? "当前整合包"}{currentArchive?.version && <em>{currentArchive.version}</em>}</strong>
+                    <small>
+                      <i /> 当前存档 · 演示
+                    </small>
+                  </span>
                 </div>
-              </div>
+              )}
               <button
                 className="nav-item settings-nav"
+                aria-label="界面设置"
                 onClick={() => setModal("settings")}
               >
                 <Settings size={19} />
@@ -532,7 +682,7 @@ export default function App() {
           <div className="workspace" inert={opening}>
             <header className="topbar">
               <span className="topbar-path">
-                我的空间 <ChevronRight size={13} />{" "}
+                {winterTheme && ["updates","leaderboards"].includes(page) ? "服务器" : "我的空间"} <ChevronRight size={13} />{" "}
                 <strong>
                   {
                     {
@@ -562,48 +712,28 @@ export default function App() {
             <main className={`page-content page-${page}`} key={`${page}-${opening ? "opening" : "ready"}`}>
               {page === "home" && (
                 <>
-                  <div className="page-heading">
+                  {winterHome ? <header className="station-heading">{playerIntro}</header> : <div className="page-heading">
                     <div>
                       <h1>个人主页</h1>
                       <p>很高兴又见到你，今天是旅程的第 18 天。</p>
                     </div>
                     <div className="date-label">
-                      <Sun size={18} />
+                      <Sun size={18}/>
                       <span>11 月 3 日，星期二</span>
                     </div>
-                  </div>
+                  </div>}
                   <section className="identity-card">
-                    <GlassSurface width="100%" height="auto" borderRadius={22}
+                    <IdentitySurface width="100%" height="auto" borderRadius={22}
                       borderWidth={0.04} brightness={65} opacity={0.7} blur={8}
                       backgroundOpacity={0.09} saturation={1.25} distortionScale={-45}
                       redOffset={0} greenOffset={0} blueOffset={0} refraction={false} className="identity-glass">
-                    <div className="identity-main">
-                      <div className="identity-copy">
-                        <div className="identity-greeting">你好</div>
-                        <h2>
-                          {player.name}
-                          <Pill>在线</Pill>
-                        </h2>
-                        <div className="equipped-line">
-                          <TitleText title={equipped} />
-                          {equipped && !state.visible && (
-                            <span className="hidden-indicator">
-                              <EyeOff size={13} />
-                              展示已隐藏
-                            </span>
-                          )}
-                        </div>
+                    {winterHome ? <div className="station-scenery">
+                      <div className="station-scene-caption">
+                        <span>{state.theme === "dark" ? <Moon size={15}/> : <Sun size={15}/>}11 月 3 日，星期二</span>
+                        <strong>旅程第 18 天</strong>
                       </div>
-                      <button
-                        className="btn subtle profile-btn"
-                        onClick={() => openPublicProfile(SELF_PROFILE)}
-                      >
-                        公开资料
-                        <ArrowUpRight size={15} />
-                      </button>
-                      <button className="btn subtle profile-btn memories-btn" onClick={() => openMemories()}>
-                        旅程档案<Bookmark size={14} />
-                      </button>
+                    </div> : <div className="identity-main">
+                      {playerIntro}
                       <div className="identity-decoration">
                         <span className="medallion-ring" />
                         <TiltedCard containerHeight="160px" imageHeight="160px" imageWidth="190px"
@@ -617,11 +747,11 @@ export default function App() {
                         <span className="identity-spark spark-a">✦</span>
                         <span className="identity-spark spark-b">✧</span>
                       </div>
-                    </div>
+                    </div>}
                     <div className="stats-row">
                       <div>
                         <span className="stat-icon">
-                          <Clock size={19} />
+                          {winterHome ? <Hourglass size={19}/> : <Clock size={19} />}
                         </span>
                         <div>
                           <small>累计在线</small>
@@ -635,7 +765,7 @@ export default function App() {
                       </div>
                       <div>
                         <span className="stat-icon">
-                          <LogIn size={19} />
+                          {winterHome ? <Footprints size={19}/> : <LogIn size={19} />}
                         </span>
                         <div>
                           <small>登录次数</small>
@@ -647,7 +777,7 @@ export default function App() {
                       </div>
                       <div>
                         <span className="stat-icon">
-                          <CalendarDays size={19} />
+                          {winterHome ? <CalendarCheck2 size={19}/> : <CalendarDays size={19} />}
                         </span>
                         <div>
                           <small>上次登录</small>
@@ -658,16 +788,16 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    </GlassSurface>
+                    </IdentitySurface>
                   </section>
-                  <div className="home-lower">
+                  <div className={winterHome ? "station-sections" : "home-lower"}>
                     <section className="card today-card">
                       <div className="card-title">
                         <h2>
-                          <Leaf size={19} />
+                          {winterHome ? <MailOpen size={19}/> : <Leaf size={19} />}
                           今日签笺
                         </h2>
-                        <span className="quiet-label">每日一签</span>
+                        {!winterHome && <span className="quiet-label">每日一签</span>}
                       </div>
                       {["read", "archived"].includes(state.fortuneState) ? (
                         <>
@@ -684,7 +814,7 @@ export default function App() {
                                 ))}
                               </div>
                             </div>
-                            <div className="fortune-art">
+                            {winterHome ? <FoxStamp/> : <div className="fortune-art">
                               <div className="art-orbit" />
                               <img
                                 src="/assets/fortune-barrel.png"
@@ -692,7 +822,7 @@ export default function App() {
                               />
                               <span className="art-spark one">✦</span>
                               <span className="art-spark two">✧</span>
-                            </div>
+                            </div>}
                           </div>
                           <div className="card-bottom">
                             <span className="collected-status">
@@ -701,7 +831,7 @@ export default function App() {
                             </span>
                             <button className="btn primary" onClick={readToday}>
                               查看签文
-                              <ArrowRight size={16} />
+                              {winterHome ? <MailOpen size={16}/> : <ArrowRight size={16} />}
                             </button>
                           </div>
                         </>
@@ -721,12 +851,12 @@ export default function App() {
                                   : "带上未解的签，前往解签龛。"}
                               </p>
                             </div>
-                            <div className="fortune-art">
+                            {winterHome ? <FoxStamp/> : <div className="fortune-art">
                               <img
                                 src="/assets/fortune-barrel.png"
                                 alt="签筒"
                               />
-                            </div>
+                            </div>}
                           </div>
                           <div className="card-bottom">
                             <span className="collected-status">
@@ -742,7 +872,8 @@ export default function App() {
                         </>
                       )}
                     </section>
-                    <section className="card keepsakes">
+                    {winterHome ? <StationNews changes={updatePrototype} onOpenEntry={entry => navigate("updates", entry)}
+                      onOpenProfile={openPublicProfile}/> : <section className="card keepsakes">
                       <div className="card-title">
                         <h2>
                           <Bookmark size={18} />
@@ -818,12 +949,10 @@ export default function App() {
                           <ArrowUpRight size={16} />
                         </button>
                       </div>
-                    </section>
+                    </section>}
                   </div>
                   <div className="page-footnote">
-                    <span>
-                      <Leaf size={13} /> 每一份收藏，都记得来时的路。
-                    </span>
+                    {!winterHome && <span><Leaf size={13} /> 每一份收藏，都记得来时的路。</span>}
                     <span>统计范围：当前存档</span>
                   </div>
                 </>
@@ -837,8 +966,8 @@ export default function App() {
                   reduceMotion={reduceMotion}
                 />
               )}
-              {page === "updates" && <ChangelogPage notify={notify} reduceMotion={reduceMotion} />}
-              {page === "leaderboards" && <LeaderboardPage notify={notify} reduceMotion={reduceMotion} onOpenProfile={openPublicProfile} />}
+              {page === "updates" && <ChangelogPage notify={notify} reduceMotion={reduceMotion} initialEntry={updateToOpen} winter={winterTheme} />}
+              {page === "leaderboards" && <LeaderboardPage notify={notify} reduceMotion={reduceMotion} onOpenProfile={openPublicProfile} winter={winterTheme} />}
               {page === "fortunes" && (
                 <FortunesPage
                   archive={archivedFortunes}
@@ -848,13 +977,14 @@ export default function App() {
                   notify={notify}
                 />
               )}
-              {page === "memories" && <JourneyMemories player={memoryPlayer} initialArchiveId={memoryArchive}
+              {page === "memories" && <JourneyMemories player={memoryPlayer} initialArchiveId={memoryArchive} winter={winterTheme}
                 onBack={() => navigate(memoryReturnPage.current)} onOpenProfile={openPublicProfile} reduceMotion={reduceMotion} notify={notify} />}
             </main>
           </div>
-
+          </HubRouteSurface>}
+          </AnimatePresence>
         </div>
-      ) : (
+      {closed && (
         <div className="closed-state">
           <span className="brand-mark">
             <span />
@@ -870,14 +1000,15 @@ export default function App() {
           </span>
         </div>
       )}
-      {!closed && toast && <SwipeToast key={toast.key} title={toast.text}
-        icon={toast.tone === "error" ? <Info size={18} /> : <Check size={18} />}
-        className={`hub-swipe-toast ${toast.tone === "error" ? "is-error" : ""}`}
+      {toast && (!closed || toast.tone === "wenzhou-complete") && <SwipeToast key={toast.key} title={toast.text}
+        icon={winterTheme && toast.tone === "error" ? <span className="receipt-alert">!</span>
+          : toast.tone === "error" || toast.tone === "info" ? <Info size={18}/> : <Check size={18}/>}
+        className={`hub-swipe-toast is-${toast.tone}`}
         background="#ffffff" color="#505875" closeButton
         reducedMotion={reduceMotion} onClose={() => setToast(current => current?.key === toast.key ? null : current)} />}
       <div className="preview-footer">
         <span>
-          <kbd>Esc</kbd> {closed ? "打开手册" : "收起面板"}
+          <kbd>Esc</kbd> {closed ? "打开手册" : page === "wenzhou" ? "返回手册首页" : page === "memories" ? "返回上一级" : "收起面板"}
         </span>
         <span>本地交互预览 · 演示数据 <a className="updates-manager-link" href="/manager/" target="_blank" rel="noreferrer">打开 Manager 管理端 ↗</a></span>
         <button onClick={() => setModal("preview")}>
@@ -888,6 +1019,7 @@ export default function App() {
       {reading && (
         <FortuneReading
           fortune={reading}
+          winter={winterTheme}
           onClose={() => setReading(null)}
           displayDate={state.displayDate}
           onDisplay={async (date) => {
@@ -899,7 +1031,7 @@ export default function App() {
       {publicProfile && (
         <Modal key={publicProfile.playerId} title="玩家资料" className="public-profile-modal" animated reducedMotion={reduceMotion} onClose={() => setPublicProfile(null)}>
           <div className="public-profile-scroll">
-            <PlayerProfileCard player={publicProfile} onOpenMemories={openMemories} reduceMotion={reduceMotion} notify={notify}
+            <PlayerProfileCard player={publicProfile} onOpenMemories={openMemories} reduceMotion={reduceMotion} notify={notify} winter={winterTheme}
               fortuneOptions={publicProfile.isSelf ? Object.values(archivedFortunes).sort((a, b) => b.date.localeCompare(a.date)) : []}
               onSave={profile => setPublicProfile(current => current?.playerId === profile.playerId ? { ...current, ...profile } : current)}
               onSaveFortune={saveProfileFortune} />
@@ -911,6 +1043,7 @@ export default function App() {
       {modal === "profile" && (
         <Modal
           title="个人资料"
+          className="account-dialog"
           subtitle="你在这段旅程中留下的足迹"
           onClose={() => setModal(null)}
         >
@@ -944,7 +1077,7 @@ export default function App() {
                         await navigator.clipboard.writeText(player.uuid);
                         notify("UUID 已复制");
                       } catch {
-                        notify("浏览器未允许复制，请手动选择 UUID");
+                        notify("浏览器未允许复制，请手动选择 UUID", "error");
                       }
                     }}
                   >
@@ -959,11 +1092,12 @@ export default function App() {
       {modal === "settings" && (
         <Modal
           title="界面设置"
+          className="settings-dialog"
           subtitle="让手册更符合你的习惯"
           onClose={() => setModal(null)}
         >
           <div className="settings-content">
-            <WelcomeFrequency value={state.welcomeMode} onChange={(welcomeMode) => update({ welcomeMode })}
+            <WelcomeFrequency winter={winterTheme} value={state.welcomeMode} onChange={(welcomeMode) => update({ welcomeMode })}
               reducedMotion={reduceMotion} />
             <div className="setting-row">
               <div>
@@ -979,11 +1113,21 @@ export default function App() {
             <div className="setting-row">
               <div>
                 <strong>界面主题</strong>
-                <p>{state.theme === "dark" ? "深灰蓝紫玻璃" : "浅色液态玻璃"}</p>
+                <p>{winterTheme ? (state.theme === "dark" ? "松绿夜色与暖纸灯光" : "松针绿与雪色纸面") : (state.theme === "dark" ? "深灰蓝紫玻璃" : "浅色液态玻璃")}</p>
               </div>
               <div className="theme-choices" role="group" aria-label="界面主题">
                 <button aria-pressed={state.theme === "light"} onClick={() => update({theme:"light"})}><Sun size={15} />浅色</button>
                 <button aria-pressed={state.theme === "dark"} onClick={() => update({theme:"dark"})}><Moon size={15} />深色</button>
+              </div>
+            </div>
+            <div className="setting-row">
+              <div>
+                <strong>手册主题</strong>
+                <p>{state.homeStyle === "winter" ? (state.theme === "dark" ? "驿站夜灯" : "雪后清晨") : "经典旅人手册"}</p>
+              </div>
+              <div className="theme-choices" role="group" aria-label="手册主题">
+                <button aria-pressed={state.homeStyle !== "winter"} onClick={() => update({homeStyle:"classic"})}><BookOpen size={15}/>经典</button>
+                <button aria-pressed={state.homeStyle === "winter"} onClick={() => update({homeStyle:"winter"})}><Snowflake size={15}/>冬日驿站</button>
               </div>
             </div>
             <div className="settings-note">
@@ -993,9 +1137,115 @@ export default function App() {
           </div>
         </Modal>
       )}
+      {modal === "modpack-sync" && (
+        <Modal
+          title="整合包同步"
+          className="settings-dialog modpack-sync-dialog"
+          subtitle={`${currentArchive?.name ?? "香草纪元"}${currentArchive?.version ? ` ${currentArchive.version}` : ""} · 管理自动同步与推送频道`}
+          onClose={() => setModal(null)}
+        >
+          <div className="settings-content">
+            <div className="setting-row">
+              <div>
+                <strong>自动同步整合包</strong>
+                <p>
+                  {state.modpackSyncEnabled && state.modpackSyncGranted
+                    ? "连接服务器时自动从可信 OSS 校验并暂存更新"
+                    : "已暂停自动同步，不会改动本地模组与配置"}
+                </p>
+              </div>
+              <Toggle
+                checked={state.modpackSyncEnabled && state.modpackSyncGranted}
+                onChange={(v) => {
+                  if (v && !state.modpackSyncGranted) {
+                    update({ modpackSyncEnabled: true, modpackSyncGranted: true });
+                    notify("已重新开启自动同步（游戏内首次连服会确认授权）");
+                  } else {
+                    update({ modpackSyncEnabled: v });
+                    notify(v ? "已开启整合包自动同步" : "已关闭整合包自动同步");
+                  }
+                }}
+                label="自动同步整合包"
+              />
+            </div>
+            <div className={`setting-row${!state.modpackSyncEnabled || !state.modpackSyncGranted ? " is-dimmed" : ""}`}>
+              <div>
+                <strong>推送频道</strong>
+                <p>
+                  {state.modpackSyncChannel === "preview"
+                    ? "优先接收最新预览版更新；切回正式版后下次连服自动回退"
+                    : "仅接收稳定测试通过的正式版整合包更新（默认）"}
+                </p>
+              </div>
+              <div className="theme-choices" role="group" aria-label="推送频道">
+                <button
+                  type="button"
+                  aria-pressed={state.modpackSyncChannel !== "preview"}
+                  onClick={() => {
+                    const fromPreview = state.modpackSyncChannel === "preview";
+                    update({ modpackSyncChannel: "stable" });
+                    if (fromPreview) notify("已切回正式版，下次连服将自动安全回退");
+                  }}
+                >
+                  正式版
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={state.modpackSyncChannel === "preview"}
+                  onClick={() => {
+                    const fromStable = state.modpackSyncChannel !== "preview";
+                    update({ modpackSyncChannel: "preview" });
+                    if (fromStable) notify("已切换为预览版，下次连接服务器时生效");
+                  }}
+                >
+                  预览版
+                </button>
+              </div>
+            </div>
+            <div className="setting-row">
+              <div>
+                <strong>本地同步授权</strong>
+                <p>
+                  {state.modpackSyncGranted
+                    ? "已授权 · 仅处理签名清单内的受管目录，不触碰存档"
+                    : "已撤销 · 下次连接服务器时将重新弹出首次授权确认"}
+                </p>
+              </div>
+              {state.modpackSyncGranted ? (
+                <button
+                  type="button"
+                  className="sync-revoke-btn"
+                  onClick={() => {
+                    update({ modpackSyncGranted: false, modpackSyncEnabled: false });
+                    notify("已撤销本地同步授权并暂停自动同步");
+                  }}
+                >
+                  撤销授权
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn subtle sync-restore-btn"
+                  onClick={() => {
+                    update({ modpackSyncGranted: true, modpackSyncEnabled: true });
+                    notify("已恢复演示授权状态");
+                  }}
+                >
+                  恢复授权
+                </button>
+              )}
+            </div>
+            <div className="settings-note">
+              <Info size={15} />
+              <span>修改会写入本地客户端同步配置，重新连接服务器后自动生效。</span>
+            </div>
+          </div>
+        </Modal>
+      )}
       {modal === "preview" && (
         <Modal
           title="预览选项"
+          className="preview-options-dialog"
           subtitle="仅用于体验不同状态，不会修改游戏数据"
           onClose={() => setModal(null)}
         >
@@ -1027,6 +1277,35 @@ export default function App() {
               <p>切换后进入玩家排行查看；仅影响本地预览。</p>
               <div className="lb-preview-actions"><button className="btn subtle" onClick={playLeaderboardUpdate}>播放排行变动</button><button className="btn subtle" onClick={() => setLeaderboardPreview('ready')}>还原排行</button></div>
             </div>
+            <div className="lb-preview-field">
+              <label htmlFor="wenzhou-preview-access">问舟内测身份（本页模拟）</label>
+              <select id="wenzhou-preview-access" value={previewGrant ? "granted" : "denied"}
+                onChange={event => changePreviewGrant(event.target.value === "granted")}>
+                <option value="denied">未授权玩家</option>
+                <option value="granted">已授权玩家</option>
+              </select>
+              <label htmlFor="wenzhou-preview-model">问舟模型权限（本页模拟）</label>
+              <select id="wenzhou-preview-model" value={wenzhouModelMode}
+                onChange={event => changeModelMode(SELF_PROFILE.playerId, event.target.value)}>
+                {Object.entries(modelModes).map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+              </select>
+              <label htmlFor="modpack-sync-plugin-preview">AutoModpack-OSS 插件（本页模拟）</label>
+              <select id="modpack-sync-plugin-preview" value={state.modpackSyncPlugin ? "installed" : "absent"}
+                onChange={event => update({ modpackSyncPlugin: event.target.value === "installed" })}>
+                <option value="installed">已安装（左下角卡片可点）</option>
+                <option value="absent">未安装（左下角卡片不可点）</option>
+              </select>
+            </div>
+            <button type="button" className="btn subtle" onClick={() => {
+              if (page === "updates") navigate("home");
+              updateChangelog({ type: "resetUpdateReads" });
+              setModal(null);
+              notify("已重置更新日志阅读状态");
+            }}>
+              <RotateCcw size={15} />重置更新日志阅读状态
+            </button>
+            <a className="btn subtle" href="?page=wenzhou&demo=unread#/wenzhou" target="_blank" rel="noreferrer">演示问舟未读对话</a>
+            <a className="btn subtle" href="?page=wenzhou&demo=shares#/wenzhou" target="_blank" rel="noreferrer">演示收到的分享</a>
             <p className="preview-note">
               称号佩戴、显示设置和手册签笺展示都是本地模拟。抽签、解签、存签仍保留游戏内物品与方块交互。
             </p>
@@ -1050,6 +1329,7 @@ export default function App() {
       )}
       {modal === "fortune-help" && (
         <Modal
+          className="fortune-help-dialog"
           title={
             state.fortuneState === "undrawn"
               ? "用签筒开启今日一签"
@@ -1058,7 +1338,9 @@ export default function App() {
           onClose={() => setModal(null)}
         >
           <div className="fortune-help">
-            <img src="/assets/fortune-barrel.png" alt="签筒" />
+            {winterTheme && state.fortuneState !== "undrawn"
+              ? <img src="/assets/fortune-slip.png" alt="未解签" />
+              : <img src="/assets/fortune-barrel.png" alt="签筒" />}
             <p>
               {state.fortuneState === "undrawn"
                 ? "在游戏中手持签筒，右键抽取今天的签。"
@@ -1081,7 +1363,7 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
   const [filter, setFilter] = useState("owned");
   const [sort, setSort] = useState("recent");
   const [compact, setCompact] = useState(false);
-  const t = titles.find((t) => t.id === selected) || titles[0];
+  const winter = state.homeStyle === "winter";
   const list = titles
     .filter(
       (t) =>
@@ -1093,6 +1375,148 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
         ? a.name.localeCompare(b.name, "zh-Hans-CN-u-co-pinyin")
         : String(b.date || "").localeCompare(a.date || ""),
     );
+  const t = winter
+    ? list.find(item => item.id === selected) ?? list[0]
+    : titles.find(item => item.id === selected) ?? titles[0];
+
+  function changeList(setValue, value) {
+    if (winter) setSelected(null);
+    setValue(value);
+  }
+
+  const toolbar = (
+    <>
+      <div className="browser-toolbar">
+        <div className="segmented">
+          {[
+            ["owned", "已拥有"],
+            ["all", "全部"],
+            ["locked", "未获得"],
+          ].map(([id, label]) => (
+            <button
+              className={filter === id ? "selected" : ""}
+              key={id}
+              aria-pressed={filter === id}
+              onClick={() => { if (filter !== id) changeList(setFilter, id); }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {!winter && <IconButton
+          label={compact ? "切换卡片显示" : "切换紧凑显示"}
+          onClick={() => setCompact(!compact)}
+        >
+          {compact ? <Grid2X2 size={18} /> : <List size={18} />}
+        </IconButton>}
+      </div>
+      <div className="search-row">
+        <label className="search">
+          <Search size={16} />
+          <input
+            value={query}
+            onChange={(e) => changeList(setQuery, e.target.value)}
+            placeholder="搜索称号"
+            aria-label="搜索称号"
+          />
+          {query && (
+            <button aria-label="清空搜索" onClick={() => changeList(setQuery, "")}>
+              <X size={14} />
+            </button>
+          )}
+        </label>
+        <select
+          aria-label="称号排序"
+          className={winter ? "album-sort" : undefined}
+          onKeyDownCapture={winter ? e => {
+            if (e.key === "Escape" && e.currentTarget.matches(":open")) e.stopPropagation();
+          } : undefined}
+          value={sort}
+          onChange={(e) => changeList(setSort, e.target.value)}
+        >
+          <option value="recent">最近获得</option>
+          <option value="name">名称排序</option>
+        </select>
+      </div>
+    </>
+  );
+  const emptyState = (
+    <div className="empty-state">
+      <Search size={27} />
+      <h3>没有找到这个称号</h3>
+      <p>换个关键词，或查看全部称号。</p>
+      <button
+        className="btn subtle"
+        onClick={() => {
+          changeList(setQuery, "");
+          setFilter("all");
+        }}
+      >
+        查看全部
+      </button>
+    </div>
+  );
+  const equipButton = t?.owned ? (
+    <button
+      className={`btn ${state.equipped === t.id ? "equipped-btn" : "primary"}`}
+      onClick={() =>
+        state.equipped === t.id
+          ? (update({ equipped: null }), notify("已摘下称号"))
+          : equip(t)
+      }
+    >
+      {state.equipped === t.id ? (
+        <>
+          <Check size={16} />
+          已佩戴 · 点击摘下
+        </>
+      ) : (
+        <>
+          佩戴这个称号
+          <ArrowRight size={16} />
+        </>
+      )}
+    </button>
+  ) : (
+    <button className="btn" disabled>
+      <Lock size={15} />
+      尚未获得
+    </button>
+  );
+  function changeTitleVisibility(visible) {
+    update({ visible });
+    notify(visible ? "已开启称号展示" : "已隐藏称号展示，佩戴状态保留");
+  }
+  const visibility = winter ? (
+    <button type="button" className="album-visibility" role="switch"
+      aria-label="展示给其他玩家" aria-checked={state.visible}
+      title={state.visible ? "其他玩家可见，点击隐藏" : "称号已隐藏，点击公开"}
+      onClick={() => changeTitleVisibility(!state.visible)}>
+      {state.visible ? <Eye size={17} /> : <EyeOff size={17} />}
+    </button>
+  ) : (
+    <div className="visibility-control">
+      <div>
+        <span>展示给其他玩家</span>
+        <small>
+          {state.visible
+            ? "佩戴后在游戏中展示"
+            : "已隐藏展示，佩戴状态保留"}
+        </small>
+      </div>
+      <Toggle
+        checked={state.visible}
+        onChange={changeTitleVisibility}
+        label="展示给其他玩家"
+      />
+    </div>
+  );
+  if (winter) {
+    return <WinterTitleCase title={t} items={list} onSelect={setSelected}
+      equipped={state.equipped} visible={state.visible} toolbar={toolbar}
+      listKey={JSON.stringify([filter, sort, query.trim()])} reduceMotion={reduceMotion}
+      emptyState={emptyState} equipButton={equipButton} visibility={visibility} titleText={<TitleText title={t} />} />;
+  }
   return (
     <>
       <div className="page-heading">
@@ -1106,54 +1530,7 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
       </div>
       <div className="titles-layout">
         <section className="titles-browser">
-          <div className="browser-toolbar">
-            <div className="segmented">
-              {[
-                ["owned", "已拥有"],
-                ["all", "全部"],
-                ["locked", "未获得"],
-              ].map(([id, label]) => (
-                <button
-                  className={filter === id ? "selected" : ""}
-                  key={id}
-                  aria-pressed={filter === id}
-                  onClick={() => setFilter(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <IconButton
-              label={compact ? "切换卡片显示" : "切换紧凑显示"}
-              onClick={() => setCompact(!compact)}
-            >
-              {compact ? <Grid2X2 size={18} /> : <List size={18} />}
-            </IconButton>
-          </div>
-          <div className="search-row">
-            <label className="search">
-              <Search size={16} />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索称号"
-                aria-label="搜索称号"
-              />
-              {query && (
-                <button aria-label="清空搜索" onClick={() => setQuery("")}>
-                  <X size={14} />
-                </button>
-              )}
-            </label>
-            <select
-              aria-label="称号排序"
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-            >
-              <option value="recent">最近获得</option>
-              <option value="name">名称排序</option>
-            </select>
-          </div>
+          {toolbar}
           <div className={`title-grid ${compact ? "compact" : ""}`}>
             {list.map((item) => (
               <TiltedCard
@@ -1190,22 +1567,7 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
               </TiltedCard>
             ))}
           </div>
-          {!list.length && (
-            <div className="empty-state">
-              <Search size={27} />
-              <h3>没有找到这个称号</h3>
-              <p>换个关键词，或查看全部称号。</p>
-              <button
-                className="btn subtle"
-                onClick={() => {
-                  setQuery("");
-                  setFilter("all");
-                }}
-              >
-                查看全部
-              </button>
-            </div>
-          )}
+          {!list.length && emptyState}
           <p className="list-summary">
             {list.length} 枚称号 ·{" "}
             {filter === "locked"
@@ -1245,51 +1607,8 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
             {t.owned && <div className="acquired-date"><CalendarDays size={13} /><span>{t.date}</span><span>获得</span></div>}
           </div>
           <div className="equip-controls">
-            {t.owned ? (
-              <button
-                className={`btn ${state.equipped === t.id ? "equipped-btn" : "primary"}`}
-                onClick={() =>
-                  state.equipped === t.id
-                    ? (update({ equipped: null }), notify("已摘下称号"))
-                    : equip(t)
-                }
-              >
-                {state.equipped === t.id ? (
-                  <>
-                    <Check size={16} />
-                    已佩戴 · 点击摘下
-                  </>
-                ) : (
-                  <>
-                    佩戴这个称号
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            ) : (
-              <button className="btn" disabled>
-                <Lock size={15} />
-                尚未获得
-              </button>
-            )}
-            <div className="visibility-control">
-              <div>
-                <span>展示给其他玩家</span>
-                <small>
-                  {state.visible
-                    ? "佩戴后在游戏中展示"
-                    : "已隐藏展示，佩戴状态保留"}
-                </small>
-              </div>
-              <Toggle
-                checked={state.visible}
-                onChange={(v) => {
-                  update({ visible: v });
-                  notify(v ? "已开启称号展示" : "已隐藏称号展示，佩戴状态保留");
-                }}
-                label="展示给其他玩家"
-              />
-            </div>
+            {equipButton}
+            {visibility}
           </div>
         </aside>
       </div>
@@ -1298,7 +1617,8 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
 }
 
 function FortunesPage({ archive, state, setReading, update, notify }) {
-  const [month, setMonth] = useState(new Date(2026, 10, 1));
+  const currentMonth = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+  const [month, setMonth] = useState(currentMonth);
   const [monthDirection, setMonthDirection] = useState(1);
   const [selected, setSelected] = useState(todayKey);
   const [mode, setMode] = useState("calendar");
@@ -1310,6 +1630,13 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
   const start = month.getDay();
   const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const cells = Math.ceil((start + days) / 7) * 7;
+  const dates = Array.from({ length: cells }, (_, i) => {
+    const day = i - start + 1;
+    if (day < 1 || day > days) return null;
+    const value = new Date(month.getFullYear(), month.getMonth(), day);
+    const key = dateKey(value);
+    return { day, key, f: archive[key], future: value > TODAY };
+  });
   const shift = (amount) => {
     const d = new Date(month.getFullYear(), month.getMonth() + amount, 1);
     setMonthDirection(Math.sign(amount));
@@ -1318,6 +1645,21 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
     setSelected(Object.keys(archive).filter(date => date.startsWith(prefix)).sort().at(-1) || dateKey(d));
   };
   const display = archive[state.displayDate];
+  const returnToToday = () => {
+    setMonthDirection(1);
+    setMonth(currentMonth);
+    setSelected(todayKey);
+  };
+  const showSelected = async () => {
+    if (!selectedFortune || state.displayDate === selected) return;
+    if (await update({ displayDate: selected })) notify("已更新手册展示的签笺");
+  };
+  if (state.homeStyle === "winter") {
+    return <WinterFortuneCounter month={month} dates={dates} stored={stored} total={Object.keys(archive).length}
+      selected={selected} fortune={selectedFortune} display={display} mode={mode} monthDirection={monthDirection}
+      atCurrentMonth={month >= currentMonth} onMonth={shift} onToday={returnToToday} onMode={setMode}
+      onSelect={setSelected} onRead={setReading} onDisplay={showSelected} />;
+  }
   return (
     <>
       <div className="page-heading">
@@ -1342,11 +1684,7 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
             <div className="calendar-controls">
               <button
                 className="text-button"
-                onClick={() => {
-                  setMonthDirection(1);
-                  setMonth(new Date(2026, 10, 1));
-                  setSelected(todayKey);
-                }}
+                onClick={returnToToday}
               >
                 本月
               </button>
@@ -1355,7 +1693,7 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
               </IconButton>
               <IconButton
                 label="下个月"
-                disabled={month.getTime() >= new Date(2026, 10, 1).getTime()}
+                disabled={month >= currentMonth}
                 onClick={() => shift(1)}
               >
                 <ChevronRight size={18} />
@@ -1385,18 +1723,9 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
                 ))}
               </div>
               <div className="calendar-grid">
-                {Array.from({ length: cells }, (_, i) => {
-                  const day = i - start + 1;
-                  if (day < 1 || day > days)
-                    return <span className="calendar-blank" key={i} />;
-                  const d = new Date(
-                      month.getFullYear(),
-                      month.getMonth(),
-                      day,
-                    ),
-                    key = dateKey(d),
-                    f = archive[key],
-                    future = d > TODAY;
+                {dates.map((entry, i) => {
+                  if (!entry) return <span className="calendar-blank" key={i} />;
+                  const { day, key, f, future } = entry;
                   return (
                     <button
                       key={key}
@@ -1542,11 +1871,7 @@ function FortunesPage({ archive, state, setReading, update, notify }) {
         <button
           className="btn subtle"
           disabled={!selectedFortune || state.displayDate === selected}
-          onClick={async () => {
-            if (selectedFortune) {
-              if (await update({ displayDate: selected })) notify("已更新手册展示的签笺");
-            } else notify("请先选择一张已收藏的签笺");
-          }}
+          onClick={showSelected}
         >
           {state.displayDate === selected ? "当前选择已展示" : "展示选中的签"}
           {state.displayDate === selected ? <Check size={15} /> : <ArrowUpRight size={15} />}

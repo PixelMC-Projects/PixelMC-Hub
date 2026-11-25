@@ -210,7 +210,7 @@ export default function MemoryNote({ player, archive, reduceMotion = false, noti
           <p>{supplement.text}</p>
           {confirmingId === supplement.id && <div className="memory-delete-confirm" role="group" aria-label="确认删除补记">
             <span>删除这条补记？</span><div>
-              <button ref={confirmCancelRef} type="button" className="community-button subtle" disabled={Boolean(deletingId)} onClick={() => cancelDelete(supplement.id)}>取消</button>
+              <button ref={confirmCancelRef} data-memory-cancel type="button" className="community-button subtle" disabled={Boolean(deletingId)} onClick={() => cancelDelete(supplement.id)}>取消</button>
               <button type="button" className="community-button memory-delete-confirm-action" disabled={Boolean(deletingId)} onClick={() => removeSupplement(supplement)}>{deletingId === supplement.id ? '删除中…' : '删除'}</button>
             </div>
           </div>}
@@ -228,7 +228,7 @@ export default function MemoryNote({ player, archive, reduceMotion = false, noti
         </div>
         <div className="memory-editor-footer">
           <span id={`${editorId}-hint`}>{draft.length} / {limit}{archived ? ' · 创建后24小时内可删除' : ' 字'}</span>
-          <div><button type="button" className="community-button subtle" disabled={saving} onClick={closeEditor}>取消</button>
+          <div><button type="button" className="community-button subtle" data-memory-cancel disabled={saving} onClick={closeEditor}>取消</button>
             <button type="submit" className="community-button primary" disabled={saving || !draft.trim() || Boolean(stored.error)}><Check size={13} />{saving ? '保存中…' : archived ? '保存补记' : '保存回忆'}</button></div>
         </div>
       </motion.form>}

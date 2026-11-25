@@ -14,7 +14,10 @@ import com.pixelmc.hub.network.HubUpdatesDelta;
 import java.util.*;
 import net.minecraft.client.Minecraft;
 
-/** Connection-owned data; hiding the panel never closes this session. Logout invalidates all callbacks. */
+/**
+ * Connection-owned data; hiding the panel never closes this session. Logout invalidates all
+ * callbacks.
+ */
 public final class ClientHubSession {
     private static ClientHubSession current;
     private final long generation = java.util.concurrent.ThreadLocalRandom.current().nextLong();
@@ -35,6 +38,7 @@ public final class ClientHubSession {
     private final Map<String, Long> updatesLoads = new HashMap<>();
     private final Set<String> updatesFallback = new HashSet<>();
     private String updatesScope = "";
+    private LegacyStationNotices stationNotices;
     private boolean updatesIncremental, managerScopeResolved, updatesDeferred;
     private long updateLoadEpoch, updateLoadSequence;
     private final java.util.concurrent.Executor io, client;
@@ -126,13 +130,16 @@ public final class ClientHubSession {
         this.transport = transport;
         this.nanoTime = nanoTime;
         view.live(this::action);
+        view.setStationSharedCounts(Map.of());
     }
 
     public static void open(HubView view) {
         if (current != null && current.view == view) return;
         close();
         current = new ClientHubSession(view);
-        var connection = Minecraft.getInstance().getConnection();
+        var minecraft = Minecraft.getInstance();
+        if (minecraft.player != null) view.setSessionPlayerId(minecraft.player.getUUID());
+        var connection = minecraft.getConnection();
         if (connection == null || !HubNetwork.CHANNEL.isRemotePresent(connection.getConnection())) {
             for (String module : HubProtocol.PROVIDERS.keySet())
                 view.moduleStatus(module, "服务器未启用手册连接");
@@ -149,11 +156,13 @@ public final class ClientHubSession {
             old.incoming.clear();
             old.fragments.clear();
             old.communityMemory.clear();
+            old.view.setStationSharedCounts(Map.of());
             old.communityRequests.clear();
             old.communityDirty = false;
             old.rankingRequests.clear();
             old.rankingsDirty = 0;
             old.queue.clear("updates");
+            old.stationNotices = null;
             old.updatesMemory.clear();
             old.updatesBases.clear();
             old.updatesLoads.clear();
@@ -187,11 +196,13 @@ public final class ClientHubSession {
             return;
         }
         for (String module : session.available)
-            if (!session.view.hasModuleSnapshot(module))
+            if (!module.equals("updates") && !session.view.hasModuleSnapshot(module))
                 session.send(module, "snapshot", new JsonObject());
     }
 
-    /** Optional client-thread callback from MemorialTitles' existing display/reset sync. No IO here. */
+    /**
+     * Optional client-thread callback from MemorialTitles' existing display/reset sync. No IO here.
+     */
     public static void titlesChanged() {
         ClientHubSession session = current;
         if (session != null) session.invalidate("titles");
@@ -226,6 +237,29 @@ public final class ClientHubSession {
         session.communityVersion++;
         session.communityDirty = true;
         session.communityMemory.clear();
+    }
+
+    private static Map<String, Integer> stationSharedCounts(JsonObject snapshot) {
+        var field = snapshot.get("sharedArchiveCounts");
+        if (field == null || !field.isJsonObject()) return Map.of();
+        JsonObject counts = field.getAsJsonObject();
+        if (counts.size() > 128) return Map.of();
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (var entry : counts.entrySet()) {
+            String id = entry.getKey();
+            var count = entry.getValue();
+            if (id.length() != 36
+                    || !count.isJsonPrimitive()
+                    || !count.getAsJsonPrimitive().isNumber()) continue;
+            try {
+                if (!UUID.fromString(id).toString().equals(id)) continue;
+                int value = count.getAsBigDecimal().intValueExact();
+                if (value >= 0) result.put(id, value);
+            } catch (IllegalArgumentException | ArithmeticException invalid) {
+                // Ignore an invalid optional peer entry and retain the rest of the snapshot.
+            }
+        }
+        return result;
     }
 
     private void rememberCommunity(String action, JsonObject query, JsonObject result) {
@@ -264,6 +298,7 @@ public final class ClientHubSession {
         if (available.contains(module)) {
             if (module.equals("updates")) {
                 invalidateUpdateReadLoads();
+                if (stationNotices != null && stationNotices.pending()) stationNotices = null;
                 if (!queue.writing(module)) queue.invalidateReads(module);
             }
             refresh.invalidate(module, nanoTime.getAsLong());
@@ -277,6 +312,10 @@ public final class ClientHubSession {
         session.fragments.expire(now);
         for (var p : session.queue.expire(now)) {
             session.fragments.remove(p.id());
+            if (p.stationList()) {
+                session.failStationNotices();
+                continue;
+            }
             session.finishRanking(p, session.rankingRequests.remove(p.id()));
             session.calendarBases.remove(p.id());
             session.updatesBases.remove(p.id());
@@ -284,7 +323,11 @@ public final class ClientHubSession {
             if (p.module().equals("community")) {
                 if (p.write()) session.failedCommunityWrite();
                 session.view.communityFailure(p.action(), "请求超时，请稍后重试", p.payload());
-            } else session.error(p.module(), "请求超时，请稍后重试");
+            } else {
+                if (HubProtocol.isUpdateReceipt(p.module(), p.action()))
+                    session.view.updatesFailure(p.action(), p.payload(), "请求超时，请稍后重试");
+                session.error(p.module(), "请求超时，请稍后重试");
+            }
         }
         session.updatesBases.keySet().retainAll(session.queue.pendingIds());
         session.communityRequests.keySet().retainAll(session.queue.pendingIds());
@@ -324,6 +367,7 @@ public final class ClientHubSession {
             if (session.panelVisible) session.view.refreshCommunity();
         }
         session.drain();
+        session.requestStationNotices(now);
     }
 
     private long clockMillis(long now) {
@@ -495,6 +539,12 @@ public final class ClientHubSession {
         try {
             io.execute(
                     () -> {
+                        JsonObject page = copy.has("list") ? copy.getAsJsonObject("list") : copy;
+                        page.remove("seenThrough");
+                        if (page.has("rows"))
+                            for (var row : page.getAsJsonArray("rows"))
+                                row.getAsJsonObject().remove("unread");
+                        if (copy.has("entry")) copy.getAsJsonObject("entry").remove("unread");
                         updatesDisk.save(scope, key, copy);
                         if (copy.has("entry")) {
                             JsonObject id = new JsonObject();
@@ -514,6 +564,7 @@ public final class ClientHubSession {
     }
 
     private void purgeUpdates() {
+        stationNotices = null;
         updatesMemory.clear();
         updatesBases.clear();
         updatesLoads.clear();
@@ -537,6 +588,7 @@ public final class ClientHubSession {
         boolean first = !managerScopeResolved, changed = !updatesScope.equals(scope);
         managerScopeResolved = true;
         if (!updatesScope.equals(scope)) {
+            stationNotices = null;
             updatesMemory.clear();
             updatesBases.clear();
             updatesLoads.clear();
@@ -552,6 +604,52 @@ public final class ClientHubSession {
             updatesDeferred = false;
             send("updates", "snapshot", new JsonObject());
         }
+    }
+
+    private void prepareStationNotices(JsonObject snapshot) {
+        queue.cancelStationNotices();
+        LegacyStationNotices scan = LegacyStationNotices.begin(snapshot);
+        if (scan != null
+                && (scan.pending() || scan.complete())
+                && stationNotices != null
+                && stationNotices.complete()
+                && stationNotices.sameRevision(scan)) scan = stationNotices;
+        stationNotices = scan;
+        if (scan != null) {
+            JsonObject feed = scan.viewResult();
+            snapshot.add("stationNotices", feed.get("rows"));
+            snapshot.addProperty("_hubStationNoticeState", feed.get("state").getAsString());
+        }
+    }
+
+    private void requestStationNotices(long now) {
+        if (!panelVisible
+                || !view.winter()
+                || stationNotices == null
+                || !stationNotices.pending()
+                || queue.writing("updates")
+                || queue.readingStationNotices()
+                || now < nextSendAt) return;
+        try {
+            // A background read joins the existing rate limit and has a separate queue key.
+            queue.offerStationNotices(stationNotices.query(), now);
+        } catch (IllegalStateException busy) {
+            return;
+        }
+        drain();
+    }
+
+    private void acceptStationNotices(JsonObject result) {
+        if (stationNotices == null || !stationNotices.pending()) return;
+        stationNotices.accept(result);
+        if (!stationNotices.pending())
+            view.acceptLive("updates", "stationNotices", stationNotices.viewResult());
+    }
+
+    private void failStationNotices() {
+        if (stationNotices == null || !stationNotices.pending()) return;
+        stationNotices.fail();
+        view.acceptLive("updates", "stationNotices", stationNotices.viewResult());
     }
 
     private boolean sendUpdate(String action, JsonObject payload) {
@@ -612,6 +710,10 @@ public final class ClientHubSession {
     }
 
     private boolean send(String module, String action, JsonObject payload) {
+        if (module.equals("updates") && action.equals("snapshot")) {
+            queue.cancelStationNotices();
+            if (stationNotices != null && stationNotices.pending()) stationNotices = null;
+        }
         if (module.equals("updates") && updatesIncremental && updatesRead(action))
             return sendUpdate(action, payload);
         return sendRaw(module, action, payload);
@@ -630,7 +732,11 @@ public final class ClientHubSession {
         } catch (IllegalStateException busy) {
             if (module.equals("community"))
                 view.communityFailure(action, busy.getMessage(), payload);
-            else view.feedback(busy.getMessage());
+            else {
+                if (HubProtocol.isUpdateReceipt(module, action))
+                    view.updatesFailure(action, payload, busy.getMessage());
+                view.feedback(busy.getMessage());
+            }
             return false;
         }
     }
@@ -666,6 +772,10 @@ public final class ClientHubSession {
                 queue.complete(p.id(), p.module(), p.action());
                 communityRequests.remove(p.id());
                 rankingRequests.remove(p.id());
+                if (p.stationList()) {
+                    failStationNotices();
+                    continue;
+                }
                 if (p.write()) view.pending(p.module(), false);
                 if (p.module().equals("community")) {
                     if (p.write()) failedCommunityWrite();
@@ -712,6 +822,10 @@ public final class ClientHubSession {
             session.fragments.remove(part.id());
             var ticket = session.queue.complete(part.id(), "updates", part.action());
             if (ticket != null) {
+                if (ticket.stationList()) {
+                    session.failStationNotices();
+                    return;
+                }
                 if (ticket.write()) session.view.pending("updates", false);
                 session.error("updates", "更新日志同步失败，请重新读取");
             }
@@ -732,8 +846,15 @@ public final class ClientHubSession {
                                         response.payload(),
                                         HubProtocol.maximumResponse(response.module())));
             } catch (RuntimeException invalid) {
+                boolean stationResponse =
+                        session.queue.stationNoticeResponse(
+                                response.id(), response.module(), response.action());
                 var failed =
                         session.queue.complete(response.id(), response.module(), response.action());
+                if (stationResponse) {
+                    if (failed != null) session.failStationNotices();
+                    return;
+                }
                 long[] captured = session.rankingRequests.remove(response.id());
                 if (failed != null) {
                     session.finishRanking(failed, captured);
@@ -762,6 +883,17 @@ public final class ClientHubSession {
         long[] rankingVersion = session.rankingRequests.remove(response.id());
         Long communityVersion = session.communityRequests.remove(response.id());
         if (ticket == null) return;
+        if (ticket.stationList()) {
+            if (response.success()) session.acceptStationNotices(result);
+            else if (response.payload().contains("不可见")
+                    || response.payload().contains("入口暂未开放")
+                    || response.payload().contains("会话已失效")
+                    || response.payload().contains("只接受已入服玩家")) {
+                session.purgeUpdates();
+                session.invalidate("updates");
+            } else session.failStationNotices();
+            return;
+        }
         String module = ticket.module(), action = ticket.action();
         boolean updateSync = HubProtocol.updatesSync(module, action);
         if (updateSync) action = HubProtocol.updatesPlain(action);
@@ -848,6 +980,7 @@ public final class ClientHubSession {
                         && result.getAsJsonObject("settings").has("updatesEnabled")
                         && !result.getAsJsonObject("settings").get("updatesEnabled").getAsBoolean())
                     session.purgeUpdates();
+                if (action.equals("snapshot")) session.prepareStationNotices(result);
             }
             if (module.equals("manager")) session.resolveUpdatesScope(result);
             session.view.moduleStatus(module, "");
@@ -878,6 +1011,8 @@ public final class ClientHubSession {
                         return;
                     }
                     session.rememberCommunity(action, ticket.payload(), result);
+                    if (action.equals("snapshot"))
+                        session.view.setStationSharedCounts(stationSharedCounts(result));
                     if (action.equals("snapshot") && result.has("profile")) {
                         String owner =
                                 result.getAsJsonObject("profile").get("playerId").getAsString();
@@ -885,6 +1020,7 @@ public final class ClientHubSession {
                         query.addProperty("playerId", owner);
                         JsonObject profile = result.deepCopy();
                         profile.remove("memories");
+                        profile.remove("sharedArchiveCounts");
                         session.rememberCommunity("profile", query, profile);
                         if (result.has("memories") && result.get("memories").isJsonObject()) {
                             query.addProperty("page", 0);

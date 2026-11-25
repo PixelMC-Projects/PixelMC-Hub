@@ -1,0 +1,42 @@
+.wz-page { position:relative; }
+.wz-page[data-guide="0"][data-guide-leaving] .wz-body { animation:wz-home-arrives .32s cubic-bezier(.22,.75,.28,1) both; }
+.wz-page[data-guide="0"][data-guide-leaving] .wz-guide-welcome { animation:wz-guide-departs .25s ease-in both; }
+@keyframes wz-home-arrives { from { opacity:.6; transform:translateY(7px); } to { opacity:1; transform:none; } }
+@keyframes wz-guide-departs { to { opacity:0; transform:translateY(-6px); } }
+.wz-guide-links { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; }
+.wz-page .wz-guide-links .wz-terms-link { margin:1px 0 0; }
+.wz-first-guide { position:absolute; inset:0; z-index:16; overflow:hidden; isolation:isolate; color:var(--wz-ink); }
+.wz-first-guide.is-welcome { display:grid; place-items:center; background:radial-gradient(ellipse at 24% 18%,#d9edf7,transparent 56%),radial-gradient(ellipse at 84% 85%,#eae2fa,transparent 55%),#f5f7fc; }
+html[data-theme="dark"] .wz-first-guide.is-welcome { background:radial-gradient(ellipse at 24% 18%,#283c51,transparent 56%),radial-gradient(ellipse at 84% 85%,#39304c,transparent 55%),#1d2230; }
+.wz-guide-welcome { display:grid; justify-items:center; gap:12px; text-align:center; }
+.wz-guide-emblem { width:145px; position:relative; padding-bottom:15px; }
+.wz-guide-emblem .wz-mascot { width:130px; margin:auto; animation:wz-boat-arrives .9s cubic-bezier(.18,.7,.22,1) both; }
+.wz-guide-emblem svg { position:absolute; left:0; bottom:0; width:100%; color:var(--wz-blue); }
+.wz-guide-emblem path { stroke:currentColor; opacity:.48; stroke-width:1.5; stroke-linecap:round; stroke-dasharray:1; animation:wz-wake .8s ease-out both; }
+.wz-guide-welcome h1 { margin:0; font-size:32px; letter-spacing:.12em; animation:wz-guide-rise .36s .25s both; }
+.wz-welcome-intro { margin:0; padding:0 16px; color:var(--wz-muted); font-size:14px; line-height:1.6; text-wrap:balance; animation:wz-guide-rise .32s .36s both; }
+.wz-welcome-actions { display:flex; gap:10px; margin-top:8px; animation:wz-guide-rise .35s .52s both; }
+.wz-first-guide button { cursor:pointer; border-radius:10px; font:inherit; border:1px solid var(--wz-rule); padding:7px 13px; background:var(--surface); }
+.wz-welcome-actions button { padding:10px 22px; font-size:14px; font-weight:600; }
+.wz-page .wz-guide-primary { color:var(--surface); background:var(--wz-blue); border-color:transparent; }
+.wz-first-guide button:hover { filter:brightness(.95); }
+.wz-guide-cutout { position:absolute; border:1.5px solid var(--wz-blue); border-radius:13px; box-shadow:0 0 0 300vmax rgb(26 35 50 / 41%); transition:top .25s,left .25s,width .25s,height .25s; pointer-events:none; }
+.wz-guide-card { position:absolute; width:min(310px,calc(100% - 20px)); padding:16px 18px 13px; border-radius:16px; background:var(--surface); color:var(--wz-ink); border:1px solid var(--wz-rule); transition:top .25s,left .25s; }
+.wz-guide-caption,.wz-guide-controls { display:flex; align-items:center; gap:6px; }
+.wz-guide-caption { color:var(--wz-muted); font-size:12px; }
+.wz-guide-caption small { margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums; }
+.wz-guide-card h2 { margin:8px 0 4px; font-size:18px; }
+.wz-guide-card p { margin:0; color:var(--wz-muted); font-size:13px; line-height:1.6; }
+.wz-guide-controls { margin-top:12px; font-size:12px; }
+.wz-guide-controls span { flex:1; }
+.wz-guide-controls button { padding:5px 8px; }
+.wz-guide-controls button:first-child { padding-left:0; color:var(--wz-muted); background:transparent; border-color:transparent; }
+.wz-lesson-copy,.wz-page[data-guide="5"] [data-guide-target="new"] { animation:wz-guide-rise .25s both; }
+.wz-page[data-guide="5"][data-guide-leaving] [data-guide-preview-only] { animation:wz-guide-fade .25s ease-out forwards; }
+@keyframes wz-guide-fade { to { opacity:0; } }
+.wz-first-guide :is(h1,h2):focus { outline:0; }
+@keyframes wz-boat-arrives { from {opacity:0;transform:translate(-22px,9px) rotate(-7deg)} to {opacity:1;transform:none} }
+@keyframes wz-wake { from {stroke-dashoffset:1} to {stroke-dashoffset:0} }
+@keyframes wz-guide-rise { from {opacity:0;transform:translateY(6px)} to {opacity:1;transform:none} }
+html[data-motion="reduced"] :is(.wz-first-guide *,[data-guide-target="new"]) { animation:none!important;transition:none!important; }
+@media(prefers-reduced-motion:reduce){.wz-first-guide *, .wz-page[data-guide="5"] [data-guide-target="new"] { animation:none!important; transition:none!important; }}

@@ -944,7 +944,7 @@ const GlassIcons = ({
             key={item.id ?? index}
             className={`glass-icon${item.className ? ` ${item.className}` : ''}`}
             data-glass-icon=""
-            aria-label={item.label}
+            aria-label={item.ariaLabel ?? item.label}
             aria-current={item.current ? "page" : undefined}
             {...(item.href
               ? { href: item.href, target: item.target, rel: item.target === '_blank' ? 'noreferrer' : undefined }

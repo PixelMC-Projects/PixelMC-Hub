@@ -1,0 +1,15 @@
+.wz-reminders { position:absolute; left:clamp(14px,2.2vw,24px); bottom:clamp(14px,2.2vw,24px); z-index:4; }
+.wz-reminder-trigger, .wz-reminder-panel { border:1px solid var(--wz-rule); background:var(--surface); box-shadow:0 4px 16px #25365415; }
+.wz-page .wz-reminder-trigger { display:grid; place-items:center; width:40px; height:40px; padding:0; border-radius:50%; color:var(--wz-muted); transition:color .16s,transform .16s,box-shadow .16s; }
+.wz-reminder-trigger svg { transition:transform .2s ease-out; }
+.wz-page .wz-reminder-trigger:is(:hover,[aria-expanded="true"]) { color:var(--wz-blue); box-shadow:0 5px 18px #25365424; }
+html:not([data-motion="reduced"]) .wz-reminder-trigger:is(:hover,[aria-expanded="true"]) svg { transform:rotate(24deg); }
+html:not([data-motion="reduced"]) .wz-reminder-trigger:active { transform:scale(.95); }
+.wz-reminder-panel { position:absolute; left:0; bottom:calc(100% + 10px); width:min(282px,calc(100cqw - 36px)); border-radius:16px; padding:16px; }
+.wz-reminder-panel h2 { margin:0 0 8px; font-size:15px; }
+.wz-reminder-panel button { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; text-align:left; }
+.wz-reminder-panel button + button { border-top:1px solid var(--wz-rule); }
+.wz-reminder-panel button:last-child { padding-bottom:2px; }
+.wz-reminder-panel strong, .wz-reminder-panel small { display:block; }
+.wz-reminder-panel strong { font-size:13px; font-weight:600; }
+.wz-reminder-panel small { margin-top:4px; font-size:12px; color:var(--wz-muted); }

@@ -181,6 +181,10 @@ final class HubMotion {
         boolean initialized;
 
         float sample(float next, long now, long duration, boolean reduced) {
+            return sample(next, now, duration, reduced, false);
+        }
+
+        float sample(float next, long now, long duration, boolean reduced, boolean easeOut) {
             if (!initialized) {
                 initialized = true;
                 target = next;
@@ -194,7 +198,7 @@ final class HubMotion {
                             runDuration <= 0
                                     ? 1
                                     : clamp((float) (now - started) / runDuration, 0, 1),
-                    timing = ease(current);
+                    timing = easeOut ? HubMotion.easeOut(current) : ease(current);
             value = from + (target - from) * timing;
             if (next != target) {
                 // CSS Transitions 1, starting/reversing transitions: returning to

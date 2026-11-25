@@ -111,6 +111,18 @@ html[data-theme="dark"] .server-icon {
 }
 html[data-theme="dark"] .server-card i,
 html[data-theme="dark"] .connected > span { background: var(--hub-success); }
+html[data-theme="dark"] .server-card i.is-preview { background: #b197fc; }
+html[data-theme="dark"] .server-card i.is-paused { background: #6b768f; }
+html[data-theme="dark"] button.server-card:hover { background: #acbfff0f; }
+html[data-theme="dark"] .sync-revoke-btn {
+  color: #f095a3;
+  background: #ee89981c;
+  border-color: #ee89984d;
+}
+html[data-theme="dark"] .sync-revoke-btn:hover {
+  background: #ee89982e;
+  border-color: #ee899880;
+}
 html[data-theme="dark"] :is(.topbar-path strong, .connected) { color: var(--hub-text-secondary); }
 html[data-theme="dark"] .hub-navigation .glass-icon-label { color: #bac5dd; }
 html[data-theme="dark"] .hub-navigation .glass-icon:hover::before { background: #acbfff0c; }

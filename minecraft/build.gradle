@@ -178,3 +178,70 @@ tasks.register('sessionCacheChecks', JavaExec) {
     mainClass = 'com.pixelmc.hub.client.SessionCacheChecks'
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
 }
+
+tasks.register('updatesSessionChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.UpdatesSessionChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativeUpdatesChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeUpdatesChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.register('hubTextEditorChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.ui.HubTextEditorChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('updatesCacheChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.UpdatesCacheChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativeTerraChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeTerraChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativeWarmupChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeWarmupChecks'
+    args 'comparison', 'C:/Users/Administrator/Documents/ChatGPT/服务器综合/outputs/playerhub-render-warmup-20261105'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativeWarmupStartupChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.render.NativeWarmupChecks'
+    args 'startup', 'C:/Users/Administrator/Documents/ChatGPT/服务器综合/outputs/playerhub-render-warmup-20261105'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('nativeRankingsChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.ui.NativeRankingsChecks'
+    args project.findProperty('rankingsOutput') ?: '../.runtime/native-previews/rankings'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.register('rankingsSessionChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.RankingsSessionChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.register('winterStationChecks', JavaExec) {
+    dependsOn 'renderChecksClasses'
+    classpath = sourceSets.renderChecks.runtimeClasspath
+    mainClass = 'com.pixelmc.hub.client.ui.WinterStationChecks'
+    args project.findProperty('stationOutput') ?: '../.runtime/native-previews/winter-station'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
