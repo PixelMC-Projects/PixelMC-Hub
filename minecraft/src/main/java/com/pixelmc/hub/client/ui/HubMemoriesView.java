@@ -614,7 +614,7 @@ public final class HubMemoriesView {
             shelfTop = frameTop + (paper == null ? 0 : 45.9f);
             archiveStep = paper == null ? 153 : 103;
             readerX = layoutLeft + archiveColumnWidth + (paper == null ? 22 : 0);
-            readerWidth = layoutLeft + layoutWidth - readerX - (paper == null ? 0 : 6);
+            readerWidth = layoutLeft + layoutWidth - readerX - (paper == null ? 0 : 5);
             mx = mouseX;
             my = mouseY;
             focused = focus == null ? "" : focus;
@@ -636,7 +636,12 @@ public final class HubMemoriesView {
             }
             drawHeader();
             if (!loaded) {
-                empty(layoutLeft, frameTop, layoutWidth, viewportHeight, status.isBlank() ? "旅途资料暂不可用" : status);
+                empty(
+                        layoutLeft,
+                        frameTop,
+                        layoutWidth,
+                        viewportHeight,
+                        status.isBlank() ? "旅途资料暂不可用" : status);
                 button(
                         "memories-retry",
                         "重新读取",
@@ -651,15 +656,26 @@ public final class HubMemoriesView {
                 return;
             }
             if (paper != null) {
-                d.roundRect(layoutLeft, frameTop - 3, layoutWidth, viewportHeight + 12, 19, paper.ruling());
-                d.roundRect(layoutLeft, frameTop - 6, layoutWidth, viewportHeight + 12, 19, paper.coverBase());
+                d.roundRect(
+                        layoutLeft,
+                        frameTop - 3,
+                        layoutWidth,
+                        viewportHeight + 12,
+                        19,
+                        paper.ruling());
+                d.roundRect(
+                        layoutLeft,
+                        frameTop - 6,
+                        layoutWidth,
+                        viewportHeight + 12,
+                        19,
+                        paper.coverBase());
                 d.strokeRoundRect(
-                        layoutLeft, frameTop - 6, layoutWidth, viewportHeight + 12, 19, 1, paper.stitch());
-                d.line(
-                        readerX - .5f,
-                        frameTop,
-                        readerX - .5f,
-                        frameTop + viewportHeight,
+                        layoutLeft,
+                        frameTop - 6,
+                        layoutWidth,
+                        viewportHeight + 12,
+                        19,
                         1,
                         paper.stitch());
                 d.save();
@@ -667,7 +683,16 @@ public final class HubMemoriesView {
             }
             drawArchiveList();
             drawReader();
-            if (paper != null) d.restore();
+            if (paper != null) {
+                d.line(
+                        readerX - .5f,
+                        frameTop,
+                        readerX - .5f,
+                        frameTop + viewportHeight,
+                        1,
+                        paper.stitch());
+                d.restore();
+            }
             d = null;
         } finally {
             draw.literalColors(previousColors);
@@ -705,7 +730,14 @@ public final class HubMemoriesView {
         d.roundRect(layoutLeft, backY, 35, 35, 11, surface());
         d.strokeRoundRect(layoutLeft, backY, 35, 35, 11, 1, border());
         d.icon("arrow-left", layoutLeft + 7.5f, backY + 7.5f, 20, muted());
-        host.hit("memories-back", paper != null ? "返回上一页" : "返回个人主页", layoutLeft, backY, 35, 35, host::back);
+        host.hit(
+                "memories-back",
+                paper != null ? "返回上一页" : "返回个人主页",
+                layoutLeft,
+                backY,
+                35,
+                35,
+                host::back);
         if (paper != null) {
             d.textSerif("旅程档案", layoutLeft + 47, 110, 25, ink(), 700);
             float artX = layoutLeft + layoutWidth - (loaded && !status.isBlank() ? 405 : 288);
@@ -724,7 +756,13 @@ public final class HubMemoriesView {
                 true,
                 "arrow-up-right");
         if (loaded && !status.isBlank()) {
-            d.text(fit(status, 270, 10, 400), layoutLeft + 47, 155, 10, dark ? 0xffe4a0ac : 0xffad6372, 400);
+            d.text(
+                    fit(status, 270, 10, 400),
+                    layoutLeft + 47,
+                    155,
+                    10,
+                    dark ? 0xffe4a0ac : 0xffad6372,
+                    400);
             button(
                     "memories-refresh-retry",
                     "重新读取",
@@ -746,16 +784,29 @@ public final class HubMemoriesView {
         archiveContentHeight = Math.max(0, archives.size() * archiveStep - (bound ? 8 : 13) + 9);
         archiveScroll = clamp(archiveScroll, 0, Math.max(0, archiveContentHeight - viewHeight));
         if (bound) {
-            d.textSerif("存档索引", layoutLeft + 12, frameTop + 23, 14, accent(), 650);
-            right(archivesTotal + " 本", layoutLeft + archiveColumnWidth - 8, frameTop + 22, 10, accent(), 400);
-            d.line(layoutLeft + 10, shelfTop - 8, layoutLeft + archiveColumnWidth - 10, shelfTop - 8, 1, paper.stitch());
+            d.textSerif("存档索引", layoutLeft + 14, frameTop + 23, 14, accent(), 650);
+            right(
+                    archivesTotal + " 本",
+                    layoutLeft + archiveColumnWidth - 14,
+                    frameTop + 22,
+                    10,
+                    accent(),
+                    400);
+            d.line(
+                    layoutLeft + 11,
+                    shelfTop - 8,
+                    layoutLeft + archiveColumnWidth - 11,
+                    shelfTop - 8,
+                    1,
+                    paper.stitch());
         }
         d.save();
         d.clipRoundRect(layoutLeft, shelfTop, archiveColumnWidth, viewHeight, 0);
         for (int index = 0; index < archives.size(); index++) {
             JsonObject archive = archives.get(index);
             String id = string(archive, "id", "");
-            float x = layoutLeft + (bound ? 11 : 4), y = shelfTop + (bound ? 0 : 3) + index * archiveStep - archiveScroll;
+            float x = layoutLeft + (bound ? 11 : 4),
+                    y = shelfTop + (bound ? 0 : 3) + index * archiveStep - archiveScroll;
             if (y + cardHeight < shelfTop || y > frameTop + viewportHeight) continue;
             boolean selected = id.equals(selectedId);
             float radius = bound ? 11 : 17;
@@ -872,7 +923,13 @@ public final class HubMemoriesView {
                 float artH = artW * lantern.getHeight() / lantern.getWidth();
                 d.save();
                 d.clipRoundRect(layoutLeft, freeTop, archiveColumnWidth, freeBottom - freeTop, 0);
-                d.image(resource, layoutLeft + archiveColumnWidth - 19 - artW, freeBottom - 8 - artH, artW, artH, 1);
+                d.image(
+                        resource,
+                        layoutLeft + archiveColumnWidth - 19 - artW,
+                        freeBottom - 8 - artH,
+                        artW,
+                        artH,
+                        1);
                 d.restore();
             }
         }
@@ -884,7 +941,8 @@ public final class HubMemoriesView {
                 viewHeight - (bound ? 0 : 24),
                 archiveContentHeight,
                 archiveScroll);
-        if (archives.isEmpty()) empty(layoutLeft, shelfTop, archiveColumnWidth, viewHeight, "暂无旅途档案");
+        if (archives.isEmpty())
+            empty(layoutLeft, shelfTop, archiveColumnWidth, viewHeight, "暂无旅途档案");
     }
 
     private void drawReader() {
@@ -1072,7 +1130,7 @@ public final class HubMemoriesView {
                 d,
                 readerX,
                 y,
-                readerWidth - 3,
+                paper == null ? readerWidth - 3 : readerWidth,
                 height,
                 string(selectedArchive, "coverPattern", "arcs"),
                 string(selectedArchive, "coverColor", "mist"),
@@ -2116,7 +2174,13 @@ public final class HubMemoriesView {
             d.strokeRoundRect(x, y, width, height, 13, 1, border());
         }
         d.icon("book-open", x + width / 2 - 16, y + height / 2 - 47, 32, muted());
-        center(fit(message, width - 36, 13, 400), x + width / 2, y + height / 2 + 4, 13, muted(), 400);
+        center(
+                fit(message, width - 36, 13, 400),
+                x + width / 2,
+                y + height / 2 + 4,
+                13,
+                muted(),
+                400);
     }
 
     private void buttonClipped(

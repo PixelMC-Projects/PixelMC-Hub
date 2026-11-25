@@ -1463,20 +1463,23 @@ public final class HubView {
             StationPlayer player = stationPlayers.get(first + i);
             float width = (w - 46) / 2,
                     px = x + 19 + (i % 2) * (width + 8),
-                    py = 636 + (i / 2) * 72;
-            if (inside(px, py, width, 70)) d.roundRect(px, py, width, 70, 8, p.cover());
+                    py = 636 + (i / 2) * 72,
+                    cardY = py + 9,
+                    cardH = 52;
+            if (inside(px, cardY, width, cardH))
+                d.roundRect(px, cardY, width, cardH, 10, p.cover());
             d.save();
-            d.clipRoundRect(px + 3, py + 18, 32, 32, 8);
-            HubHead.drawPlayer2D(d, player.id(), false, px + 3, py + 18, 32);
+            d.clipRoundRect(px + 10, cardY + 10, 32, 32, 8);
+            HubHead.drawPlayer2D(d, player.id(), false, px + 10, cardY + 10, 32);
             d.restore();
-            d.circle(px + 34, py + 49, 4, p.sheet());
-            d.circle(px + 34, py + 49, 2.5f, 0xff679476);
-            text(fit(player.name(), width - 48, 12, true), px + 44, py + 31, 12, p.ink(), true);
+            d.circle(px + 41, cardY + 41, 4, p.sheet());
+            d.circle(px + 41, cardY + 41, 2.5f, 0xff679476);
+            text(fit(player.name(), width - 60, 12, true), px + 51, cardY + 23, 12, p.ink(), true);
             Integer shared = stationSharedCounts.get(player.id());
             text(
                     shared == null ? "当前存档" : ("共同存档 · " + shared + " 个"),
-                    px + 44,
-                    py + 48,
+                    px + 51,
+                    cardY + 40,
                     10,
                     p.muted(),
                     false);
@@ -1484,9 +1487,9 @@ public final class HubView {
                     "station-peer-" + player.id(),
                     "查看 " + player.name() + " 的公开资料",
                     px,
-                    py,
+                    cardY,
                     width,
-                    70,
+                    cardH,
                     () -> openPublicProfile(player.id()));
         }
     }
@@ -2665,30 +2668,44 @@ public final class HubView {
                 albumRecord(selected);
             } else {
                 int muted = d.winterPaper().muted();
-                icon("search", 720, ALBUM_SPREAD + 27, 27, muted);
-                serifCenter(
-                        catalogueComplete ? "没有找到这个称号" : "正在读取称号目录…",
-                        734,
-                        ALBUM_SPREAD + 88,
-                        18,
-                        muted,
-                        true);
+                boolean searching = !query.isBlank();
+                String emptyIcon =
+                        !catalogueComplete || (!searching && filter != 2)
+                                ? "tag"
+                                : searching ? "search" : "check";
+                String emptyTitle =
+                        !catalogueComplete
+                                ? "正在读取称号目录…"
+                                : searching
+                                        ? "没有找到这个称号"
+                                        : filter == 2 ? "已集齐全部称号" : filter == 0 ? "暂未获得称号" : "暂无称号";
+                String emptyHint =
+                        searching
+                                ? "换个关键词，或查看全部称号。"
+                                : filter == 2
+                                        ? "你已经收藏了当前全部称号。"
+                                        : filter == 0
+                                                ? "继续探索旅程解锁更多称号，也可以先查看全部称号。"
+                                                : "当前目录里还没有可展示的称号。";
+                icon(emptyIcon, 720, ALBUM_SPREAD + 27, 27, muted);
+                serifCenter(emptyTitle, 734, ALBUM_SPREAD + 88, 18, muted, true);
                 if (catalogueComplete) {
-                    textCenter("换个关键词，或查看全部称号。", 734, ALBUM_SPREAD + 117, 12, muted, false);
-                    button(
-                            "reset-filter",
-                            "查看全部",
-                            683,
-                            ALBUM_SPREAD + 135,
-                            102,
-                            34,
-                            false,
-                            true,
-                            () -> {
-                                filter = 1;
-                                query = "";
-                                searchCaret = 0;
-                            });
+                    textCenter(emptyHint, 734, ALBUM_SPREAD + 117, 12, muted, false);
+                    if (searching || filter != 1)
+                        button(
+                                "reset-filter",
+                                "查看全部",
+                                683,
+                                ALBUM_SPREAD + 135,
+                                102,
+                                34,
+                                false,
+                                true,
+                                () -> {
+                                    filter = 1;
+                                    query = "";
+                                    searchCaret = 0;
+                                });
                 }
             }
             d.restore();
@@ -2721,15 +2738,14 @@ public final class HubView {
                 new int[] {0x40233f35, 0x00233f35},
                 new float[] {0, .68f});
         HubHead.draw(d, COLLECTION_LEFT + 55, mid - 23.5f, 46.7f, -23);
-        tracked(
-                fit(playerName, 345, 18, true),
-                x,
-                mid - (t == null ? 2 : 30),
-                18,
-                .45f,
-                ink,
-                600,
-                false);
+        String monoName = playerName;
+        if (d.textWidthMono(monoName, 18, .45f) > 345) {
+            int end = monoName.length();
+            while (end > 0 && d.textWidthMono(monoName.substring(0, end) + "…", 18, .45f) > 345)
+                end--;
+            monoName = monoName.substring(0, end) + "…";
+        }
+        d.textMono(monoName, x, mid - (t == null ? 2 : 30), 18, ink, .45f);
         boolean worn = t != null && Objects.equals(equipped, t.id());
         if (t != null) {
             float e = albumEase(0, 220);
@@ -2737,7 +2753,7 @@ public final class HubView {
             float baseline = mid + 18 + 4 * (1 - e);
             if (live()) {
                 // The provider supplies the rich name independently of badge and card palette.
-                titleLabel(t, x, baseline, 42.67f, 1.4f, false, false, 370);
+                titleLabel(t, x, baseline, 42.67f, 1.4f, false, false, 370, true, 700);
             } else {
                 // The paper is painted with literal inks. The demo name inherits the handbook's
                 // .title-text colors from glass-theme.css and dark-theme.css.
@@ -3200,24 +3216,33 @@ public final class HubView {
         for (int i = 0; i < cond.size(); i++)
             text(cond.get(i), x + 12, ticketY + 44 + i * 20, 13, ink, false);
         if (stub) {
-            float sx = x + w - 66;
+            float sx = x + w - 66, midY = ticketY + ticketH / 2;
             for (float dy = 0; dy < ticketH; dy += 5)
                 d.line(sx, ticketY + dy, sx, ticketY + Math.min(ticketH, dy + 3), 1, rule);
             d.circle(sx, ticketY, 3.5f, folio);
             d.circle(sx, ticketY + ticketH, 3.5f, folio);
             int red = d.winterPaper().mailInk();
-            if (!t.owned()) icon("lock", sx + 25, ticketY + 21, 16, red);
+            if (!t.owned()) icon("lock", sx + 25, midY - 17, 16, red);
             else if (date.matches("[0-9]{4}[-/][0-9]{2}[-/][0-9]{2}")) {
-                textCenter(date.substring(0, 4), sx + 33, ticketY + 23, 10, red, false);
+                textCenter(date.substring(0, 4), sx + 33, midY - 14, 10, red, false);
                 serifCenter(
                         date.substring(5).replace('/', '.').replace('-', '.'),
                         sx + 33,
-                        ticketY + 46,
+                        midY + 7,
                         19,
                         red,
                         true);
-            } else textCenter(fit(date, 60, 10, false), sx + 33, ticketY + 37, 10, red, false);
-            textCenter(t.owned() ? "入藏" : "未解锁", sx + 33, ticketY + 63, 10, red, false);
+            } else textCenter(fit(date, 60, 10, false), sx + 33, midY - 2, 10, red, false);
+            textCenter(
+                    t.owned() ? "入藏" : "未解锁",
+                    sx + 33,
+                    midY
+                            + (t.owned() && !date.matches("[0-9]{4}[-/][0-9]{2}[-/][0-9]{2}")
+                                    ? 14
+                                    : 22),
+                    10,
+                    red,
+                    false);
         }
         pop();
         endAlpha();
@@ -3652,16 +3677,18 @@ public final class HubView {
                 boolean future = date.isAfter(data.today), selected = date.equals(selectedDate);
                 if (!future && inside(x, y, cellW, cellH))
                     d.rect(x, y + 1, cellW, cellH - 1, withAlpha(ink, .08f));
-                float fs = cellH <= 45 ? 13 : cellH <= 54 ? 15 : 18.43f,
+                float fs = cellH <= 45 ? 13 : cellH <= 54 ? 15 : 17.5f,
                         cyDay = y + cellH / 2,
-                        numberH = fs * (cellH <= 45 ? 1.16f : cellH <= 54 ? 1.3f : 1.45f);
+                        numberH = fs * (cellH <= 45 ? 1.16f : cellH <= 54 ? 1.26f : 1.32f);
                 float
                         ny =
                                 cellH <= 45
-                                        ? Math.max(y + 1, cyDay - 16)
-                                        : cyDay - numberH / 2 - (cellH <= 54 ? 3 : 0),
-                        cx = x + cellW / 2;
-                if (selected) d.roundRect(cx - fs * .86f, ny, fs * 1.72f, numberH, 3, 0xff934835);
+                                        ? Math.max(y + 2, cyDay - 16)
+                                        : y + Math.max(4f, (cellH - numberH) * 0.30f),
+                        cx = x + cellW / 2,
+                        badgeHalfW = fs * 0.86f;
+                if (selected)
+                    d.roundRect(cx - badgeHalfW, ny, badgeHalfW * 2, numberH, 3, 0xff934835);
                 serifCenter(
                         Integer.toString(day),
                         cx,
@@ -3669,16 +3696,15 @@ public final class HubView {
                         fs,
                         selected ? 0xfffff3d8 : future ? withAlpha(ink, .63f) : ink,
                         true);
-                if (date.equals(data.today)) serif("今", cx + 13, cyDay - 5, 9, red, true);
+                if (date.equals(data.today))
+                    serif("今", cx + badgeHalfW + 3.5f, ny + 8.5f, 9, red, true);
                 if (entry != null) {
-                    float labelSize = cellH <= 54 ? 10 : 12;
+                    float labelSize = cellH <= 54 ? 10 : 11.5f;
                     String label =
                             fitTracked(entry.fortune().title(), cellW - 9, labelSize, 0, 550, true);
                     float lw = d.textWidthSerif(label, labelSize, false);
-                    float baseline =
-                            cellH <= 45
-                                    ? y + cellH - 3
-                                    : cyDay + (cellH <= 54 ? 7 : 16) + labelSize;
+                    float gapBottom = y + cellH - (ny + numberH);
+                    float baseline = ny + numberH + (gapBottom + labelSize * 0.78f) * 0.5f;
                     d.roundRect(
                             cx - (lw + 5) / 2,
                             baseline - labelSize * .77f,
@@ -4283,23 +4309,43 @@ public final class HubView {
             icon("tag", 548, 374, 28, 0xff9d90b4);
             textCenter("正在读取称号目录…", 567, 437, 17, 0xff8c8495, true);
         } else if (list.isEmpty()) {
-            icon("search", 548, 374, 28, 0xff9d90b4);
-            textCenter("没有找到这个称号", 567, 437, 17, 0xff8c8495, true);
-            textCenter("换个关键词，或查看全部称号。", 567, 466, 12, MUTED, false);
-            button(
-                    "reset-filter",
-                    "查看全部",
-                    512,
-                    492,
-                    110,
-                    37,
-                    false,
-                    true,
-                    () -> {
-                        filter = 1;
-                        query = "";
-                        titleScroll = 0;
-                    });
+            boolean searching = !query.isBlank();
+            icon(searching ? "search" : filter == 2 ? "check" : "tag", 548, 374, 28, 0xff9d90b4);
+            textCenter(
+                    searching
+                            ? "没有找到这个称号"
+                            : filter == 2 ? "已集齐全部称号" : filter == 0 ? "暂未获得称号" : "暂无称号",
+                    567,
+                    437,
+                    17,
+                    0xff8c8495,
+                    true);
+            textCenter(
+                    searching
+                            ? "换个关键词，或查看全部称号。"
+                            : filter == 2
+                                    ? "你已经收藏了当前全部称号。"
+                                    : filter == 0 ? "继续探索旅程解锁更多称号，也可以先查看全部称号。" : "当前目录里还没有可展示的称号。",
+                    567,
+                    466,
+                    12,
+                    MUTED,
+                    false);
+            if (searching || filter != 1)
+                button(
+                        "reset-filter",
+                        "查看全部",
+                        512,
+                        492,
+                        110,
+                        37,
+                        false,
+                        true,
+                        () -> {
+                            filter = 1;
+                            query = "";
+                            titleScroll = 0;
+                        });
         }
         text(
                 list.size()
@@ -6930,20 +6976,39 @@ public final class HubView {
             boolean center,
             boolean locked,
             float maxWidth) {
+        return titleLabel(title, x, baseline, size, tracking, center, locked, maxWidth, false, 400);
+    }
+
+    private float titleLabel(
+            HubData.Title title,
+            float x,
+            float baseline,
+            float size,
+            float tracking,
+            boolean center,
+            boolean locked,
+            float maxWidth,
+            boolean serif,
+            int defaultWeight) {
         if (live()) {
             List<HubData.Glyph> glyphs = title.glyphs();
-            float width = richWidth(glyphs, size, tracking);
+            float width = richWidth(glyphs, size, tracking, serif, defaultWeight);
             float actual = Math.max(11, Math.min(size, size * maxWidth / Math.max(1, width)));
-            width = richWidth(glyphs, actual, tracking);
+            width = richWidth(glyphs, actual, tracking, serif, defaultWeight);
             boolean clipped = width > maxWidth;
             float start = center ? x - Math.min(width, maxWidth) * .5f : x;
             d.save();
             d.clipRoundRect(start - 2, baseline - actual * 1.3f, maxWidth + 4, actual * 1.7f, 0);
             float cursor = start;
             for (HubData.Glyph glyph : glyphs) {
-                float advance = d.textWidth(glyph.text(), actual, glyph.bold() ? 700 : 400);
+                int weight = glyph.bold() ? 700 : defaultWeight;
+                float advance =
+                        serif
+                                ? d.textWidthSerif(glyph.text(), actual, weight)
+                                : d.textWidth(glyph.text(), actual, weight);
                 if (clipped && cursor + advance > start + maxWidth - actual) {
-                    text("…", cursor, baseline, actual, INK, false);
+                    if (serif) serif("…", cursor, baseline, actual, INK, weight >= 700);
+                    else text("…", cursor, baseline, actual, INK, false);
                     break;
                 }
                 d.richGlyph(
@@ -6955,7 +7020,9 @@ public final class HubView {
                         glyph.bold(),
                         glyph.italic(),
                         glyph.underline(),
-                        glyph.strike());
+                        glyph.strike(),
+                        serif,
+                        defaultWeight);
                 cursor += advance + tracking;
             }
             d.restore();
@@ -7009,9 +7076,24 @@ public final class HubView {
     }
 
     private float richWidth(List<HubData.Glyph> glyphs, float size, float tracking) {
+        return richWidth(glyphs, size, tracking, false, 400);
+    }
+
+    private float richWidth(
+            List<HubData.Glyph> glyphs,
+            float size,
+            float tracking,
+            boolean serif,
+            int defaultWeight) {
         float width = 0;
-        for (HubData.Glyph glyph : glyphs)
-            width += d.textWidth(glyph.text(), size, glyph.bold() ? 700 : 400) + tracking;
+        for (HubData.Glyph glyph : glyphs) {
+            int weight = glyph.bold() ? 700 : defaultWeight;
+            width +=
+                    (serif
+                                    ? d.textWidthSerif(glyph.text(), size, weight)
+                                    : d.textWidth(glyph.text(), size, weight))
+                            + tracking;
+        }
         return Math.max(0, width - tracking);
     }
 
@@ -7606,7 +7688,14 @@ public final class HubView {
         pageAt = System.nanoTime();
         focusId = null;
         titleScroll = 0;
-        if (destination == 2) monthAt = pageAt;
+        if (destination == 1) {
+            lastAlbumTitle = null;
+            albumStatus = null;
+        }
+        if (destination == 2) {
+            monthAt = pageAt;
+            unfoldedDate = null;
+        }
         if (destination == 0) tilts.remove("medallion");
     }
 

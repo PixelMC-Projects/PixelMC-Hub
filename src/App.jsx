@@ -1440,20 +1440,38 @@ function TitlesPage({ state, update, equip, notify, reduceMotion }) {
       </div>
     </>
   );
+  const hasSearch = query.trim().length > 0;
+  const emptyTitle = hasSearch
+    ? "没有找到这个称号"
+    : filter === "unowned"
+      ? "已集齐全部称号"
+      : filter === "owned"
+        ? "暂未获得称号"
+        : "暂无称号";
+  const emptyHint = hasSearch
+    ? "换个关键词，或查看全部称号。"
+    : filter === "unowned"
+      ? "你已经收藏了当前全部称号。"
+      : filter === "owned"
+        ? "继续探索旅程解锁更多称号，也可以先查看全部称号。"
+        : "当前目录里还没有可展示的称号。";
+  const EmptyIcon = hasSearch ? Search : filter === "unowned" ? Check : Tag;
   const emptyState = (
     <div className="empty-state">
-      <Search size={27} />
-      <h3>没有找到这个称号</h3>
-      <p>换个关键词，或查看全部称号。</p>
-      <button
-        className="btn subtle"
-        onClick={() => {
-          changeList(setQuery, "");
-          setFilter("all");
-        }}
-      >
-        查看全部
-      </button>
+      <EmptyIcon size={27} />
+      <h3>{emptyTitle}</h3>
+      <p>{emptyHint}</p>
+      {(hasSearch || filter !== "all") && (
+        <button
+          className="btn subtle"
+          onClick={() => {
+            changeList(setQuery, "");
+            setFilter("all");
+          }}
+        >
+          查看全部
+        </button>
+      )}
     </div>
   );
   const equipButton = t?.owned ? (

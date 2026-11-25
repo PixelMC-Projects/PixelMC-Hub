@@ -251,7 +251,7 @@ html[data-theme="dark"] .winter-theme .sidebar {
 .station-pager button { display:grid; width:23px; height:23px; place-items:center; color:var(--pine); border:1px solid var(--ruling); border-radius:6px; }
 .station-pager button:disabled { opacity:.35; cursor:default; }
 .station-roster { display:grid; flex:1; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:2px 8px; }
-.station-roster button { min-width:0; display:flex; align-items:center; gap:8px; padding:6px 3px; border-radius:8px; color:var(--ink); text-align:left; }
+.station-roster button { align-self:center; min-width:0; display:flex; align-items:center; gap:8px; padding:10px; border-radius:10px; color:var(--ink); text-align:left; }
 .station-roster button:hover,.station-pager button:hover:enabled { background:var(--label); }
 .station-player-copy { min-width:0; }
 .station-player-copy strong,.station-player-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

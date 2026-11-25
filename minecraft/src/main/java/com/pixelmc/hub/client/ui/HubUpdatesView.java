@@ -2274,10 +2274,11 @@ final class HubUpdatesView {
                 afterHeading = heading;
                 afterList = bullet || continuation;
                 float indent = bullet || continuation ? (winter() ? 16 : 18) + block.depth * 14 : 0;
+                float baselineShift = winter() ? (line - size) / 2 : 0;
                 if (heading) {
                     if (winter()) {
                         d.save();
-                        d.translate(x + 4, y + 9);
+                        d.translate(x + 4, y + 11 + baselineShift);
                         d.canvas().rotate(45);
                         d.rect(-3, -3, 6, 6, gazette.red());
                         d.restore();
@@ -2293,8 +2294,12 @@ final class HubUpdatesView {
                                 new float[] {0, 1});
                     indent = winter() ? 15 : 11;
                 }
-                if (bullet) d.circle(x + indent - 8, y + 8, 1.8f, accent(0xffa295ca));
-                float baselineShift = winter() ? (line - size) / 2 : 0;
+                if (bullet)
+                    d.circle(
+                            x + indent - 8,
+                            y + (winter() ? 8.3f : 8f) + baselineShift,
+                            1.8f,
+                            accent(0xffa295ca));
                 y =
                         rich(
                                         block.runs,

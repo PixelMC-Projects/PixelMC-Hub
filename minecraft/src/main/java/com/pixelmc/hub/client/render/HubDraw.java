@@ -37,6 +37,9 @@ public final class HubDraw implements AutoCloseable {
     private static final String[] CJK_FAMILIES = {
         "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", "sans-serif"
     };
+    private static final String[] MONO_FAMILIES = {
+        "Cascadia Mono", "Consolas", "JetBrains Mono", "Courier New", "monospace"
+    };
     private final Paint paint = new Paint();
     private final FontMgr fontManager = FontMgr.getDefault();
     private final Shaper shaper = Shaper.makeBestAvailable(fontManager);
@@ -46,6 +49,7 @@ public final class HubDraw implements AutoCloseable {
     private final Typeface serifBold;
     private final Typeface cjkRegular;
     private final Typeface cjkBold;
+    private final Typeface monoSemiBold;
     private final Map<FontKey, Font> fonts = new LinkedHashMap<>();
     private final Map<TextKey, TextLine> lines = new LinkedHashMap<>(128, 0.75f, true);
     private final Map<String, Image> images = new LinkedHashMap<>();
@@ -54,6 +58,7 @@ public final class HubDraw implements AutoCloseable {
     private final Map<GlyphKey, Boolean> primaryGlyphs = new LinkedHashMap<>();
     private final Map<FaceKey, Typeface> weightedFaces = new LinkedHashMap<>(16, .75f, true);
     private final Map<TrackedKey, TrackedLine> trackedLines = new LinkedHashMap<>(128, .75f, true);
+    private final Map<MonoKey, MonoLine> monoLines = new LinkedHashMap<>(32, .75f, true);
     private Canvas canvas;
     private int baseSaveCount;
     private boolean closed;
@@ -71,6 +76,7 @@ public final class HubDraw implements AutoCloseable {
     void prepareWinterArt() {
         if (winterArt == null) winterArt = new WinterRouteArt();
     }
+
     private boolean dark, literalColors, supersampling;
     private final HubCorners corners = new HubCorners();
     private final HubShadowCache shadows = new HubShadowCache();
@@ -130,6 +136,13 @@ public final class HubDraw implements AutoCloseable {
         serifBold = serifTypeface(FontStyle.BOLD);
         cjkRegular = cjkTypeface(FontStyle.NORMAL);
         cjkBold = cjkTypeface(FontStyle.BOLD);
+        monoSemiBold = monoTypeface(FontStyle.NORMAL.withWeight(600));
+    }
+
+    private Typeface monoTypeface(FontStyle style) {
+        Typeface result = fontManager.matchFamiliesStyle(MONO_FAMILIES, style);
+        if (result == null) result = fontManager.matchFamilyStyle("monospace", style);
+        return result != null ? result : regular;
     }
 
     private Typeface serifTypeface(FontStyle style) {
@@ -1136,6 +1149,85 @@ public final class HubDraw implements AutoCloseable {
                         fill(color));
     }
 
+    public float textWidthMono(String text, float size, float tracking) {
+        if (text == null || text.isEmpty() || size <= 0) return 0;
+        return monoLine(text, size, tracking).width;
+    }
+
+    public void textMono(
+            String text, float x, float baseline, float size, int color, float tracking) {
+        color = foreground(color);
+        if (text == null || text.isEmpty() || size <= 0) return;
+        canvas().drawTextBlob(monoLine(text, size, tracking).blob, x, baseline, fill(color));
+    }
+
+    private MonoLine monoLine(String text, float size, float tracking) {
+        MonoKey key = new MonoKey(text, size, tracking);
+        MonoLine existing = monoLines.get(key);
+        if (existing != null) return existing;
+        List<FontRunText> runs = new ArrayList<>();
+        int start = 0;
+        boolean lastCjk = false;
+        for (int offset = 0; offset < text.length(); ) {
+            int codePoint = text.codePointAt(offset);
+            boolean cjk = monoSemiBold.getUTF32Glyph(codePoint) == 0;
+            if (offset > 0 && cjk != lastCjk) {
+                runs.add(new FontRunText(text.substring(start, offset), lastCjk));
+                start = offset;
+            }
+            lastCjk = cjk;
+            offset += Character.charCount(codePoint);
+        }
+        runs.add(new FontRunText(text.substring(start), lastCjk));
+        float advance = 0;
+        int consumed = 0;
+        try (TextBlobBuilder builder = new TextBlobBuilder()) {
+            for (FontRunText run : runs) {
+                Typeface runFace = run.cjk ? face(600, false, true) : monoSemiBold;
+                try (Font font =
+                                new Font(runFace, size)
+                                        .setSubpixel(true)
+                                        .setEdging(FontEdging.ANTI_ALIAS)
+                                        .setHinting(run.cjk ? FontHinting.NONE : FontHinting.SLIGHT)
+                                        .setBaselineSnapped(false);
+                        TextLine line = shaper.shapeLine(run.text, font)) {
+                    short[] glyphs = line.getGlyphs();
+                    float[] positions = line.getPositions();
+                    Point[] points = new Point[glyphs.length];
+                    for (int i = 0; i < glyphs.length; i++) {
+                        int offset =
+                                Math.max(
+                                        0,
+                                        Math.min(
+                                                run.text.length(),
+                                                line.getLeftOffsetAtCoord(
+                                                        positions[i * 2] + .001f)));
+                        int cluster = run.text.codePointCount(0, offset);
+                        points[i] =
+                                new Point(
+                                        advance
+                                                + positions[i * 2]
+                                                + tracking * (consumed + cluster),
+                                        positions[i * 2 + 1]);
+                    }
+                    builder.appendRunPos(font, glyphs, points);
+                    advance += line.getWidth();
+                    consumed += run.text.codePointCount(0, run.text.length());
+                }
+            }
+            float totalWidth =
+                    advance + tracking * Math.max(0, text.codePointCount(0, text.length()) - 1);
+            MonoLine result = new MonoLine(builder.build(), totalWidth);
+            monoLines.put(key, result);
+            if (monoLines.size() > 64) {
+                var iterator = monoLines.entrySet().iterator();
+                iterator.next().getValue().blob.close();
+                iterator.remove();
+            }
+            return result;
+        }
+    }
+
     /** Minecraft RichText italic is an oblique glyph; bold uses the actual weighted font. */
     public void richGlyph(
             String text,
@@ -1147,16 +1239,32 @@ public final class HubDraw implements AutoCloseable {
             boolean italic,
             boolean underline,
             boolean strike) {
+        richGlyph(text, x, baseline, size, color, bold, italic, underline, strike, false, 400);
+    }
+
+    public void richGlyph(
+            String text,
+            float x,
+            float baseline,
+            float size,
+            int color,
+            boolean bold,
+            boolean italic,
+            boolean underline,
+            boolean strike,
+            boolean serif,
+            int defaultWeight) {
         boolean previousLiteral = literalColors;
         literalColors = true;
-        int weight = bold ? 700 : 400;
-        float width = textWidth(text, size, weight);
+        int weight = bold ? 700 : defaultWeight;
+        float width = serif ? textWidthSerif(text, size, weight) : textWidth(text, size, weight);
         try {
             canvas().save();
             try {
                 canvas().translate(x, baseline);
                 if (italic) canvas().skew(-.2f, 0);
-                text(text, 0, 0, size, color, weight);
+                if (serif) textSerif(text, 0, 0, size, color, weight);
+                else text(text, 0, 0, size, color, weight);
             } finally {
                 canvas().restore();
             }
@@ -1558,6 +1666,8 @@ public final class HubDraw implements AutoCloseable {
         weightedFaces.clear();
         trackedLines.values().forEach(value -> value.blob.close());
         trackedLines.clear();
+        monoLines.values().forEach(value -> value.blob.close());
+        monoLines.clear();
         lines.clear();
         fonts.clear();
         images.clear();
@@ -1565,6 +1675,7 @@ public final class HubDraw implements AutoCloseable {
         primaryGlyphs.clear();
         paint.close();
         shaper.close();
+        if (monoSemiBold != regular) monoSemiBold.close();
         bold.close();
         regular.close();
         serifBold.close();
@@ -1606,4 +1717,8 @@ public final class HubDraw implements AutoCloseable {
     private record TrackedKey(String text, float size, int weight, float tracking, boolean serif) {}
 
     private record TrackedLine(TextBlob blob) {}
+
+    private record MonoKey(String text, float size, float tracking) {}
+
+    private record MonoLine(TextBlob blob, float width) {}
 }
