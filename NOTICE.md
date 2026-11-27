@@ -8,7 +8,7 @@ Copyright © 2026 zhan_cpu / PixelMC Projects. 本项目自有应用代码使用
 
 - `public/assets/wenzhou-items/`：问舟 Web 配方示例中的原版物品纹理与方块模型缩略图取自本机 Minecraft Java Edition 1.20.1 客户端。原版美术归 Mojang / Microsoft 所有，项目的 Apache-2.0 许可不涵盖这些素材。
 
-- `public/assets/fortune-slip.png`、`fortune-barrel.png`、`collection-chest.png`：来自本地 DailyFortunes 项目的签笺及默认像素模型物品图。Copyright © 2026 zhan_cpu / PixelMC Projects，AGPL-3.0-only。
+- `public/assets/fortune-slip.png`、`fortune-barrel.png`、`collection-chest.png`：来自本地 DailyFortunes 项目的签笺及默认像素模型物品图。Copyright © 2026 zhan_cpu / PixelMC Projects，Apache-2.0。
 - `src/fortunes.json`：DailyFortunes 六十签文案，同上。
 - `public/assets/server-logo.png`：用户提供的 PixelMC 服务器 Logo，原文件用于品牌展示；该品牌标识不因应用代码使用 Apache-2.0 而被重新授权。 / User-provided PixelMC server logo; the application license does not relicense this brand asset.
 - `public/assets/avatar.png`：MemorialTitles 附带的默认演示头像。同项目来源；仅作为无完整皮肤时的占位。完整皮肤可通过本地 `VITE_PREVIEW_SKIN` 配置，`public/assets/local-preview/` 中的测试皮肤不纳入仓库，也不受本项目许可证重新授权。
@@ -18,7 +18,7 @@ Copyright © 2026 zhan_cpu / PixelMC Projects. 本项目自有应用代码使用
 - 字体调用系统 Segoe UI、Microsoft YaHei UI 与可用宋体，不随项目分发字体文件。
 - `src/vendor/react-bits/` 的 GlassIcons、GlassSurface、TiltedCard、AnimatedList、ClickSpark：Copyright © 2026 David Haz；使用该目录 `LICENSE.md` 中的 **MIT + Commons Clause License Condition v1.0**，不是标准 MIT 或 Apache 授权。来源：https://github.com/DavidHDev/react-bits 。官方注册表来源与获取时的文件哈希见 `SOURCES.json`。2026/11/03 修改 GlassIcons 和 TiltedCard，加入应用的减少动态效果选项、当前页面和选中状态的可访问性属性；2026/11/05 AnimatedList 适配应用现有图标、受控选中状态与读屏标签，ClickSpark 保留上游实现。组件只作为本玩家应用的一部分使用，不作为组件包独立再分发。
 
-DailyFortunes 素材及签文的 AGPL-3.0-only 全文见 `licenses/AGPL-3.0-assets.txt`；来源为 https://github.com/PixelMC-Projects/DailyFortunes 。默认头像来源为 https://github.com/PixelMC-Projects/MemorialTitles 。本项目保存这些素材的原始形式，未把它们改标为 Apache。
+DailyFortunes 素材及签文采用 Apache-2.0，许可全文见 `LICENSE`；来源为 https://github.com/PixelMC-Projects/DailyFortunes 。默认头像来源为 https://github.com/PixelMC-Projects/MemorialTitles 。本项目保留这些素材的原始署名与许可声明。
 
 Artwork and fortune text are reused from the local PixelMC projects under their original license. The avatar is a bundled demo placeholder. Third-party dependencies retain their own licenses. System fonts are referenced, not redistributed.
 

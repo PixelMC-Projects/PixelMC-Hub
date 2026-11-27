@@ -13,19 +13,19 @@
       "source": "public/assets/collection-chest.png",
       "target": "textures/ui/collection-chest.png",
       "sha256": "b8a0eca290d456a92e40c172f5883feba5be56fce6dc0f12f0f820414eca1301",
-      "license": "AGPL-3.0-only"
+      "license": "Apache-2.0"
     },
     {
       "source": "public/assets/fortune-barrel.png",
       "target": "textures/ui/fortune-barrel.png",
       "sha256": "006208086c7027701c4a847785c10faf3b7d8632676099dd79ee334febb6f888",
-      "license": "AGPL-3.0-only"
+      "license": "Apache-2.0"
     },
     {
       "source": "public/assets/fortune-slip.png",
       "target": "textures/ui/fortune-slip.png",
       "sha256": "1ed75a08b569a08c78f9fb834c7f68fec858cdbc01ecd97544009afaf3aaa6b3",
-      "license": "AGPL-3.0-only"
+      "license": "Apache-2.0"
     },
     {
       "source": "public/assets/server-logo.png",
@@ -1284,7 +1284,7 @@
       "target": "data/fortunes.json",
       "count": 60,
       "sha256": "645dda1beb847eb613b0b09c6980c502be9e2fcc9f9ee4be7a067aeccaba8539",
-      "license": "AGPL-3.0-only"
+      "license": "Apache-2.0"
     },
     {
       "source": "src/data.js",

@@ -6,7 +6,6 @@ const licenseFiles = {
   "NOTICE.md": "NOTICE.md",
   "React-Bits.txt": "src/vendor/react-bits/LICENSE.md",
   "React-Bits-sources.json": "src/vendor/react-bits/SOURCES.json",
-  "AGPL-3.0-assets.txt": "licenses/AGPL-3.0-assets.txt",
   "React.txt": "node_modules/react/LICENSE",
   "React-DOM.txt": "node_modules/react-dom/LICENSE",
   "Lucide.txt": "node_modules/lucide-react/LICENSE",
