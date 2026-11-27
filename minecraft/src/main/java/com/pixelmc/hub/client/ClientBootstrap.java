@@ -3,11 +3,8 @@ package com.pixelmc.hub.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.logging.LogUtils;
 import com.pixelmc.hub.PixelMCHub;
-import com.pixelmc.hub.client.ui.HubHead;
 import com.pixelmc.hub.client.ui.HubView;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.HexFormat;
+
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -22,7 +19,12 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+
 import org.lwjgl.glfw.GLFW;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 public final class ClientBootstrap {
     private static final KeyMapping OPEN =
@@ -39,7 +41,6 @@ public final class ClientBootstrap {
     private static String fallbackScope = "";
     private static boolean scopeApplied;
     private static boolean preloadOnNextTick;
-    private static final LoginNotice loginNotice = new LoginNotice();
     private static final HubSystemMotion systemMotion = new HubSystemMotion();
     private static int openingRequest;
 
@@ -104,35 +105,6 @@ public final class ClientBootstrap {
             preloadOnNextTick = false;
             prepareLive(minecraft);
         }
-        if (minecraft.player != null
-                && minecraft.getConnection() != null
-                && loginNotice.claim(
-                        minecraft.getConnection().getConnection(), System.nanoTime())) {
-            Component key =
-                    OPEN.isUnbound() ? Component.literal("未绑定") : OPEN.getTranslatedKeyMessage();
-            minecraft.player.sendSystemMessage(
-                    Component.literal("我们为你准备了一个全新的统一菜单")
-                            .withStyle(style -> style.withColor(0xf2c66d).withBold(false))
-                            .append(
-                                    Component.literal("，在这里可以快捷管理您个人的")
-                                            .withStyle(style -> style.withColor(0xb6c4d7)))
-                            .append(
-                                    Component.literal("统计数据及收藏信息")
-                                            .withStyle(style -> style.withColor(0x5dd4ed)))
-                            .append(
-                                    Component.literal("，按下 ")
-                                            .withStyle(style -> style.withColor(0xb6c4d7)))
-                            .append(key.copy().withStyle(style -> style.withColor(0x5dd4ed)))
-                            .append(
-                                    Component.literal(" 体验，")
-                                            .withStyle(style -> style.withColor(0xb6c4d7)))
-                            .append(
-                                    Component.literal("我们将持续丰富这个菜单的体验并探索更多功能。")
-                                            .withStyle(style -> style.withColor(0x80caa2)))
-                            .append(
-                                    Component.literal("\n该内容仍处于实验状态,可能存在未经验证的兼容性问题,如出现异常请及时反馈")
-                                            .withStyle(net.minecraft.ChatFormatting.RED)));
-        }
         if (Boolean.getBoolean("pixelmc.hub.autoOpen")
                 && !automaticPreviewOpened
                 && minecraft.screen instanceof TitleScreen
@@ -148,7 +120,6 @@ public final class ClientBootstrap {
     private static void login(ClientPlayerNetworkEvent.LoggingIn event) {
         resetSession();
         preloadOnNextTick = true;
-        loginNotice.start(event.getConnection(), System.nanoTime());
     }
 
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
@@ -157,7 +128,6 @@ public final class ClientBootstrap {
 
     private static void resetSession() {
         openingRequest++;
-        loginNotice.cancel();
         preloadOnNextTick = false;
         shownThisLogin = false;
         ClientHubSession.close();
@@ -180,6 +150,16 @@ public final class ClientBootstrap {
     }
 
     public static void open() {
+        openInternal(false, null);
+    }
+
+    /** Opens the Hub directly for an external sibling page, skipping the welcome splash. */
+    public static void openForExternal(java.util.function.Consumer<HubView> onReady) {
+        openInternal(true, onReady);
+    }
+
+    private static void openInternal(
+            boolean skipWelcome, java.util.function.Consumer<HubView> onReady) {
         Minecraft minecraft = Minecraft.getInstance();
         int request = ++openingRequest;
         var previousScreen = minecraft.screen;
@@ -193,7 +173,7 @@ public final class ClientBootstrap {
                                             && minecraft.screen == previousScreen
                                             && minecraft.player == previousPlayer
                                             && minecraft.getConnection() == previousConnection)
-                                        open();
+                                        openInternal(skipWelcome, onReady);
                                 }))) return;
         HubClientGraphics.panelOpening();
         if (minecraft.player != null) prepareLive(minecraft);
@@ -216,7 +196,10 @@ public final class ClientBootstrap {
                 minecraft.player == null
                         ? minecraft.getUser().getName()
                         : minecraft.player.getGameProfile().getName());
-        boolean welcome = (!live || !scope.isEmpty()) && prefs.shouldPlay(scope, shownThisLogin);
+        boolean welcome =
+                !skipWelcome
+                        && (!live || !scope.isEmpty())
+                        && prefs.shouldPlay(scope, shownThisLogin);
         view.open(welcome);
         if (live) {
             ClientHubSession.open(view);
@@ -228,6 +211,7 @@ public final class ClientBootstrap {
                     server == null ? "本地存档" : server.name,
                     server == null ? null : server.getIconBytes());
         }
+        if (onReady != null) onReady.accept(view);
         minecraft.setScreen(new HubScreen(view, scope, welcome, minecraft.screen));
     }
 

@@ -2,8 +2,10 @@
 package com.pixelmc.hub.client.ui;
 
 import com.pixelmc.hub.client.render.HubDraw;
+
 import io.github.humbleui.skija.*;
 import io.github.humbleui.types.Rect;
+
 import java.util.List;
 
 /** The engraved artwork used by the winter album, collected slips and public profiles. */
@@ -39,17 +41,16 @@ final class HubCollectionArt {
             float opacity) {
         int cell = STYLES.indexOf(style);
         if (cell < 0) {
-            d.circle(
-                    x + size / 2,
-                    y + size / 2,
-                    size / 2,
-                    HubWinterSheet.alpha(0xffedcf87, opacity));
+            int gold = d.dark() ? 0xffe5c788 : 0xffedcf87;
+            int glyph = d.dark() ? 0xff233a33 : 0xff334f43;
+            if (locked) gold = HubWinterSheet.mix(gold, d.dark() ? 0xff4c5650 : 0xff9aa59d, .55f);
+            d.circle(x + size / 2, y + size / 2, size / 2, HubWinterSheet.alpha(gold, opacity));
             d.icon(
                     fallbackIcon == null || fallbackIcon.isBlank() ? "tag" : fallbackIcon,
                     x + size * .29f,
                     y + size * .29f,
                     size * .42f,
-                    HubWinterSheet.alpha(0xff334f43, opacity));
+                    HubWinterSheet.alpha(glyph, opacity));
             return;
         }
         x += size * DX[cell] / 100;
@@ -78,9 +79,16 @@ final class HubCollectionArt {
             ColorFilter color) {
         var image = d.imageResource(ROOT + name + ".png");
         float sw = image.getWidth() / 4f, sh = image.getHeight() / 2f;
-        try (ImageFilter shadow = name.equals("title-pins")
-                        ? ImageFilter.makeDropShadow(0,2,.5f,.5f,0x8510271c) : null;
-                Paint paint = new Paint().setAntiAlias(true).setAlphaf(opacity).setColorFilter(color).setImageFilter(shadow)) {
+        try (ImageFilter shadow =
+                        name.equals("title-pins")
+                                ? ImageFilter.makeDropShadow(0, 2, .5f, .5f, 0x8510271c)
+                                : null;
+                Paint paint =
+                        new Paint()
+                                .setAntiAlias(true)
+                                .setAlphaf(opacity)
+                                .setColorFilter(color)
+                                .setImageFilter(shadow)) {
             d.canvas()
                     .drawImageRect(
                             image,
@@ -113,8 +121,13 @@ final class HubCollectionArt {
             float saturation) {
         var img = d.imageResource(ROOT + name + ".png");
         boolean slip = name.equals("journal-slip");
-        try (ColorFilter color = brightness == 1 && saturation == 1 ? null : shade(brightness, saturation);
-                ImageFilter shadow = slip ? ImageFilter.makeDropShadow(1,3,1,1,d.dark()?0x80101719:0x60192325) : null;
+        try (ColorFilter color =
+                        brightness == 1 && saturation == 1 ? null : shade(brightness, saturation);
+                ImageFilter shadow =
+                        slip
+                                ? ImageFilter.makeDropShadow(
+                                        1, 3, 1, 1, d.dark() ? 0x80101719 : 0x60192325)
+                                : null;
                 Paint paint = new Paint().setColorFilter(color).setImageFilter(shadow)) {
             d.canvas()
                     .drawImageRect(

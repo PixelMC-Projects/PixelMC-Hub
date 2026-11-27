@@ -1,6 +1,6 @@
 # PixelMC-Hub
 
-- 本项目位于 `E:\minecraftserver\fabricmod\PixelMCPlayerHub`，产品名与远程仓库为 PixelMC-Hub。包含网页设计参考及 `minecraft/` 下的 Forge 1.20.1 原生 Skija 玩家面板和可选服务端连接，不是 Manager 管理后台。
+- 本项目位于 `E:\minecraft-pixelmc\mods\PixelMCPlayerHub`，产品名与远程仓库为 PixelMC-Hub。包含网页设计参考及 `minecraft/` 下的 Forge 1.20.1 原生 Skija 玩家面板和可选服务端连接，不是 Manager 管理后台。
 - 使用场景是 Minecraft Java 版游戏内横屏面板；验收优先横屏分辨率、GUI 缩放和鼠标键盘交互，不开展手机竖屏专项设计或验收。
 - 使用浅色液态玻璃方向和实际 React Bits 组件；网页保留获准的五页：个人主页、我的称号、我的签笺、更新日志、玩家排行；玩家排行已有确认后的 Web 参考及本地原生/真实数据接入候选；更新日志已有本地 Web 参考及 Forge 1.20.1 原生接入候选，真实游戏验收仍由用户完成。没有玩法指南页面。详见 `docs/design-spec.md`。
 - 原生移植以完整前端源码为准：逐项对应组件参数、透明层叠、背景采样、字体选择、阴影、透视、动画曲线/时长/延迟、hover/press/focus。不能把静态渐变或单轴旋转当作已还原的玻璃/三维效果。映射与尚存差异记录在 `docs/native-visual-parity.md`，自动截图不等于用户的游戏验收。

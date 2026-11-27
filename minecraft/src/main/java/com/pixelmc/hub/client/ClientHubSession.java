@@ -133,8 +133,24 @@ public final class ClientHubSession {
         view.setStationSharedCounts(Map.of());
     }
 
+    public static HubView liveView() {
+        return current == null ? null : current.view;
+    }
+
+    public static <T extends com.pixelmc.hub.client.ui.HubExternalPage> T externalPage(
+            Class<T> type) {
+        return current == null ? null : current.view.externalPage(type);
+    }
+
+    public static com.pixelmc.hub.client.ui.HubExternalPage externalPage(String id) {
+        return current == null ? null : current.view.externalPage(id);
+    }
+
     public static void open(HubView view) {
-        if (current != null && current.view == view) return;
+        if (current != null && current.view == view) {
+            view.refreshExternalPages();
+            return;
+        }
         close();
         current = new ClientHubSession(view);
         var minecraft = Minecraft.getInstance();
@@ -143,10 +159,12 @@ public final class ClientHubSession {
         if (connection == null || !HubNetwork.CHANNEL.isRemotePresent(connection.getConnection())) {
             for (String module : HubProtocol.PROVIDERS.keySet())
                 view.moduleStatus(module, "服务器未启用手册连接");
+            view.refreshExternalPages();
             return;
         }
         current.bridgeAvailable = true;
         current.send("hub", "discover", new JsonObject());
+        view.refreshExternalPages();
     }
 
     public static void close() {
@@ -308,6 +326,7 @@ public final class ClientHubSession {
     public static void tick() {
         ClientHubSession session = current;
         if (session == null) return;
+        session.view.prefetchExternalPages();
         long now = session.nanoTime.getAsLong();
         session.fragments.expire(now);
         for (var p : session.queue.expire(now)) {

@@ -1443,7 +1443,7 @@ final class HubUpdatesView {
             d = null;
             return;
         }
-        packPicker();
+        packPicker(now);
         if (press) {
             d.boxShadow(pageX, pageTop + 2, pageWidth, pageHeight, 21, 0, 3, 10, -5, 0x4d182a24);
             d.roundRect(pageX, pageTop + 2, pageWidth, pageHeight, 21, gazette.rule());
@@ -1477,7 +1477,7 @@ final class HubUpdatesView {
         return s(pack, "shortName", s(pack, "name", "")) + s(pack, "version", "");
     }
 
-    private void packPicker() {
+    private void packPicker(long now) {
         if (packTotal < 2 && (!winter() || packs.isEmpty() && selectedPack == null)) return;
         JsonObject current =
                 selectedPack != null
@@ -1491,8 +1491,20 @@ final class HubUpdatesView {
             return;
         }
         pickerBounds = new InputBox(pickerRight - w, 82, w, 32);
-        if (winter() && (packMenu || inside(pickerRight - w, 86, w, 27)))
-            d.roundRect(pickerRight - w, 86, w, 27, 6, paper().soft());
+        if (winter()) {
+            float hover =
+                    controlMotion
+                            .computeIfAbsent(
+                                    "updates-packs-hover", ignored -> new HubMotion.Transition())
+                            .sample(
+                                    packMenu || inside(pickerRight - w, 86, w, 27) ? 1 : 0,
+                                    now,
+                                    160_000_000L,
+                                    reduced);
+            if (hover > 0)
+                d.roundRect(
+                        pickerRight - w, 86, w, 27, 6, HubWinterSheet.alpha(paper().soft(), hover));
+        }
         text(fit(name, w - 26, 12, 400), pickerRight - w + 5, 105, 12, ink(0xff697695), 400);
         icon("chevron-down", pickerRight - 12, 94, 14, muted(0xff697695));
         hit("updates-packs", "选择整合包", pickerRight - w, 82, w, 32, () -> packMenu = !packMenu);
@@ -1771,7 +1783,8 @@ final class HubUpdatesView {
             float brightness = pressed.equals("updates-row-" + id) ? .92f : hover && !on ? .97f : 1;
             if (ry + rh < top || ry > top + height) continue;
             d.saveLayerAlpha(pageX, ry, indexWidth, rh, enter);
-            d.saveBrightnessLayer(pageX - 4, ry - 4, indexWidth + 8, rh + 10, brightness);
+            if (!winter())
+                d.saveBrightnessLayer(pageX - 4, ry - 4, indexWidth + 8, rh + 10, brightness);
             d.save();
             d.canvas()
                     .concat(
@@ -1781,7 +1794,12 @@ final class HubUpdatesView {
                                             Matrix33.makeTranslate(
                                                     -pageX - indexWidth / 2, -ry - rh / 2)));
             if (winter()) {
-                gazetteRow(row, ry, rh, on, hover);
+                float hoverAmt =
+                        controlMotion
+                                .computeIfAbsent(
+                                        "gazette-row-" + id, ignored -> new HubMotion.Transition())
+                                .sample(hover && !on ? 1 : 0, now, 180_000_000L, reduced);
+                gazetteRow(row, ry, rh, on, hoverAmt);
             } else {
                 d.boxShadow(pageX + 2, ry, indexWidth - 8, rh, 14, 0, 2, 8, 0, 0x087183aa);
                 d.linearGradientRoundRect(
@@ -1865,7 +1883,7 @@ final class HubUpdatesView {
                             muted(0xffa498ba));
             }
             d.restore();
-            d.restore();
+            if (!winter()) d.restore();
             d.restore();
             clippedHit(
                     "updates-row-" + id,
@@ -1905,9 +1923,9 @@ final class HubUpdatesView {
         scrollbar(1, pageX + indexWidth - 3, top, 3, height, listHeight, listScroll);
     }
 
-    private void gazetteRow(JsonObject row, float y, float h, boolean selectedRow, boolean hover) {
+    private void gazetteRow(JsonObject row, float y, float h, boolean selectedRow, float hoverAmt) {
         float left = pageX + 9, width = indexWidth - 18, x = left + 11;
-        if (selectedRow || hover)
+        if (selectedRow || hoverAmt > 0)
             d.rect(
                     left,
                     y,
@@ -1915,7 +1933,7 @@ final class HubUpdatesView {
                     h,
                     selectedRow
                             ? gazette.active()
-                            : HubWinterSheet.mix(gazette.index(), gazette.active(), .6f));
+                            : HubWinterSheet.alpha(gazette.active(), .6f * hoverAmt));
         d.line(
                 left,
                 y + h - 1,
@@ -2542,12 +2560,20 @@ final class HubUpdatesView {
             String cid = s(c, "id", "");
             y += 20;
             if (y + 25 > pageTop && y < pageTop + pageHeight) {
-                d.roundRect(x, y, 25, 25, 5, 0xffe9edf6);
+                d.roundRect(
+                        x, y, 25, 25, 5, winter() ? paper().cover() : c(0xffe9edf6, 0xff2c364c));
                 d.save();
                 d.clipRoundRect(x, y, 25, 25, 5);
                 HubHead.draw2D(d, x, y, 25);
                 d.restore();
-                d.strokeRoundRect(x, y, 25, 25, 5, 1, 0x22a9b2cd);
+                d.strokeRoundRect(
+                        x,
+                        y,
+                        25,
+                        25,
+                        5,
+                        1,
+                        winter() ? paper().ruling() : c(0x22a9b2cd, 0x33a9b2cd));
             }
             text(player, x + 32, y + 16, 11, ink(0xff67708a), 600);
             text("我", x + 38 + d.textWidth(player, 11, 600), y + 16, 9, muted(0xffa7adbf), 400);
@@ -2644,7 +2670,13 @@ final class HubUpdatesView {
                         winter()
                                 ? mix(paper().sheet(), paper().mail(), .09f)
                                 : c(0xfffcf3f5, 0x1aca7695));
-                text("删除这条留言及回复？", x + 10, y + 24, 11, warning(0xffa57683), 400);
+                text(
+                        "删除这条留言及回复？",
+                        x + 10,
+                        y + 24,
+                        11,
+                        winter() ? gazette.ink() : warning(0xffa57683),
+                        400);
                 buttonClipped(
                         "updates-delete-cancel",
                         "取消",

@@ -5,11 +5,26 @@
 .wz-page .wz-reminder-trigger:is(:hover,[aria-expanded="true"]) { color:var(--wz-blue); box-shadow:0 5px 18px #25365424; }
 html:not([data-motion="reduced"]) .wz-reminder-trigger:is(:hover,[aria-expanded="true"]) svg { transform:rotate(24deg); }
 html:not([data-motion="reduced"]) .wz-reminder-trigger:active { transform:scale(.95); }
-.wz-reminder-panel { position:absolute; left:0; bottom:calc(100% + 10px); width:min(282px,calc(100cqw - 36px)); border-radius:16px; padding:16px; }
+.wz-reminder-panel { position:absolute; left:0; bottom:calc(100% + 10px); width:min(296px,calc(100cqw - 36px)); border-radius:16px; padding:16px; }
 .wz-reminder-panel h2 { margin:0 0 8px; font-size:15px; }
-.wz-reminder-panel button { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; text-align:left; }
-.wz-reminder-panel button + button { border-top:1px solid var(--wz-rule); }
-.wz-reminder-panel button:last-child { padding-bottom:2px; }
+.wz-reminder-panel .wz-reminder-switch { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; text-align:left; }
+.wz-reminder-panel .wz-reminder-switch + .wz-reminder-switch,
+.wz-reminder-panel .wz-reminder-choice { border-top:1px solid var(--wz-rule); }
 .wz-reminder-panel strong, .wz-reminder-panel small { display:block; }
 .wz-reminder-panel strong { font-size:13px; font-weight:600; }
-.wz-reminder-panel small { margin-top:4px; font-size:12px; color:var(--wz-muted); }
+.wz-reminder-panel small { margin-top:4px; font-size:12px; color:var(--wz-muted); line-height:1.45; }
+.wz-reminder-choice { padding:11px 0 2px; }
+.wz-reminder-segment {
+  display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:4px;
+  margin-top:9px; padding:3px; border:1px solid var(--wz-rule); border-radius:10px;
+  background:color-mix(in srgb, var(--wz-ink) 5%, transparent);
+}
+.wz-reminder-segment button {
+  min-height:28px; padding:4px 6px; border-radius:7px; border:0; background:transparent;
+  font-size:12px; font-weight:600; color:var(--wz-muted); text-align:center;
+  transition:background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.wz-reminder-segment button:hover { color:var(--wz-ink); }
+.wz-reminder-segment button.is-active {
+  background:var(--wz-blue); color:#ffffff; box-shadow:0 2px 8px color-mix(in srgb, var(--wz-blue) 28%, transparent);
+}

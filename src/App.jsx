@@ -20,6 +20,7 @@ import PlayerHead from "./PlayerHead.jsx";
 import { FoxStamp, WinterNavigation, StationPaper, StationNews } from "./WinterStation.jsx";
 import { grantKey, rememberedGrant, subscribePreview, writeValue } from "./wenzhou/managerPreview.js";
 import Wenzhou from "./wenzhou/Wenzhou.jsx";
+import JeiQuickAskPreview from "./wenzhou/JeiQuickAskPreview.jsx";
 import {changeModelMode, modelMode, modelModes} from "./wenzhou/modelPreview.js";
 import HubRouteSurface from "./wenzhou/HubRouteSurface.jsx";
 import { Glyph } from "./wenzhou/Glyph.jsx";
@@ -345,15 +346,18 @@ function FortuneReading({ fortune, onClose, displayDate, onDisplay, winter }) {
 }
 
 const requestedDemo = new URLSearchParams(location.search).get("demo");
-const inboxDemo = ["unread", "shares"].includes(requestedDemo) ? requestedDemo : null;
+const inboxDemo = ["unread", "shares", "item-ask"].includes(requestedDemo) ? requestedDemo : null;
+const jeiDemo = requestedDemo === "jei-ask";
 
 export default function App() {
-  const [previewGrant, setPreviewGrant] = useState(() => Boolean(inboxDemo) || rememberedGrant(SELF_PROFILE.playerId));
+  const [previewGrant, setPreviewGrant] = useState(() => Boolean(inboxDemo || jeiDemo) || rememberedGrant(SELF_PROFILE.playerId));
+  const [jeiPreviewOpen, setJeiPreviewOpen] = useState(() => jeiDemo);
+  const [pendingQuickAsk, setPendingQuickAsk] = useState(null);
   const [wenzhouModelMode, setWenzhouModelMode] = useState(() => modelMode(SELF_PROFILE.playerId));
   useEffect(() => subscribePreview(() => setWenzhouModelMode(modelMode(SELF_PROFILE.playerId))), []);
   useEffect(() => subscribePreview(key => {
     if (key && key !== grantKey(SELF_PROFILE.playerId)) return;
-    const granted = Boolean(inboxDemo) || rememberedGrant(SELF_PROFILE.playerId);
+    const granted = Boolean(inboxDemo || jeiDemo) || rememberedGrant(SELF_PROFILE.playerId);
     setPreviewGrant(granted);
     if (!granted && location.hash === '#/wenzhou') {
       setPage('home');
@@ -585,7 +589,7 @@ export default function App() {
       </div>
         <div style={closed ? {display:"none"} : undefined} className={`app-shell welcome-shell has-leaderboards-nav handbook-routes ${previewGrant ? "has-wenzhou-nav" : ""} ${opening ? "is-opening" : ""}`}>
           {opening && <WelcomeSplash winter={winterTheme} />}
-          {previewGrant && <Wenzhou hubClosed={closed} demo={inboxDemo} blocked={Boolean(modal || opening)} playerId={SELF_PROFILE.playerId} active={!closed && page === "wenzhou"} reduceMotion={reduceMotion} notify={notify} onBack={() => navigate("home")} />}
+          {previewGrant && <Wenzhou hubClosed={closed} demo={inboxDemo || (jeiDemo ? "jei-ask" : null)} quickAsk={pendingQuickAsk} onConsumeQuickAsk={() => setPendingQuickAsk(null)} blocked={Boolean(modal || opening || jeiPreviewOpen)} playerId={SELF_PROFILE.playerId} active={!closed && !jeiPreviewOpen && page === "wenzhou"} reduceMotion={reduceMotion} notify={notify} onBack={() => navigate("home")} />}
           <AnimatePresence initial={false}>
           {!closed && page !== "wenzhou" && <HubRouteSurface key="handbook" side="handbook" reduceMotion={reduceMotion}>
           <aside className="sidebar" inert={opening}>
@@ -617,8 +621,8 @@ export default function App() {
                   { id: "leaderboards", label: "玩家排行", icon: <Trophy />, color: "pink" },
                   ...(previewGrant ? [{
                     id: "wenzhou", color: "teal", icon: <Glyph name="boat" />,
-                    label: <span className="wz-nav-label">问舟<small className="wz-beta">BETA</small></span>,
-                    ariaLabel: "问舟，内测",
+                    label: "问舟",
+                    ariaLabel: "问舟",
                   }] : []),
                 ].map(item => ({ ...item, onClick: () => navigate(item.id), current: page === item.id || (page === "memories" && item.id === "home"),
                   className: page === item.id || (page === "memories" && item.id === "home") ? "is-current" : "" }))}
@@ -1011,11 +1015,28 @@ export default function App() {
           <kbd>Esc</kbd> {closed ? "打开手册" : page === "wenzhou" ? "返回手册首页" : page === "memories" ? "返回上一级" : "收起面板"}
         </span>
         <span>本地交互预览 · 演示数据 <a className="updates-manager-link" href="/manager/" target="_blank" rel="noreferrer">打开 Manager 管理端 ↗</a></span>
+        <button onClick={() => setJeiPreviewOpen(true)}>
+          <Sparkles size={13} />
+          模拟 JEI 快捷提问
+        </button>
         <button onClick={() => setModal("preview")}>
           <SlidersHorizontal size={13} />
           预览选项
         </button>
       </div>
+      {jeiPreviewOpen && (
+        <JeiQuickAskPreview
+          playerId={SELF_PROFILE.playerId}
+          onClose={() => setJeiPreviewOpen(false)}
+          onAskItem={(item, source) => {
+            setJeiPreviewOpen(false);
+            setPreviewGrant(true);
+            setClosed(false);
+            setPendingQuickAsk({ item, source, at: Date.now() });
+            navigate("wenzhou");
+          }}
+        />
+      )}
       {reading && (
         <FortuneReading
           fortune={reading}
@@ -1278,7 +1299,7 @@ export default function App() {
               <div className="lb-preview-actions"><button className="btn subtle" onClick={playLeaderboardUpdate}>播放排行变动</button><button className="btn subtle" onClick={() => setLeaderboardPreview('ready')}>还原排行</button></div>
             </div>
             <div className="lb-preview-field">
-              <label htmlFor="wenzhou-preview-access">问舟内测身份（本页模拟）</label>
+              <label htmlFor="wenzhou-preview-access">问舟访问权限（本页模拟）</label>
               <select id="wenzhou-preview-access" value={previewGrant ? "granted" : "denied"}
                 onChange={event => changePreviewGrant(event.target.value === "granted")}>
                 <option value="denied">未授权玩家</option>
@@ -1306,6 +1327,8 @@ export default function App() {
             </button>
             <a className="btn subtle" href="?page=wenzhou&demo=unread#/wenzhou" target="_blank" rel="noreferrer">演示问舟未读对话</a>
             <a className="btn subtle" href="?page=wenzhou&demo=shares#/wenzhou" target="_blank" rel="noreferrer">演示收到的分享</a>
+            <a className="btn subtle" href="?demo=jei-ask" target="_blank" rel="noreferrer">演示 JEI 悬停快捷提问</a>
+            <a className="btn subtle" href="?page=wenzhou&demo=item-ask#/wenzhou" target="_blank" rel="noreferrer">演示物品提问承接页</a>
             <p className="preview-note">
               称号佩戴、显示设置和手册签笺展示都是本地模拟。抽签、解签、存签仍保留游戏内物品与方块交互。
             </p>

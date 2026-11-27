@@ -9,12 +9,39 @@ const choices = [
   ["unread", "历史未读提醒", "在历史入口和未读对话旁显示圆点。"],
 ];
 
+export const QUICK_ASK_MODES = [
+  ["global", "全局"],
+  ["jei", "JEI"],
+  ["off", "关闭"],
+];
+
 const storageKey = (playerId, kind) => prefix + "reminder:" + playerId + ":" + kind;
+const quickAskModeKey = playerId => prefix + "quick-ask-mode:" + playerId;
+const quickAskBindKey = playerId => prefix + "quick-ask-key:" + playerId;
+
 export const reminderEnabled = (playerId, kind) => readValue(storageKey(playerId, kind), true) !== false;
+export function quickAskMode(playerId) {
+  const saved = readValue(quickAskModeKey(playerId), "global");
+  return QUICK_ASK_MODES.some(([id]) => id === saved) ? saved : "global";
+}
+export function setQuickAskMode(playerId, mode) {
+  if (!QUICK_ASK_MODES.some(([id]) => id === mode)) return;
+  writeValue(quickAskModeKey(playerId), mode);
+}
+export function quickAskKey(playerId) {
+  const saved = readValue(quickAskBindKey(playerId), "G");
+  return typeof saved === "string" && /^[A-Z0-9]$/.test(saved) ? saved : "G";
+}
+export function setQuickAskKey(playerId, key) {
+  const normalized = String(key || "G").toUpperCase();
+  if (!/^[A-Z0-9]$/.test(normalized)) return;
+  writeValue(quickAskBindKey(playerId), normalized);
+}
 
 function ReminderPanel({id, playerId, notify, reduceMotion, guideOpen}) {
   const completion = useSyncExternalStore(subscribePreview, () => reminderEnabled(playerId, "completion"));
   const unread = useSyncExternalStore(subscribePreview, () => reminderEnabled(playerId, "unread"));
+  const askMode = useSyncExternalStore(subscribePreview, () => quickAskMode(playerId));
   const present = useIsPresent();
   const first = useRef(null);
   useEffect(() => { if (!guideOpen) first.current?.focus({preventScroll:true}); }, [guideOpen]);
@@ -24,7 +51,7 @@ function ReminderPanel({id, playerId, notify, reduceMotion, guideOpen}) {
     <h2>问舟设置</h2>
     {choices.map(([key, label, description], i) => {
       const checked = key === "completion" ? completion : unread;
-      return <button key={key} type="button" ref={i === 0 ? first : undefined} role="switch"
+      return <button key={key} type="button" className="wz-reminder-switch" ref={i === 0 ? first : undefined} role="switch"
         aria-checked={checked} aria-label={label} aria-describedby={id + key}
         onClick={() => {
           try { writeValue(storageKey(playerId, key), !checked); }
@@ -34,6 +61,24 @@ function ReminderPanel({id, playerId, notify, reduceMotion, guideOpen}) {
         <span className={"toggle" + (checked ? " on" : "")} aria-hidden="true"><span/></span>
       </button>;
     })}
+    <div className="wz-reminder-choice">
+      <div className="wz-reminder-choice-head">
+        <strong>物品快捷提问</strong>
+        <small id={id + "quick-ask"}>悬停物品时显示快捷提问提示。</small>
+      </div>
+      <div className="wz-reminder-segment" role="radiogroup" aria-label="物品快捷提问范围" aria-describedby={id + "quick-ask"}>
+        {QUICK_ASK_MODES.map(([mode, label]) => (
+          <button key={mode} type="button" role="radio" aria-checked={askMode === mode}
+            className={askMode === mode ? "is-active" : undefined}
+            onClick={() => {
+              try { setQuickAskMode(playerId, mode); }
+              catch { notify("未能保存快捷提问设置，请重试。", "error"); }
+            }}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
   </motion.section>;
 }
 

@@ -7,6 +7,7 @@
 package com.pixelmc.hub.client.ui;
 
 import com.pixelmc.hub.client.render.HubDraw;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,7 @@ final class HubToast {
     private final ArrayDeque<Message> queue = new ArrayDeque<>();
     private final ArrayDeque<double[]> samples = new ArrayDeque<>();
     private final HubMotion.Spring returnY = new HubMotion.Spring();
+    private final HubMotion.Transition closeHover = new HubMotion.Transition();
     private Message current;
     private long entered, last, closingAt = -1;
     private double remaining = 4;
@@ -51,12 +53,16 @@ final class HubToast {
         closePressed = false;
         dragY = 0;
         returnY.snap(0);
+        closeHover.initialized = false;
+        closeHover.value = 0;
         visibleBounds = false;
     }
 
     void clear() {
         current = null;
         queue.clear();
+        closeHover.initialized = false;
+        closeHover.value = 0;
         dragging = closePressed = visibleBounds = false;
     }
 
@@ -123,12 +129,27 @@ final class HubToast {
         advance(now, contains(mx, my) || keyboardFocus, reduced);
         if (current == null) return;
         winterReceipt = d.winter();
-        float right = winterReceipt ? viewportX + viewportW - 24 : Math.min(1236, viewportX + viewportW - 16);
-        float bottom = winterReceipt ? viewportY + viewportH - 24 : Math.min(826, viewportY + viewportH - 16);
-        w = winterReceipt ? Math.min(356, viewportW - 48) : Math.min(356, right - Math.max(16, viewportX + 16));
-        if (w < 120) { visibleBounds = false; return; }
+        float right =
+                winterReceipt
+                        ? viewportX + viewportW - 24
+                        : Math.min(1236, viewportX + viewportW - 16);
+        float bottom =
+                winterReceipt
+                        ? viewportY + viewportH - 24
+                        : Math.min(826, viewportY + viewportH - 16);
+        w =
+                winterReceipt
+                        ? Math.min(356, viewportW - 48)
+                        : Math.min(356, right - Math.max(16, viewportX + 16));
+        if (w < 120) {
+            visibleBounds = false;
+            return;
+        }
         List<String> lines = lines(d, current.text, w - (winterReceipt ? 111 : 86));
-        h = winterReceipt ? Math.max(60, 26 + lines.size() * 19) : Math.max(56, 32 + lines.size() * 19);
+        h =
+                winterReceipt
+                        ? Math.max(60, 26 + lines.size() * 19)
+                        : Math.max(56, 32 + lines.size() * 19);
         x = right - w;
         float enter = HubMotion.bezier((now - entered) / 400_000_000f, .23f, 1, .32f, 1);
         float exit =
@@ -151,7 +172,11 @@ final class HubToast {
         try {
             if (winterReceipt) {
                 boolean prior = d.literalColors(true);
-                try { winterReceipt(d, lines, mx, my); } finally { d.literalColors(prior); }
+                try {
+                    winterReceipt(d, lines, mx, my, now, reduced);
+                } finally {
+                    d.literalColors(prior);
+                }
                 return;
             }
             d.boxShadow(x, y, w, h, 12, 0, 4, 12, 0, 0x294a4d75);
@@ -195,13 +220,15 @@ final class HubToast {
         }
     }
 
-    private void winterReceipt(HubDraw d, List<String> lines, float mx, float my) {
+    private void winterReceipt(
+            HubDraw d, List<String> lines, float mx, float my, long now, boolean reduced) {
         var p = d.winterPaper();
-        int accent = switch (current.kind) {
-            case SUCCESS -> p.pine();
-            case ERROR -> p.mailInk();
-            case INFO -> d.dark() ? 0xffabc8d0 : 0xff4b6874;
-        };
+        int accent =
+                switch (current.kind) {
+                    case SUCCESS -> p.pine();
+                    case ERROR -> p.mailInk();
+                    case INFO -> d.dark() ? 0xffabc8d0 : 0xff4b6874;
+                };
         float mid = y + h / 2;
         d.boxShadow(x, y, w, h, 14, 0, 5, 15, -5, 0x52182e28);
         d.roundRect(x, y + 2, w, h, 14, p.ruling());
@@ -211,37 +238,74 @@ final class HubToast {
         d.canvas().concat(io.github.humbleui.skija.Matrix33.makeRotate(-5, x + 30.5f, mid));
         float stamp = x + 16;
         d.roundRect(stamp, mid - 15, 29, 30, 6, HubWinterSheet.mix(p.sheet(), accent, .10f));
-        d.strokeRoundRect(stamp + .5f, mid - 14.5f, 28, 29, 6, 1, HubWinterSheet.mix(p.sheet(), accent, .56f));
-        try (var dash = io.github.humbleui.skija.PathEffect.makeDash(new float[]{2, 2}, 0);
-                var paint = new io.github.humbleui.skija.Paint().setAntiAlias(true)
-                        .setColor(HubWinterSheet.alpha(accent, .47f))
-                        .setMode(io.github.humbleui.skija.PaintMode.STROKE).setStrokeWidth(1).setPathEffect(dash)) {
-            d.canvas().drawRRect(io.github.humbleui.types.RRect.makeXYWH(stamp + 3, mid - 12, 23, 24, 4), paint);
+        d.strokeRoundRect(
+                stamp + .5f,
+                mid - 14.5f,
+                28,
+                29,
+                6,
+                1,
+                HubWinterSheet.mix(p.sheet(), accent, .56f));
+        try (var dash = io.github.humbleui.skija.PathEffect.makeDash(new float[] {2, 2}, 0);
+                var paint =
+                        new io.github.humbleui.skija.Paint()
+                                .setAntiAlias(true)
+                                .setColor(HubWinterSheet.alpha(accent, .47f))
+                                .setMode(io.github.humbleui.skija.PaintMode.STROKE)
+                                .setStrokeWidth(1)
+                                .setPathEffect(dash)) {
+            d.canvas()
+                    .drawRRect(
+                            io.github.humbleui.types.RRect.makeXYWH(stamp + 3, mid - 12, 23, 24, 4),
+                            paint);
         }
         if (current.kind == Kind.ERROR) {
             d.roundRect(stamp + 13, mid - 6.5f, 2.5f, 8, 1.2f, accent);
             d.circle(stamp + 14.25f, mid + 5, 1.55f, accent);
-        } else d.icon(current.kind == Kind.SUCCESS ? "check" : "info", stamp + 7, mid - 7.5f, 15, accent);
+        } else
+            d.icon(
+                    current.kind == Kind.SUCCESS ? "check" : "info",
+                    stamp + 7,
+                    mid - 7.5f,
+                    15,
+                    accent);
         d.restore();
         float textHeight = Math.max(32, lines.size() * 19);
         for (float at = mid - textHeight / 2; at < mid + textHeight / 2; at += 5)
             d.rect(x + 57, at, 1, Math.min(3, mid + textHeight / 2 - at), p.stitch());
         float baseline = mid - lines.size() * 9.5f + 14;
-        for (int i = 0; i < lines.size(); i++) d.textSerif(lines.get(i), x + 70, baseline + 19 * i, 13, p.ink(), true);
-        if (overClose(mx, my)) d.circle(x + w - 23, mid, 12, p.cover());
-        d.icon("x", x + w - 29, mid - 6, 12, p.muted());
-        d.roundRect(x + 69, y + h - 7, Math.max(0, (w - 89) * (float) remaining / 4),
-                2, 1, HubWinterSheet.mix(p.sheet(), accent, .68f));
+        for (int i = 0; i < lines.size(); i++)
+            d.textSerif(lines.get(i), x + 70, baseline + 19 * i, 13, p.ink(), true);
+        float hover = closeHover.sample(overClose(mx, my) ? 1 : 0, now, 160_000_000L, reduced);
+        if (hover > 0) d.circle(x + w - 23, mid, 12, HubWinterSheet.alpha(p.cover(), hover));
+        d.icon("x", x + w - 29, mid - 6, 12, HubWinterSheet.mix(p.muted(), p.ink(), hover));
+        d.roundRect(
+                x + 69,
+                y + h - 7,
+                Math.max(0, (w - 89) * (float) remaining / 4),
+                2,
+                1,
+                HubWinterSheet.mix(p.sheet(), accent, .68f));
     }
 
-    boolean canClose() { return visibleBounds && current != null && closingAt < 0; }
-    float closeLeft() { return x + w - 35; }
-    float closeTop() { return y + h / 2 - 12; }
+    boolean canClose() {
+        return visibleBounds && current != null && closingAt < 0;
+    }
+
+    float closeLeft() {
+        return x + w - 35;
+    }
+
+    float closeTop() {
+        return winterReceipt ? y + h / 2 - 12 : y + 14;
+    }
 
     private boolean overClose(float px, float py) {
         float top = winterReceipt ? y + h / 2 - 12 : y + 14;
-        return px >= x + w - (winterReceipt ? 35 : 34) && px <= x + w - (winterReceipt ? 11 : 10)
-                && py >= top && py <= top + 24;
+        return px >= x + w - (winterReceipt ? 35 : 34)
+                && px <= x + w - (winterReceipt ? 11 : 10)
+                && py >= top
+                && py <= top + 24;
     }
 
     private List<String> lines(HubDraw d, String text, float maxWidth) {
@@ -249,7 +313,12 @@ final class HubToast {
         StringBuilder line = new StringBuilder();
         for (int cp : text.codePoints().toArray()) {
             String next = new String(Character.toChars(cp));
-            if (cp == '\n' || line.length() > 0 && (winterReceipt ? d.textWidthSerif(line + next, 13, true) : d.textWidth(line + next, 12, 500)) > maxWidth) {
+            if (cp == '\n'
+                    || line.length() > 0
+                            && (winterReceipt
+                                            ? d.textWidthSerif(line + next, 13, true)
+                                            : d.textWidth(line + next, 12, 500))
+                                    > maxWidth) {
                 result.add(line.toString());
                 line.setLength(0);
             }

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Pixel chisel & blueprint inspired by Ultramarine chisel table icon -->
+  <rect x="2" y="10" width="5" height="4" fill="#8b909a"/>
+  <rect x="3" y="11" width="3" height="2" fill="#a6acb6"/>
+  <rect x="4" y="4" width="1" height="6" fill="#7d6452"/>
+  <rect x="4" y="2" width="1" height="2" fill="#a58268"/>
+  <rect x="3" y="9" width="3" height="1" fill="#6b707a"/>
+  <rect x="8" y="3" width="6" height="10" fill="#e9e7e0"/>
+  <rect x="8" y="3" width="6" height="1" fill="#f7f5ef"/>
+  <rect x="13" y="4" width="1" height="9" fill="#cbc7bc"/>
+  <rect x="8" y="12" width="6" height="1" fill="#cbc7bc"/>
+  <rect x="9" y="5" width="2" height="2" fill="#c97474"/>
+  <rect x="12" y="5" width="1" height="1" fill="#b4b0a6"/>
+  <rect x="12" y="7" width="1" height="1" fill="#b4b0a6"/>
+  <rect x="9" y="8" width="4" height="1" fill="#a8a49a"/>
+  <rect x="9" y="10" width="3" height="1" fill="#a8a49a"/>
+</svg>

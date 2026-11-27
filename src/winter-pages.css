@@ -265,9 +265,17 @@ html .preview-stage.winter-theme :focus-visible,
   right:4%; bottom:8%; width:clamp(65px,11%,120px); height:9%; opacity:.33; transform:rotate(-8deg);
   mask:url("/assets/winter/winter-marks.svg#mail") bottom right / contain no-repeat;
 }
-.winter-theme .wz-page :is(.wz-welcome-actions button,.wz-guide-card,.wz-agreement-footer,.wz-compose,.wz-usage-paper,.wz-picker,.wz-model-menu,.wz-reference-menu,.wz-reminder-panel,.wz-reminder-trigger) {
+.winter-theme .wz-page :is(.wz-welcome-actions button,.wz-guide-card,.wz-agreement-footer,.wz-compose,.wz-usage-paper,.wz-picker,.wz-model-menu,.wz-reference-menu,.wz-reminder-panel,.wz-reminder-trigger,.wz-compose-shell.has-quick-suggestions) {
   background:var(--sheet); border-color:var(--ruling); color:var(--ink);
 }
+.winter-theme .wz-page .wz-compose-shell.has-quick-suggestions { border-radius:14px; box-shadow:0 3px 0 var(--soft-paper),0 4px 0 var(--ruling); }
+.winter-theme .wz-page .wz-compose-shell.has-quick-suggestions:focus-within { border-color:var(--ruling); box-shadow:0 3px 0 var(--soft-paper),0 4px 0 var(--ruling); }
+.winter-theme .wz-page .wz-compose-shell.has-quick-suggestions .wz-compose { box-shadow:none; background:transparent; }
+.winter-theme .wz-page .wz-quick-dock-top { border-bottom-color:var(--ruling); }
+.winter-theme .wz-page .wz-quick-context-bar { background:var(--soft-paper); border-bottom-color:var(--ruling); border-radius:13px 13px 0 0; }
+.winter-theme .wz-page .wz-quick-row { border-radius:8px; }
+.winter-theme .wz-page .wz-quick-row:enabled:hover { background:color-mix(in srgb,var(--pine) 9%,var(--sheet)); color:var(--pine); }
+.winter-theme .wz-page .wz-quick-row:enabled:hover svg { color:var(--pine); }
 .winter-theme .wz-page .wz-welcome-actions button.wz-guide-primary,.winter-theme .wz-page .wzs-primary { color:var(--sheet); background:var(--pine); }
 .winter-theme .wz-page :is(.wz-guide-welcome h1,.wz-landing h1,.wzs-content h1,.wz-history h1,.wz-agreement h1) {
   font-family:var(--poem); letter-spacing:.035em; color:var(--ink);

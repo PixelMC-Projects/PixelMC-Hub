@@ -6,6 +6,7 @@ import com.google.gson.*;
 import com.pixelmc.hub.client.render.GlassStyle;
 import com.pixelmc.hub.client.render.HubDraw;
 import com.pixelmc.hub.client.render.WinterPaper;
+
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
@@ -1064,11 +1065,15 @@ final class HubLeaderboardsView {
             if (hover
                     && (Objects.equals(pressed, "rankings-row-" + row.playerId())
                             || Objects.equals(pressed, "rankings-profile-row-" + row.playerId())))
-                draw.rect(224, y, 995, pose.summitHeight, c(0x80e7e4f1, 0x1ab69cdb));
+                draw.rect(224, y, 995, pose.summitHeight, alpha(summitRule(), .32f));
             float located = reduced ? 0 : locateOpacity(state, row, 1_600_000_000L);
             if (located > 0) {
                 draw.rect(
-                        224, y, 995, pose.summitHeight, alpha(c(0xffebe1ff, 0x338e70c7), located));
+                        224,
+                        y,
+                        995,
+                        pose.summitHeight,
+                        alpha(paper.mail(), (paper.dark() ? .22f : .14f) * located));
                 draw.strokeRoundRect(
                         224.5f,
                         y + .5f,
@@ -1076,7 +1081,7 @@ final class HubLeaderboardsView {
                         pose.summitHeight - 1,
                         0,
                         1,
-                        alpha(c(0xffac94d2, 0xffc1a0e6), located));
+                        alpha(paper.mail(), .75f * located));
             }
             draw.rect(224, y + pose.summitHeight - 1, 995, 1, alpha(summitRule(), .62f));
             rank(row, state, 230, cy, 48, false, summitMuted());

@@ -177,7 +177,9 @@ html[data-theme="dark"] .winter-theme .preview-options-dialog select { color-sch
   box-shadow:0 7px 22px -10px #15272045;
 }
 .winter-theme .wz-page :is(.wz-reminder-panel h2,.wz-guide-card h2,.wz-model-heading) { color:var(--pine); }
-.winter-theme .wz-page :is(.wz-picker-search,.wz-reminder-panel button + button,.wz-model-menu small) { border-color:var(--ruling); }
+.winter-theme .wz-page :is(.wz-picker-search,.wz-reminder-panel .wz-reminder-switch + .wz-reminder-switch,.wz-reminder-panel .wz-reminder-choice,.wz-model-menu small) { border-color:var(--ruling); }
+.winter-theme .wz-page .wz-reminder-segment { background:var(--soft-paper); border-color:var(--ruling); }
+.winter-theme .wz-page .wz-reminder-segment button.is-active { background:var(--pine); color:var(--sheet); box-shadow:none; }
 .winter-theme .wz-page .wz-block-world {
   color:var(--ink); background:radial-gradient(ellipse at 65% 32%,var(--sheet),transparent 63%),linear-gradient(165deg,var(--cover-base),var(--paper) 55%,var(--cover));
   box-shadow:none;

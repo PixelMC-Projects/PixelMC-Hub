@@ -23,18 +23,9 @@ import {player as previewOwner} from '../data.js';
 import QuotaIndicator from './QuotaIndicator.jsx';
 import { getPreviewQuota, getPreviewTerraQuota, previewQuotaSettings, startPreviewQuota, terraQuotaChanged } from './quotaPreview.js';
 import { ReminderSettings, reminderEnabled } from "./ReminderSettings.jsx";
-import Agreement from "./Agreement.jsx";
+import { ItemQuickAskPanel } from "./ItemQuickAskStage.jsx";
 
-import { currentPolicy, policyKey, showsPlayerAgreement, visibilityKey, prefix, archivePrefix, readValue, receiptKey as previewEntryKey, historyKey as storageKey, subscribePreview, terraPreviewProjectAvailable, writeValue, archiveSessions } from './managerPreview.js';
-
-function readPreviewReceipt() {
-  try {
-    const receipt = JSON.parse(localStorage.getItem(previewEntryKey));
-    return receipt?.version === currentPolicy().version && receipt.terms === true && receipt.api === true
-      && Number.isFinite(receipt.acceptedAt) ? receipt : null;
-  }
-  catch { return null; }
-}
+import { prefix, archivePrefix, readValue, historyKey as storageKey, subscribePreview, terraPreviewProjectAvailable, writeValue, archiveSessions } from './managerPreview.js';
 
 function exampleInbox() {
   const now = Date.now();
@@ -243,7 +234,7 @@ function pickGreeting(previous) {
   return choices[Math.floor(Math.random() * choices.length)];
 }
 
-export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = false, reduceMotion, onBack, notify }) {
+export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = false, quickAsk = null, onConsumeQuickAsk, reduceMotion, onBack, notify }) {
   const [shareView, setShareView] = useState(() => demo === "shares" ? {page:"inbox"} : null);
   const shareOpener = useRef(null);
   function closeShares() {
@@ -256,7 +247,6 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
   const showTerra = terraAllowed(mode, projectAvailable);
   const terraSelected = currentModel === TERRA;
   const chatGptSelected = currentModel !== DEEPSEEK && !terraSelected;
-  const [policy, setPolicy] = useState(currentPolicy);
   const archived = useRef([]);
   const [quotas, setQuotas] = useState(() => playerQuotas(playerId, mode));
   const quota = quotaFor(currentModel, quotas);
@@ -273,32 +263,25 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
     const timeout = setTimeout(() => setQuotas(playerQuotas(playerId, mode)), Math.max(0, quota.resetAt - Date.now()) + 1);
     return () => clearTimeout(timeout);
   }, [playerId, mode, quota.enabled, quota.resetAt]);
-  const [receipt, setReceipt] = useState(readPreviewReceipt);
-  const [agreementVisible, setAgreementVisible] = useState(() => !demo && showsPlayerAgreement());
-  const enteredPreview = !agreementVisible || Boolean(receipt);
-  const [reviewingTerms, setReviewingTerms] = useState(false);
-  const agreementLink = useRef(null);
-  const restoreAgreementFocus = useRef(false);
-  const showAgreement = agreementVisible && (!receipt || reviewingTerms);
   const [guide, setGuide] = useState(null);
   const [guideLeaving, setGuideLeaving] = useState(false);
   const seenHere = useRef(null);
   const replayButton = useRef(null);
   const replaying = useRef(false);
   useLayoutEffect(() => {
-    if (!active || showAgreement) { setGuideLeaving(false); setGuide(null); return; }
+    if (!active) { setGuideLeaving(false); setGuide(null); return; }
     const key = prefix + "intro-seen:" + playerId;
     if (demo || seenHere.current === key || readValue(key, false) === true) return;
     seenHere.current = key;
     replaying.current = false;
     setGuide(0);
-  }, [active, showAgreement, playerId]);
+  }, [active, playerId]);
   useEffect(() => {
-    if (active && !showAgreement && guide === 0) {
+    if (active && guide === 0) {
       try { writeValue(prefix + "intro-seen:" + playerId, true); }
       catch { /* The current visit is still covered if browser storage is unavailable. */ }
     }
-  }, [guide, active, showAgreement, playerId]);
+  }, [guide, active, playerId]);
   function closeGuide() {
     if (reduceMotion) finishGuide();
     else setGuideLeaving(true);
@@ -311,6 +294,9 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
   const guidanceId = useId();
   const [sessions, setSessions] = useState(() => demo ? exampleInbox() : loadHistory());
   const [selected, setSelected] = useState(null);
+  const [quickAskItem, setQuickAskItem] = useState(() =>
+    demo === "item-ask" ? { item: itemById.get("ultramarine:chisel_table"), source: "jei" } : null,
+  );
   const [viewHistory, setViewHistory] = useState(false);
   const [greeting, setGreeting] = useState(pickGreeting);
   const [draft, setDraft] = useState([]);
@@ -340,8 +326,8 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
     if (restoreFocus) input.current?.focus({preventScroll: true});
   }, []);
   useEffect(() => {
-    if (!active || viewHistory || showAgreement) { setPickerOpen(false); setSelectingBlock(false); }
-  }, [active, viewHistory, showAgreement]);
+    if (!active || viewHistory) { setPickerOpen(false); setSelectingBlock(false); }
+  }, [active, viewHistory]);
   function pickItem(item) {
     input.current?.insert(item);
     closePicker(true);
@@ -365,11 +351,23 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
   const busy = Boolean(running);
   const showingRun = busy && lastTurn?.id === running;
   const waiting = Boolean(lastTurn?.topicPrompt);
+  useEffect(() => {
+    if (!quickAsk?.item) return;
+    newest.current = null;
+    setSelected(null);
+    setViewHistory(false);
+    setShareView(null);
+    setPickerOpen(false);
+    setSelectingBlock(false);
+    setDraft([]);
+    setQuickAskItem({ item: quickAsk.item, source: quickAsk.source || "jei" });
+    onConsumeQuickAsk?.();
+  }, [quickAsk, onConsumeQuickAsk]);
   useLayoutEffect(() => {
     const entering = active && !wasOpen.current;
     wasOpen.current = active;
     if (!active) return;
-    if (entering) {
+    if (entering && !quickAsk && !quickAskItem) {
       const ongoing = running && sessions.find(row => row.turns.at(-1)?.id === running);
       const latest = sessions.reduce((best, row) =>
         row.unread && (!best || row.updated > best.updated) ? row : best, null);
@@ -379,29 +377,13 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
         return;
       }
     }
-    if (session?.unread && !shareView && tabVisible && !blocked && !viewHistory && !showAgreement && guide === null && !selectingBlock) {
+    if (session?.unread && !shareView && tabVisible && !blocked && !viewHistory && guide === null && !selectingBlock) {
       setSessions(rows => rows.map(row => row.id === selected ? {...row, unread:false} : row));
     }
-  }, [active, selected, running, sessions, tabVisible, blocked, viewHistory, showAgreement, guide, selectingBlock, shareView]);
+  }, [active, selected, running, sessions, tabVisible, blocked, viewHistory, guide, selectingBlock, shareView, quickAsk, quickAskItem]);
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   useEffect(() => () => request.current?.abort(), []);
-  useEffect(() => {
-    return subscribePreview(key => {
-      if (key && key !== previewEntryKey && key !== policyKey && key !== visibilityKey) return;
-      const visible = !demo && showsPlayerAgreement();
-      setAgreementVisible(visible);
-      setPolicy(currentPolicy());
-      const next = readPreviewReceipt();
-      setReceipt(next);
-      if (!visible || !next) setReviewingTerms(false);
-      if (visible && !next) {
-        request.current?.abort();
-        request.current = null;
-        setRunning(null);
-      }
-    });
-  }, []);
   useEffect(() => {
     try {
       if (demo) return;
@@ -413,52 +395,23 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
     catch { notifyRef.current("浏览器未能保存对话。这次仍可在手册里继续聊。", "error"); }
   }, [sessions]);
   useEffect(() => {
-    if (!active) { setShareView(null); newest.current = null; setViewHistory(false); setReviewingTerms(false); return; }
-    if (showAgreement || viewHistory || shareView) return;
-    if (restoreAgreementFocus.current) {
-      restoreAgreementFocus.current = false;
-      agreementLink.current?.focus({ preventScroll: true });
-      return;
-    }
+    if (!active) { setShareView(null); newest.current = null; setViewHistory(false); return; }
+    if (viewHistory || shareView) return;
     const target = waiting ? scroll.current?.querySelector(".wz-topic-choice") : input.current;
     target?.focus({ preventScroll: true });
-  }, [active, showAgreement, selected, viewHistory, waiting]);
+  }, [active, selected, viewHistory, waiting, shareView]);
   const followAnswer = useCallback(() => {
     if (pinned.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, []);
   useLayoutEffect(() => {
-    if (active && !showAgreement && !viewHistory) followAnswer();
-  }, [lastTurn, active, viewHistory, showAgreement, followAnswer]);
-
-  function enterPreview(research) {
-    const acceptedAt = Date.now();
-    if (!showsPlayerAgreement() || currentPolicy().version !== policy.version) return;
-    const next = { version: policy.version, acceptedAt, terms: true, api: true, research, researchUpdatedAt: acceptedAt };
-    try {
-      writeValue(previewEntryKey, next);
-    }
-    catch { notify("浏览器未能保存选择，本次预览仍可使用。", "error"); }
-    setReceipt(next);
-  }
-
-  function changeResearchConsent(research) {
-    if (!receipt || currentPolicy().version !== receipt.version) return;
-    const next = { ...receipt, research, researchUpdatedAt: Date.now() };
-    try {
-      writeValue(previewEntryKey, next);
-      setReceipt(next);
-    } catch { notify("浏览器未能保存修改，请重试。", "error"); }
-  }
-
-  function closeReview() {
-    restoreAgreementFocus.current = true;
-    setReviewingTerms(false);
-  }
+    if (active && !viewHistory) followAnswer();
+  }, [lastTurn, active, viewHistory, followAnswer]);
 
   function choose(id) {
     if (id === null) setGreeting(pickGreeting);
     newest.current = null;
     setSelected(id);
+    setQuickAskItem(null);
     setPickerOpen(false);
     setDraft([]);
     setViewHistory(false);
@@ -476,22 +429,26 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
     notify("已删除这段对话");
   }
   function send(raw, choosing = false) {
-    const parts = typeof raw === "string" ? [raw] : raw;
+    const rawParts = typeof raw === "string" ? [raw] : raw;
+    const activeQuickItem = !choosing ? quickAskItem?.item : null;
+    const alreadyReferenced = activeQuickItem && rawParts.some(p => p?.item === activeQuickItem.id);
+    const parts = activeQuickItem && !alreadyReferenced
+      ? [{ item: activeQuickItem.id }, " ", ...rawParts]
+      : rawParts;
     const question = questionText(parts).trim();
-    if (!question || showAgreement || request.current || waiting || (lastTurn?.itemChoice && !choosing)) return;
+    if (!question || request.current || waiting || (lastTurn?.itemChoice && !choosing)) return;
     const model = selectedModel(playerId);
     if (quotaFor(model, playerQuotas(playerId, modelMode(playerId))).exhausted) {
       notify(model === TERRA ? "Terra 美元额度已用完，可以切换到 DeepSeek。" : "本周额度已用完，可在输入栏左侧查看额度状态。");
       return;
     }
-    const id = selected || crypto.randomUUID();
-    const consent = readPreviewReceipt();
-    if (!demo && showsPlayerAgreement() && !consent) return;
+    const id = activeQuickItem ? crypto.randomUUID() : (selected || crypto.randomUUID());
+    const historyTurns = activeQuickItem ? [] : turns;
     if (!demo && model === DEEPSEEK) startPreviewQuota(playerId);
     const turn = {
       id: crypto.randomUUID(), createdAt: Date.now(), question, questionParts: parts, model, reasoningEffort: effectiveEffort(playerId, model), events: [], usageReceipts: [], reply: null,
-      researchAuthorizedAt: consent?.research ? consent.researchUpdatedAt : null,
     };
+    setQuickAskItem(null);
     setDraft([]);
     setPickerOpen(false);
     setSelected(id);
@@ -499,7 +456,7 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
       const old = prev.find(row => row.id === id);
       return [{ id, updated: Date.now(), turns: [...(old?.turns || []), turn] }, ...prev.filter(row => row.id !== id)];
     });
-    runTurn(id, turn, turns, false);
+    runTurn(id, turn, historyTurns, false);
   }
 
   function resolveTopic(startNew) {
@@ -567,36 +524,49 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
     }
   }
 
+  const quickAskActive = Boolean(!session && !viewHistory && quickAskItem?.item);
+  const quickAskName = quickAskItem?.item?.name || "";
+  const quickAskLongName = [...quickAskName].length > 8;
+  const quickAskHeading = quickAskItem?.item
+    ? (quickAskLongName ? "想了解这件物品什么？" : `想了解「${quickAskName}」什么？`)
+    : greeting;
+  const quickAskPlaceholder = quickAskItem?.item ? "对该物品进行提问..." : null;
   const composer = <div className="wz-compose-row">
     {(quota.enabled || quota.terra && (quota.unlimited || quota.exhausted)) &&
       <QuotaIndicator key={quota.terra ? TERRA : DEEPSEEK} quota={quota}/>}
-    <form ref={composerForm} className="wz-compose" onSubmit={e => { e.preventDefault(); send(draft); }}>
-    {pickerOpen && <ItemPicker anchor={composerForm} onSelect={pickItem} onClose={closePicker}/>}
-    <ReferenceTools guideOpen={guide === 3} disabled={waiting} searching={pickerOpen} closeSearch={closePicker} remember={() => input.current?.remember()}
-      onItem={openPicker} onBlock={openBlockPicker}/>
-    <InlineQuestion editorRef={input} parts={draft} onChange={setDraft} disabled={waiting} description={guidanceId}
-      placeholder={quotaExhausted ? (terraSelected ? "Terra 美元额度已用完" : "本周额度已用完") : waiting ? "请选择如何继续这次提问" : session ? "接着问问舟…" : "想在旅途中弄清什么？"}
-      onPicker={openPicker} onSend={() => send(draft)}/>
-    {(ownerModelView(mode) || showTerra) && <ModelPicker playerId={playerId} disabled={busy || waiting || guide !== null}/>}
-    {!chatGptSelected && <UsageCost key={(selected || 'new') + ':' + currentModel} turns={turns} terra={terraSelected} guideOpen={guide === 2} />}
-    {showingRun
-      ? <button type="button" className="wz-stop" aria-label="停止回答" title="停止回答" onClick={stop}><span aria-hidden="true"/></button>
-      : <button type="submit" aria-label="发送问题" disabled={!questionText(draft).trim() || busy || waiting || quotaExhausted}><Glyph name="send" size={21} /></button>}
-  </form></div>;
+    <div className={"wz-compose-shell" + (quickAskActive ? " has-quick-suggestions" : "")}>
+      {quickAskActive && (
+        <ItemQuickAskPanel
+          item={quickAskItem.item}
+          busy={busy}
+          exhausted={quotaExhausted}
+          onPreset={prompt => send([{ item: quickAskItem.item.id }, " ", prompt])}
+          onDismiss={() => setQuickAskItem(null)}
+        />
+      )}
+      <form ref={composerForm} className="wz-compose" onSubmit={e => { e.preventDefault(); send(draft); }}>
+      {pickerOpen && <ItemPicker anchor={composerForm} onSelect={pickItem} onClose={closePicker}/>}
+      <ReferenceTools guideOpen={guide === 3} disabled={waiting} searching={pickerOpen} closeSearch={closePicker} remember={() => input.current?.remember()}
+        onItem={openPicker} onBlock={openBlockPicker}/>
+      <InlineQuestion editorRef={input} parts={draft} onChange={setDraft} disabled={waiting} description={guidanceId}
+        placeholder={quotaExhausted ? (terraSelected ? "Terra 美元额度已用完" : "本周额度已用完") : waiting ? "请选择如何继续这次提问" : quickAskPlaceholder ? quickAskPlaceholder : session ? "接着问问舟…" : "想在旅途中弄清什么？"}
+        onPicker={openPicker} onSend={() => send(draft)}/>
+      {(ownerModelView(mode) || showTerra) && <ModelPicker playerId={playerId} disabled={busy || waiting || guide !== null}/>}
+      {!chatGptSelected && <UsageCost key={(selected || 'new') + ':' + currentModel} turns={turns} terra={terraSelected} guideOpen={guide === 2} />}
+      {showingRun
+        ? <button type="button" className="wz-stop" aria-label="停止回答" title="停止回答" onClick={stop}><span aria-hidden="true"/></button>
+        : <button type="submit" aria-label="发送问题" disabled={!questionText(draft).trim() || busy || waiting || quotaExhausted}><Glyph name="send" size={21} /></button>}
+      </form>
+    </div>
+  </div>;
 
   return <AnimatePresence initial={false}>
     {active && <HubRouteSurface key="guide" side="guide" reduceMotion={reduceMotion}>
     <MotionConfig reducedMotion={reduceMotion ? "always" : "never"} transition={{ duration: reduceMotion ? 0 : 0.2, ease }}>
-    <section className="wz-page" aria-label="问舟" data-sharing={Boolean(shareView) && !showAgreement || undefined} data-guide={guide ?? undefined} data-guide-leaving={guideLeaving || undefined} onKeyDown={event => {
-      if (reviewingTerms && event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        closeReview();
-      }
-    }}>
-    <header className="topbar wz-bar" inert={guide !== null || Boolean(shareView) && !showAgreement}>
-      <button className="wz-back" onClick={reviewingTerms ? closeReview : onBack}><Glyph name="back" size={18} />{reviewingTerms ? "返回问舟" : "返回手册"}</button>
-      {!showAgreement && <div className="wz-actions">
+    <section className="wz-page" aria-label="问舟" data-sharing={Boolean(shareView) || undefined} data-guide={guide ?? undefined} data-guide-leaving={guideLeaving || undefined}>
+    <header className="topbar wz-bar" inert={guide !== null || Boolean(shareView)}>
+      <button className="wz-back" onClick={onBack}><Glyph name="back" size={18} />返回手册</button>
+      <div className="wz-actions">
         {!viewHistory && (guide === 6 || turns.some(t => t.reply && !t.itemChoice && !t.topicPrompt && !t.stopped)) &&
           <button id="wz-share-open-preview" onClick={event => { shareOpener.current = event.currentTarget.id;
             setShareView({page:"preview", snapshot:freezeConversation(session, previewOwner.name)}); }}>
@@ -605,17 +575,15 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
           <Inbox size={17} aria-hidden="true"/>收到的分享</button>
         {(session || guide === 5) && !viewHistory && <button data-guide-target="new" data-guide-preview-only={!session || undefined} onClick={() => choose(null)}><Glyph name="new" size={17} />新对话</button>}
         <button className="wz-history-toggle" data-guide-target="history" aria-expanded={viewHistory} onClick={() => { newest.current = null; setViewHistory(!viewHistory); }}><Glyph name="history" size={18} />{viewHistory ? "返回对话" : "历史"}{!viewHistory && (guide === 4 || hasUnread) && <i className="wz-unread-dot" role="img" aria-label="有未读对话"/>}</button>
-      </div>}
+      </div>
     </header>
-    {showAgreement && <Agreement key={policy.version} policy={policy} quotaEnabled={quotas.deepSeek.enabled} review={reviewingTerms} reduceMotion={reduceMotion} onAccept={enterPreview}
-      onBack={onBack} researchAllowed={receipt?.research === true} onResearchChange={changeResearchConsent} />}
-    {enteredPreview && <div hidden={reviewingTerms} inert={reviewingTerms || guide !== null || Boolean(shareView)}
-      className={"wz-body" + (!session && !viewHistory ? " wz-empty" : "")}>
+    <div inert={guide !== null || Boolean(shareView)}
+      className={"wz-body" + (!session && !viewHistory ? " wz-empty" : "") + (quickAskItem && !session && !viewHistory ? " wz-quick-mode" : "")}>
     <AnimatePresence initial={false}>
     {viewHistory ? <Pane key="history" reduceMotion={reduceMotion} className="wz-history wz-scroll">
       <ChatHistory sessions={sessions} running={running} showUnread={showUnread} onChoose={choose} onDelete={remove} />
-    </Pane> : !session ? <Pane key="landing" reduceMotion={reduceMotion} className="wz-landing">
-      <BoatMark /><h1>{greeting}</h1>
+    </Pane> : !session ? <Pane key={quickAskItem?.item ? "landing-quick-" + quickAskItem.item.id : "landing"} reduceMotion={reduceMotion} className="wz-landing">
+      <BoatMark /><h1>{quickAskHeading}</h1>
     </Pane> :
       <Pane key={selected} reduceMotion={reduceMotion} className="wz-chat wz-scroll" nodeRef={scroll} onScroll={e => {
         const box = e.currentTarget; pinned.current = box.scrollHeight - box.clientHeight - box.scrollTop < 52;
@@ -650,7 +618,6 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
           }}/> : composer}
         <p className="wz-compose-hint" id={guidanceId}><strong>换话题请新建对话。</strong>经提醒仍反复询问无关问题，可能被限制使用问舟。</p>
         <div className="wz-guide-links">
-          {agreementVisible && <button ref={agreementLink} type="button" className="wz-terms-link" onClick={() => setReviewingTerms(true)}>《问舟内测使用协议》</button>}
           <button ref={replayButton} type="button" className="wz-terms-link" disabled={busy || waiting} onClick={() => {
             setPickerOpen(false); replaying.current = true; setGuide(0);
           }}>重看使用引导</button>
@@ -658,19 +625,19 @@ export default function Wenzhou({ playerId, active, hubClosed, blocked, demo = f
       </motion.div>}
     </AnimatePresence>
     <AnimatePresence initial={false}>
-      {!viewHistory && !session && <Pane key="examples" reduceMotion={reduceMotion} className="wz-examples">
+      {!viewHistory && !session && !quickAskItem && <Pane key="examples" reduceMotion={reduceMotion} className="wz-examples">
         {examples.map(example => <button key={example.icon} disabled={busy || quotaExhausted} onClick={() => send(example.text)}>
           <Glyph name={example.icon} size={16} />{example.text}</button>)}
       </Pane>}
     </AnimatePresence>
-    {(!session && guide === null || guide === 8) && !viewHistory && !shareView && !showAgreement && !selectingBlock &&
+    {(!session && guide === null || guide === 8) && !viewHistory && !shareView && !selectingBlock &&
       <ReminderSettings guideOpen={guide === 8} playerId={playerId} notify={notify} reduceMotion={reduceMotion}/>}
-    </div>}
-    <span className="wz-sr" role="status">{active && !showAgreement && !viewHistory && (lastTurn?.topicPrompt || (running === lastTurn?.id ? eventLabel(lastTurn?.events.at(-1), lastTurn, true) : lastTurn?.reply ? "问舟已回复" : ""))}</span>
-    {selectingBlock && active && !showAgreement && !viewHistory && <BlockPicker reduceMotion={reduceMotion} onReturn={finishBlockPicker}/>}
-    {guide !== null && active && !showAgreement && <FirstGuide step={guide} setStep={setGuide} onClose={closeGuide} leaving={guideLeaving} onExited={finishGuide} reduceMotion={reduceMotion} chatGptSelected={chatGptSelected}/>}
+    </div>
+    <span className="wz-sr" role="status">{active && !viewHistory && (lastTurn?.topicPrompt || (running === lastTurn?.id ? eventLabel(lastTurn?.events.at(-1), lastTurn, true) : lastTurn?.reply ? "问舟已回复" : ""))}</span>
+    {selectingBlock && active && !viewHistory && <BlockPicker reduceMotion={reduceMotion} onReturn={finishBlockPicker}/>}
+    {guide !== null && active && <FirstGuide step={guide} setStep={setGuide} onClose={closeGuide} leaving={guideLeaving} onExited={finishGuide} reduceMotion={reduceMotion} chatGptSelected={chatGptSelected}/>}
     <AnimatePresence initial={false}>
-      {shareView && !showAgreement && <SharePanel key={shareView.page} initial={shareView} playerId={playerId}
+      {shareView && <SharePanel key={shareView.page} initial={shareView} playerId={playerId}
         demo={Boolean(demo)} onBack={closeShares} notify={notify} reduceMotion={reduceMotion}/>}
     </AnimatePresence>
     </section>

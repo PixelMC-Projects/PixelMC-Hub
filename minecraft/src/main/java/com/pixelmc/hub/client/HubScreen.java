@@ -3,16 +3,20 @@ package com.pixelmc.hub.client;
 import com.mojang.logging.LogUtils;
 import com.pixelmc.hub.client.render.HubRenderer;
 import com.pixelmc.hub.client.ui.HubView;
+
+import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.Screenshot;
 import net.minecraft.client.renderer.CubeMap;
 import net.minecraft.client.renderer.PanoramaRenderer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+
 import org.lwjgl.glfw.GLFW;
 
-/** Native GPU composition and input bridge. Player requests use the authenticated optional channel. */
+/**
+ * Native GPU composition and input bridge. Player requests use the authenticated optional channel.
+ */
 public final class HubScreen extends Screen {
     private final HubView view;
     private final String scope;
@@ -46,11 +50,16 @@ public final class HubScreen extends Screen {
         this.previous = previous;
     }
 
+    public HubView view() {
+        return view;
+    }
+
     @Override
     protected void init() {
         super.init();
         view.beforeThemeChange(this::captureThemeTransition);
         view.onCopyToClipboard(minecraft.keyboardHandler::setClipboard);
+        view.onWindowHandle(() -> minecraft.getWindow().getWindow());
     }
 
     @Override
@@ -114,7 +123,9 @@ public final class HubScreen extends Screen {
                 firstFrameAt = System.nanoTime();
                 LogUtils.getLogger()
                         .info(
-                                "PixelMC-Hub first displayed screen CPU submission size={}x{} scale={} acquireMs={} nativeMs={} totalMs={} warmupComplete={}",
+                                "PixelMC-Hub first displayed screen CPU submission size={}x{}"
+                                        + " scale={} acquireMs={} nativeMs={} totalMs={}"
+                                        + " warmupComplete={}",
                                 framebufferWidth,
                                 framebufferHeight,
                                 panelScale,
@@ -159,8 +170,29 @@ public final class HubScreen extends Screen {
             }
             LogUtils.getLogger()
                     .error(
-                            "PixelMC-Hub native preview rendering failed; the screen can be closed with Esc",
+                            "PixelMC-Hub native preview rendering failed; the screen can be closed"
+                                    + " with Esc",
                             failure);
+        }
+        if (!failed) {
+            var externalPages = view.externalPages();
+            if (!externalPages.isEmpty()) {
+                var window = minecraft.getWindow();
+                float sx = (float) window.getGuiScaledWidth() / window.getWidth();
+                float sy = (float) window.getGuiScaledHeight() / window.getHeight();
+                for (var ext : externalPages) {
+                    if (ext.active()) {
+                        ext.paintOverlayItems(
+                                graphics,
+                                panelX * sx,
+                                panelY * sy,
+                                panelScale * sx,
+                                panelScale * sy,
+                                mouseX,
+                                mouseY);
+                    }
+                }
+            }
         }
     }
 
@@ -181,7 +213,7 @@ public final class HubScreen extends Screen {
                     panelScale,
                     1260,
                     850,
-                    28);
+                    view.winter() ? 19 : 28);
         } catch (Throwable failure) {
             // A cosmetic allocation failure must not interrupt the theme choice or input handling.
             LogUtils.getLogger()
@@ -324,6 +356,7 @@ public final class HubScreen extends Screen {
     @Override
     public void removed() {
         view.beforeThemeChange(null);
+        view.onWindowHandle(null);
         // Connection-owned data stays warm while this screen and its GPU resources close.
         ClientHubSession.panelClosed();
         ClientBootstrap.persist(view);

@@ -59,6 +59,19 @@ const guides = {
     items: {},
     text: "开启分面输入时，机器顶面接上槽，底面接下槽。其余四面可以向中间槽送料，也可以抽走成品。机器横放后，接面跟着机器一起转。\n关闭分面输入时，任意一面都能送入符合配方的材料，也能抽走成品。管道只能从输出槽抽取。",
   },
+  chisel_table: {
+    name: "雕刻桌", icon: "bench", source: "Ultramarine · 整合包查阅演示",
+    items: {
+      chisel_table: {
+        id: "ultramarine:chisel_table", name: "雕刻桌", icon: "/assets/wenzhou-items/ultramarine-chisel_table.svg",
+        tooltip: [{ text: "Ultramarine" }, { text: "ultramarine:chisel_table" }],
+      },
+      bench: vanilla("crafting_table", "工作台"),
+      planks: vanilla("oak_planks", "橡木木板"),
+    },
+    text: ["在当前整合包里，", item("chisel_table"), " 属于 Ultramarine 的建筑加工台。如果 JEI 未直接列出工作台合成表，通常可以通过", item("bench", "或在木工/石工类加工台与旅人商店检索"), "、或前往村庄工匠处以绿宝石交易获取。"],
+    note: "放入原木、石材与对应雕刻模板后，可直接雕出中式斗拱、梁柱和装饰构件。",
+  },
 };
 
 const inscriberChecks = [
@@ -76,7 +89,7 @@ export const examples = [
 
 const previewTitles = {
   barrel: "签筒的摆放和使用", bench: "工作台的合成方法", torch: "合成火把需要的材料",
-  enchant: "效率附魔书的合成", inscriber: "AE2 压印器的管道接法",
+  enchant: "效率附魔书的合成", inscriber: "AE2 压印器的管道接法", chisel_table: "雕刻桌的获取与使用",
 };
 
 export function previewSessionTitle(row) {
@@ -100,6 +113,7 @@ export function restorePreviewReply(reply) {
 // topic.confirm event before any tools when it detects an unrelated question.
 const topicTerms = {
   inscriber: /压印器|inscriber/i,
+  chisel_table: /雕刻桌|chisel_table/i,
   barrel: /签筒|抽签|问签|能抽|抽几次/,
   bench: /工作台/,
   torch: /火把/,
@@ -184,11 +198,32 @@ export async function* previewEvents(question, memory, signal, topicConfirmed = 
     text: "",
   } : lookupPreview(question, previousKey, recalledKey);
   const referenced = parts.find(p => p?.item);
-  if (referenced && !reply.key && !blocks.length) {
+  if (referenced && reply.key === "chisel_table") {
+    const chosen = itemById.get(referenced.item);
+    if (chosen) {
+      if (/有什么用|怎么使用/.test(question)) {
+        reply.text = [item("chisel_table"), " 用来把基础建筑材料和雕刻模板加工成中式装饰方块。放好后右键打开界面，左侧放底材，模板槽放蓝图，右侧即可直接取出成品。"];
+        reply.note = "同一套模板可重复使用，不会被消耗。";
+      } else if (/主要用途|关联玩法/.test(question)) {
+        reply.text = ["围绕 ", item("chisel_table"), " 的玩法主要是建筑构件细化：搭配木材、青砖与琉璃瓦，可制作斗拱、栏杆、檐角等全套中式建筑件，常与", item("planks", "各类木料及石砖"), "一起配合建造。"];
+      }
+    }
+  } else if (referenced && !reply.key && !blocks.length) {
     const chosen = itemById.get(referenced.item);
     if (chosen) {
       reply.name = chosen.name;
-      reply.text = "已选中 " + chosen.mod + " 的「" + chosen.name + "」。预览手册还没有收录这件物品的攻略。";
+      reply.source = chosen.mod + " · 物品查阅演示";
+      reply.items = { subject: chosen };
+      if (/怎么获取/.test(question)) {
+        reply.text = ["已锁定 ", item("subject"), "（", chosen.mod, "）。在线环境下问舟会自动核对工作台配方、战利品表、结构宝箱与 SDM 商店，为你汇总最省事的获取途径。"];
+        reply.note = chosen.hasJeiRecipe ? "该物品存在基础合成路径，可在 JEI 查看具体摆放。" : "本地演示未收录该物品的合成配方，真实游戏内会自动查询掉落与商店来源。";
+      } else if (/有什么用|怎么使用/.test(question)) {
+        reply.text = ["已锁定 ", item("subject"), "（", chosen.mod, "）。真实游戏内问舟会结合物品属性、使用交互与所属模组百科为你说明具体用法。"];
+      } else if (/主要用途|关联玩法/.test(question)) {
+        reply.text = ["已锁定 ", item("subject"), "（", chosen.mod, "）。真实游戏内问舟会反查以它为原料的衍生合成、任务线与相关联动机制。"];
+      } else {
+        reply.text = ["已锁定 ", item("subject"), "（", chosen.mod, "）。当前为本地离线演示，真实连接服务器后会基于整合包配方与知识库回答你的具体问题。"];
+      }
     }
   }
   const target = "「" + reply.name + "」";

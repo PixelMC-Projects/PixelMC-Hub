@@ -97,8 +97,7 @@ public final class HubClientGraphics {
         try {
             HubRankingSkins.request(players);
         } catch (RuntimeException unavailable) {
-            LogUtils.getLogger()
-                    .debug("Player skins are temporarily unavailable", unavailable);
+            LogUtils.getLogger().debug("Player skins are temporarily unavailable", unavailable);
         }
     }
 
